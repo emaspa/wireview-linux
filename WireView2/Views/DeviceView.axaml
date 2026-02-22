@@ -39,26 +39,6 @@
                 </StackPanel>
             </Border>
 
-            <!-- Firmware Update -->
-            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Firmware Update" FontWeight="SemiBold" FontSize="16"/>
-                    <ProgressBar Value="{Binding BootloaderProgress}" Maximum="1"
-                                 IsVisible="{Binding IsBootloaderBusy}"/>
-                    <WrapPanel Orientation="Horizontal">
-                        <Button Content="Enter Bootloader" Margin="0,0,8,8"
-                                Command="{Binding EnterBootloaderCommand}"/>
-                        <Button Content="Find Bootloader" Margin="0,0,8,8"
-                                Command="{Binding FindBootloaderDeviceCommand}"
-                                IsEnabled="{Binding FindBootloaderEnabled}"/>
-                        <Button Content="Update Firmware" Margin="0,0,8,8"
-                                Command="{Binding UpdateFirmwareCommand}"/>
-                        <Button Content="Exit Bootloader" Margin="0,0,8,8"
-                                Command="{Binding ExitBootloaderCommand}"/>
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
-
             <!-- Device Configuration -->
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16"
                     IsVisible="{Binding ConfigLoaded}">

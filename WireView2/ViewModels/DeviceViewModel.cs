@@ -6,10 +6,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
-using DeviceProgramming.FileFormat;
-using DeviceProgramming.Memory;
-using LibUsbDfu;
-using LibUsbDotNet;
 using MsgBox;
 using WireView2.Device;
 using WireView2.Services;
@@ -23,9 +19,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private readonly bool _ownsConnector;
     private IWireViewDevice? _device;
 
-    private bool _isBootloaderBusy;
-    private double _bootloaderProgress;
-    private bool _inBootloaderMode;
     private string _firmwareVersion = string.Empty;
     private string _uniqueId = string.Empty;
     private bool _isConnected;
@@ -90,31 +83,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         set { if (Set(ref _selectedDeviceScreenTarget, value)) GoToSelectedScreen(); }
     }
 
-    public bool IsBootloaderBusy
-    {
-        get => _isBootloaderBusy;
-        private set => Set(ref _isBootloaderBusy, value);
-    }
-
-    public double BootloaderProgress
-    {
-        get => _bootloaderProgress;
-        private set => Set(ref _bootloaderProgress, value);
-    }
-
-    public bool InBootloaderMode
-    {
-        get => _inBootloaderMode;
-        private set
-        {
-            if (value) DeviceName = "In DFU/Bootloader Mode";
-            if (Set(ref _inBootloaderMode, value))
-                OnPropertyChanged(nameof(FindBootloaderEnabled));
-        }
-    }
-
-    public bool FindBootloaderEnabled => !IsConnected && !InBootloaderMode;
-
     public string FirmwareVersion
     {
         get => _firmwareVersion;
@@ -130,11 +98,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     public bool IsConnected
     {
         get => _isConnected;
-        private set
-        {
-            if (Set(ref _isConnected, value))
-                OnPropertyChanged(nameof(FindBootloaderEnabled));
-        }
+        private set => Set(ref _isConnected, value);
     }
 
     public string DeviceName
@@ -359,25 +323,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // ======================== Bootloader helpers ========================
-
-    private void SetBootloaderProgress(double value)
-    {
-        BootloaderProgress = double.IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : 0.0;
-    }
-
-    private void BeginBootloaderAction()
-    {
-        IsBootloaderBusy = true;
-        SetBootloaderProgress(0.0);
-    }
-
-    private void EndBootloaderAction()
-    {
-        SetBootloaderProgress(1.0);
-        IsBootloaderBusy = false;
-    }
-
     private async Task ReadBuildStringAsync()
     {
         if (_device is WireViewPro2Device pro2)
@@ -385,229 +330,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             string text = await Task.Run(() => pro2.ReadBuildString()).ConfigureAwait(false);
             DeviceBuildString = string.IsNullOrWhiteSpace(text) ? null : "(" + text.Trim() + ")";
         }
-    }
-
-    // ======================== Firmware update commands ========================
-
-    [RelayCommand]
-    private void UpdateFirmware()
-    {
-        var fileInfo = new FileInfo(Path.Combine(AppContext.BaseDirectory, "TG-WV-PRO2-FW.hex"));
-        if (!fileInfo.Exists)
-        {
-            ConfigStatus = "Firmware file TG-WV-PRO2-FW.hex not found.";
-            return;
-        }
-
-        RawMemory hexFile;
-        try
-        {
-            hexFile = IntelHex.ParseFile(fileInfo.FullName);
-        }
-        catch (Exception ex)
-        {
-            ConfigStatus = "Failed to parse firmware file: " + ex.Message;
-            return;
-        }
-
-        BeginBootloaderAction();
-        Task.Run(async () =>
-        {
-            try
-            {
-                var device = LibUsbDfu.Device.OpenFirst(UsbDevice.AllDevices, 1155, 57105);
-                if (device == null)
-                {
-                    ConfigStatus = "Unable to open DFU device.";
-                    InBootloaderMode = false;
-                    return;
-                }
-
-                device.DownloadProgressChanged += (s, e) =>
-                {
-                    ConfigStatus = $"Firmware update progress: {e.ProgressPercentage}%";
-                    SetBootloaderProgress(e.ProgressPercentage / 100.0);
-                };
-                device.DeviceError += (s, e) => ConfigStatus = $"DFU Device Error: {e}";
-
-                device.DownloadFirmware(hexFile);
-                try { device.Manifest(); } catch { }
-
-                ConfigStatus = "Firmware update completed.";
-                InBootloaderMode = false;
-                DeviceName = "Not Connected";
-            }
-            catch (Exception ex)
-            {
-                ConfigStatus = "DFU Error: " + ex.Message;
-            }
-            finally
-            {
-                EndBootloaderAction();
-            }
-        });
-    }
-
-    [RelayCommand]
-    private void EnterBootloader()
-    {
-        if (_device == null) { ConfigStatus = "No device found."; return; }
-        if (!_device.Connected) { ConfigStatus = "Device not connected."; return; }
-        if (_device is not WireViewPro2Device pro2) { ConfigStatus = "Unsupported device for firmware update."; return; }
-
-        BeginBootloaderAction();
-        Task.Run(async () =>
-        {
-            try
-            {
-                SetBootloaderProgress(0.15);
-                if (await MessageBox.Show(null,
-                    "This puts your device into firmware update mode. Are you sure you want to continue?",
-                    "Warning", MessageBox.MessageBoxButtons.YesNo) != MessageBox.MessageBoxResult.Yes)
-                {
-                    ConfigStatus = "Bootloader mode entry cancelled.";
-                    return;
-                }
-
-                SetBootloaderProgress(0.6);
-                try
-                {
-                    ConfigStatus = "Entering bootloader mode...";
-                    pro2.EnterBootloader();
-                }
-                catch (Exception ex)
-                {
-                    ConfigStatus = "Entering bootloader mode failed: " + ex.Message;
-                    return;
-                }
-
-                SetBootloaderProgress(0.75);
-                try
-                {
-                    ConfigStatus = "Waiting for device to re-enumerate in bootloader mode...";
-                    if (!await DfuFirmwareUpdater.DfuHelper.WaitForDeviceAsync(1155, 57105, TimeSpan.FromSeconds(10.0))
-                        .ConfigureAwait(false))
-                    {
-                        ConfigStatus = "Bootloader device not found.";
-                        InBootloaderMode = false;
-                        return;
-                    }
-                    SetBootloaderProgress(1.0);
-                    ConfigStatus = "Bootloader/DFU ready.";
-                    InBootloaderMode = true;
-                }
-                catch (Exception ex)
-                {
-                    ConfigStatus = "Bootloader/DFU failed: " + ex.Message;
-                    InBootloaderMode = false;
-                }
-            }
-            finally
-            {
-                EndBootloaderAction();
-            }
-        });
-    }
-
-    [RelayCommand]
-    private void ExitBootloader()
-    {
-        if (IsConnected) return;
-
-        BeginBootloaderAction();
-        Task.Run(() =>
-        {
-            try
-            {
-                SetBootloaderProgress(0.25);
-                var device = LibUsbDfu.Device.OpenFirst(UsbDevice.AllDevices, 1155, 57105);
-                if (device == null)
-                {
-                    ConfigStatus = "Unable to open DFU device.";
-                    InBootloaderMode = false;
-                    return;
-                }
-
-                device.DeviceError += (s, e) =>
-                {
-                    ConfigStatus = $"DFU Device Error: {e}";
-                    InBootloaderMode = false;
-                };
-
-                SetBootloaderProgress(0.5);
-                device.UploadBlock(new Block(0x08000000uL, 0uL));
-                SetBootloaderProgress(0.75);
-                try { device.Manifest(); } catch { }
-
-                SetBootloaderProgress(1.0);
-                ConfigStatus = "Exited Bootloader mode.";
-                InBootloaderMode = false;
-            }
-            catch (Exception ex)
-            {
-                ConfigStatus = "DFU Error: " + ex.Message;
-                InBootloaderMode = false;
-            }
-            finally
-            {
-                EndBootloaderAction();
-            }
-        });
-    }
-
-    [RelayCommand]
-    private void InstallDfuDriver()
-    {
-        // DFU driver install is Windows-only; on Linux libusb works natively.
-        ConfigStatus = "DFU driver install is not required on Linux (libusb is used directly).";
-    }
-
-    [RelayCommand]
-    private void FindBootloaderDevice()
-    {
-        if (IsConnected)
-        {
-            InBootloaderMode = false;
-            ConfigStatus = "Device is connected in application mode.";
-            return;
-        }
-        if (InBootloaderMode)
-        {
-            ConfigStatus = "Device is already in Bootloader mode.";
-            return;
-        }
-
-        BeginBootloaderAction();
-        Task.Run(async () =>
-        {
-            try
-            {
-                SetBootloaderProgress(0.1);
-                if (!DfuFirmwareUpdater.DfuHelper.IsDevicePresent(1155, 57105))
-                {
-                    ConfigStatus = "No DFU device found.";
-                    return;
-                }
-
-                SetBootloaderProgress(0.5);
-                if (await DfuFirmwareUpdater.DfuHelper.WaitForDeviceAsync(1155, 57105, TimeSpan.FromSeconds(5.0))
-                    .ConfigureAwait(false))
-                {
-                    InBootloaderMode = true;
-                    ConfigStatus = "DFU device found.";
-                }
-                else
-                {
-                    InBootloaderMode = false;
-                    ConfigStatus = "DFU device found, but could not open it.";
-                }
-                SetBootloaderProgress(1.0);
-            }
-            finally
-            {
-                EndBootloaderAction();
-            }
-        });
     }
 
     // ======================== Fault mask helpers ========================

@@ -10,8 +10,9 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Device configuration** — Fan speed, display settings, fault alarms, thresholds
 - **Configuration profiles** — Save, load, and manage named device configurations
 - **Data logging** — On-device log readback and CSV export
-- **DFU firmware updates** — Update device firmware directly from the app
 - **Desktop notifications** — Via `notify-send`
+
+> **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch.
 
 ## Requirements
 
@@ -83,7 +84,7 @@ The app has five pages accessible from the left sidebar:
 | **Overview** | Summary of total current, power, voltage, and cable rating |
 | **Monitoring** | Real-time charts for voltage, current, power, and temperature |
 | **Logging** | Read device logs and export to CSV |
-| **Device** | Device info, firmware update, and full device configuration (fan, display, alarms, thresholds) |
+| **Device** | Device info and full device configuration (fan, display, alarms, thresholds) |
 | **Settings** | App theme, startup behavior, background customization |
 
 ### Configuration profiles
@@ -95,7 +96,6 @@ On the **Device** page, you can save the current device configuration as a named
 | Mode | VID | PID | Description |
 |------|-----|-----|-------------|
 | Normal | `0483` | `5740` | STM32 CDC/ACM virtual serial port |
-| DFU | `0483` | `df11` | STM32 DFU bootloader |
 
 ## Project structure
 
@@ -105,9 +105,9 @@ wireview-linux/
 │   ├── Views/                  # AXAML views
 │   ├── ViewModels/             # MVVM view models
 │   ├── Services/               # App settings, profiles, notifications
-│   └── Assets/                 # Icons, backgrounds, firmware
+│   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
-│   └── Device/                 # Serial protocol, port finder, DFU
+│   └── Device/                 # Serial protocol, port finder
 ├── tools/                      # Asset extraction utilities
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script
@@ -120,7 +120,6 @@ wireview-linux/
 - **CommunityToolkit.Mvvm 8.4** — MVVM source generators
 - **LiveChartsCore + SkiaSharp** — Real-time chart rendering
 - **System.IO.Ports** — Serial communication with the device
-- **LibUsbDotNet / LibUsbDfu** — USB device access for DFU firmware updates
 
 ## Troubleshooting
 
@@ -129,7 +128,7 @@ wireview-linux/
 1. Check that the device is connected: `lsusb | grep 0483`
 2. Check that `/dev/ttyACM0` exists: `ls -la /dev/ttyACM*`
 3. Check permissions: `groups` should include `dialout`
-4. If using a VM, ensure USB passthrough is configured for both VID/PID pairs (normal + DFU mode)
+4. If using a VM, ensure USB passthrough is configured for the VID/PID pair
 
 ### Permission denied on /dev/ttyACM0
 
