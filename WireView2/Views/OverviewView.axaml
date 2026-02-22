@@ -23,24 +23,27 @@
             </Border>
 
             <!-- Totals gauges -->
-            <Grid ColumnDefinitions="*,*,*" Height="180">
-                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                    <lvc:PieChart Height="140" Series="{Binding TotalPowerSeries}"
+            <Grid ColumnDefinitions="*,*,*" Height="200">
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Total Power" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                    <lvc:PieChart Height="140" Width="140" Series="{Binding TotalPowerSeries}"
                                   InitialRotation="-90" MaxAngle="360"/>
                     <TextBlock Text="{Binding TotalPowerW, StringFormat='{}{0:0.#} W'}"
-                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                    <lvc:PieChart Height="140" Series="{Binding TotalCurrentSeries}"
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Total Current" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                    <lvc:PieChart Height="140" Width="140" Series="{Binding TotalCurrentSeries}"
                                   InitialRotation="-90" MaxAngle="360"/>
                     <TextBlock Text="{Binding TotalCurrentA, StringFormat='{}{0:0.###} A'}"
-                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                    <lvc:PieChart Height="140" Series="{Binding AvgVoltageSeries}"
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                    <TextBlock Text="Avg Voltage" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                    <lvc:PieChart Height="140" Width="140" Series="{Binding AvgVoltageSeries}"
                                   InitialRotation="-90" MaxAngle="360"/>
                     <TextBlock Text="{Binding AvgVoltageV, StringFormat='{}{0:0.###} V'}"
-                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
                 </StackPanel>
             </Grid>
 
@@ -48,30 +51,43 @@
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Temperatures" FontWeight="SemiBold" FontSize="16"/>
-                    <Grid ColumnDefinitions="*,*,*,*" Height="160">
-                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                            <lvc:PieChart Height="120" Series="{Binding TempInSeries}"
-                                          InitialRotation="-90" MaxAngle="360"/>
-                            <TextBlock Text="{Binding OnboardTempInC, StringFormat='{}{0:0.#} \u00B0C In'}"
-                                       HorizontalAlignment="Center"/>
+                    <Grid ColumnDefinitions="*,*,*,*" Height="180">
+                        <!-- Onboard In -->
+                        <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="Onboard In" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempInSeries}"
+                                          InitialRotation="-90" MaxAngle="360"
+                                          IsVisible="{Binding TempInAvailable}"/>
+                            <TextBlock Text="{Binding TempInText}"
+                                       HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                            <lvc:PieChart Height="120" Series="{Binding TempOutSeries}"
-                                          InitialRotation="-90" MaxAngle="360"/>
-                            <TextBlock Text="{Binding OnboardTempOutC, StringFormat='{}{0:0.#} \u00B0C Out'}"
-                                       HorizontalAlignment="Center"/>
+                        <!-- Onboard Out -->
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="Onboard Out" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempOutSeries}"
+                                          InitialRotation="-90" MaxAngle="360"
+                                          IsVisible="{Binding TempOutAvailable}"/>
+                            <TextBlock Text="{Binding TempOutText}"
+                                       HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                            <lvc:PieChart Height="120" Series="{Binding TempExt1Series}"
-                                          InitialRotation="-90" MaxAngle="360"/>
-                            <TextBlock Text="{Binding ExternalTemp1C, StringFormat='{}{0:0.#} \u00B0C Ext1'}"
-                                       HorizontalAlignment="Center"/>
+                        <!-- External 1 -->
+                        <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="External 1" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempExt1Series}"
+                                          InitialRotation="-90" MaxAngle="360"
+                                          IsVisible="{Binding TempExt1Available}"/>
+                            <TextBlock Text="{Binding TempExt1Text}"
+                                       HorizontalAlignment="Center" FontWeight="Bold"
+                                       />
                         </StackPanel>
-                        <StackPanel Grid.Column="3" HorizontalAlignment="Center">
-                            <lvc:PieChart Height="120" Series="{Binding TempExt2Series}"
-                                          InitialRotation="-90" MaxAngle="360"/>
-                            <TextBlock Text="{Binding ExternalTemp2C, StringFormat='{}{0:0.#} \u00B0C Ext2'}"
-                                       HorizontalAlignment="Center"/>
+                        <!-- External 2 -->
+                        <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="2">
+                            <TextBlock Text="External 2" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
+                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempExt2Series}"
+                                          InitialRotation="-90" MaxAngle="360"
+                                          IsVisible="{Binding TempExt2Available}"/>
+                            <TextBlock Text="{Binding TempExt2Text}"
+                                       HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>

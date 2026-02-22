@@ -61,23 +61,23 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     // --------------- Pie/gauge series ---------------
 
-    private readonly PieSeries<double> _tempInValue  = MakeTempSlice("Onboard In",  new SKColor(33, 150, 243));
-    private readonly PieSeries<double> _tempOutValue = MakeTempSlice("Onboard Out", new SKColor(76, 175, 80));
-    private readonly PieSeries<double> _tempE1Value  = MakeTempSlice("External 1",  new SKColor(255, 152, 0));
-    private readonly PieSeries<double> _tempE2Value  = MakeTempSlice("External 2",  new SKColor(244, 67, 54));
+    private readonly PieSeries<double> _tempInValue  = MakeGaugeSlice("Onboard In",  new SKColor(33, 150, 243), 25);
+    private readonly PieSeries<double> _tempOutValue = MakeGaugeSlice("Onboard Out", new SKColor(76, 175, 80), 25);
+    private readonly PieSeries<double> _tempE1Value  = MakeGaugeSlice("External 1",  new SKColor(255, 152, 0), 25);
+    private readonly PieSeries<double> _tempE2Value  = MakeGaugeSlice("External 2",  new SKColor(244, 67, 54), 25);
 
-    private readonly PieSeries<double> _tempInRest  = MakeTempRemainderSlice();
-    private readonly PieSeries<double> _tempOutRest = MakeTempRemainderSlice();
-    private readonly PieSeries<double> _tempE1Rest  = MakeTempRemainderSlice();
-    private readonly PieSeries<double> _tempE2Rest  = MakeTempRemainderSlice();
+    private readonly PieSeries<double> _tempInRest  = MakeRemainderSlice(25);
+    private readonly PieSeries<double> _tempOutRest = MakeRemainderSlice(25);
+    private readonly PieSeries<double> _tempE1Rest  = MakeRemainderSlice(25);
+    private readonly PieSeries<double> _tempE2Rest  = MakeRemainderSlice(25);
 
-    private readonly PieSeries<double> _totalPowerValue   = MakeTempSlice("Total Power",   new SKColor(103, 58, 183));
-    private readonly PieSeries<double> _totalCurrentValue  = MakeTempSlice("Total Current",  new SKColor(0, 188, 212));
-    private readonly PieSeries<double> _avgVoltageValue    = MakeTempSlice("Avg Voltage",    new SKColor(255, 193, 7));
+    private readonly PieSeries<double> _totalPowerValue   = MakeGaugeSlice("Total Power",   new SKColor(103, 58, 183), 35);
+    private readonly PieSeries<double> _totalCurrentValue  = MakeGaugeSlice("Total Current",  new SKColor(0, 188, 212), 35);
+    private readonly PieSeries<double> _avgVoltageValue    = MakeGaugeSlice("Avg Voltage",    new SKColor(255, 193, 7), 35);
 
-    private readonly PieSeries<double> _totalPowerRest   = MakeTempRemainderSlice();
-    private readonly PieSeries<double> _totalCurrentRest  = MakeTempRemainderSlice();
-    private readonly PieSeries<double> _avgVoltageRest    = MakeTempRemainderSlice();
+    private readonly PieSeries<double> _totalPowerRest   = MakeRemainderSlice(35);
+    private readonly PieSeries<double> _totalCurrentRest  = MakeRemainderSlice(35);
+    private readonly PieSeries<double> _avgVoltageRest    = MakeRemainderSlice(35);
 
     // --------------- Constants ---------------
 
@@ -121,26 +121,39 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     public double OnboardTempInC
     {
         get => _onboardTempInC;
-        private set { if (Set(ref _onboardTempInC, value)) UpdateTempSeries(); }
+        private set { if (Set(ref _onboardTempInC, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempInText)); OnPropertyChanged(nameof(TempInAvailable)); } }
     }
 
     public double OnboardTempOutC
     {
         get => _onboardTempOutC;
-        private set { if (Set(ref _onboardTempOutC, value)) UpdateTempSeries(); }
+        private set { if (Set(ref _onboardTempOutC, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempOutText)); OnPropertyChanged(nameof(TempOutAvailable)); } }
     }
 
     public double ExternalTemp1C
     {
         get => _externalTemp1C;
-        private set { if (Set(ref _externalTemp1C, value)) UpdateTempSeries(); }
+        private set { if (Set(ref _externalTemp1C, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempExt1Text)); OnPropertyChanged(nameof(TempExt1Available)); } }
     }
 
     public double ExternalTemp2C
     {
         get => _externalTemp2C;
-        private set { if (Set(ref _externalTemp2C, value)) UpdateTempSeries(); }
+        private set { if (Set(ref _externalTemp2C, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempExt2Text)); OnPropertyChanged(nameof(TempExt2Available)); } }
     }
+
+    // Temperature display helpers — sensors read ~-3276.8°C when disconnected
+    private static bool IsTempValid(double t) => t > -100.0 && t < 200.0;
+
+    public bool TempInAvailable => IsTempValid(OnboardTempInC);
+    public bool TempOutAvailable => IsTempValid(OnboardTempOutC);
+    public bool TempExt1Available => IsTempValid(ExternalTemp1C);
+    public bool TempExt2Available => IsTempValid(ExternalTemp2C);
+
+    public string TempInText => IsTempValid(OnboardTempInC) ? $"{OnboardTempInC:0.#} °C" : "N/A";
+    public string TempOutText => IsTempValid(OnboardTempOutC) ? $"{OnboardTempOutC:0.#} °C" : "N/A";
+    public string TempExt1Text => IsTempValid(ExternalTemp1C) ? $"{ExternalTemp1C:0.#} °C" : "N/A";
+    public string TempExt2Text => IsTempValid(ExternalTemp2C) ? $"{ExternalTemp2C:0.#} °C" : "N/A";
 
     public ObservableCollection<ISeries> BarSeries { get; } = new();
     public Axis[] XAxes { get; }
@@ -291,7 +304,7 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     // --------------- Pie helpers ---------------
 
-    private static PieSeries<double> MakeTempSlice(string name, SKColor color)
+    private static PieSeries<double> MakeGaugeSlice(string name, SKColor color, double innerRadius)
     {
         return new PieSeries<double>
         {
@@ -299,12 +312,12 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             Stroke = null,
             Fill = new SolidColorPaint(color),
             DataLabelsPaint = null,
-            InnerRadius = 60.0,
+            InnerRadius = innerRadius,
             IsHoverable = false
         };
     }
 
-    private static PieSeries<double> MakeTempRemainderSlice()
+    private static PieSeries<double> MakeRemainderSlice(double innerRadius)
     {
         return new PieSeries<double>
         {
@@ -312,7 +325,7 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             Stroke = null,
             Fill = new SolidColorPaint(new SKColor(220, 220, 220)),
             DataLabelsPaint = null,
-            InnerRadius = 60.0,
+            InnerRadius = innerRadius,
             IsHoverable = false
         };
     }
@@ -358,12 +371,12 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     private void UpdateTempSeries()
     {
-        static double Clamp(double v) => Math.Clamp(v, 0.0, TempMaxC);
+        static double SafeClamp(double v) => IsTempValid(v) ? Math.Clamp(v, 0.0, TempMaxC) : 0.0;
 
-        double tIn  = Clamp(OnboardTempInC);
-        double tOut = Clamp(OnboardTempOutC);
-        double tE1  = Clamp(ExternalTemp1C);
-        double tE2  = Clamp(ExternalTemp2C);
+        double tIn  = SafeClamp(OnboardTempInC);
+        double tOut = SafeClamp(OnboardTempOutC);
+        double tE1  = SafeClamp(ExternalTemp1C);
+        double tE2  = SafeClamp(ExternalTemp2C);
 
         _tempInValue.Values  = new[] { tIn };
         _tempOutValue.Values = new[] { tOut };
