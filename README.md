@@ -27,6 +27,7 @@ Download the latest release from the [Releases](https://github.com/emaspa/wirevi
 
 ```bash
 # Download and extract
+mkdir -p ~/wireview-linux
 tar xzf wireview-linux-v1.0.2-linux-x64.tar.gz -C ~/wireview-linux
 
 # Set up USB permissions
