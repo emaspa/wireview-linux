@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WireView2.ViewModels"
+             x:Class="WireView2.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="16">
+            <TextBlock Text="Settings" FontSize="24" FontWeight="Bold"/>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Appearance" FontWeight="SemiBold" FontSize="16"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Theme:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding ThemeModes}"
+                                  SelectedItem="{Binding ThemePreference}" Width="150"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Background:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding BackgroundColorModes}"
+                                  SelectedItem="{Binding BackgroundColorPreference}" Width="150"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Background Opacity:" VerticalAlignment="Center"/>
+                        <Slider Value="{Binding BackgroundOpacity}" Minimum="0" Maximum="1"
+                                Width="200" TickFrequency="0.1"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Startup" FontWeight="SemiBold" FontSize="16"/>
+                    <CheckBox Content="Auto-start on login" IsChecked="{Binding AutoStart}"/>
+                    <CheckBox Content="Start minimized" IsChecked="{Binding StartMinimized}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Screen after connection:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding DeviceScreens}"
+                                  SelectedItem="{Binding ScreenAfterConnection}" Width="150"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="About" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Text="WireView Pro II - Linux Unofficial Client" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding BuildDateText}" Opacity="0.6"/>
+                    <StackPanel Orientation="Horizontal" Spacing="4" Opacity="0.8">
+                        <TextBlock Text="Linux port by"/>
+                        <TextBlock Text="emaspa" FontWeight="SemiBold"/>
+                        <TextBlock Text="-"/>
+                        <TextBlock Text="https://github.com/emaspa/wireview-linux"
+                                   Foreground="{DynamicResource SystemAccentColor}"
+                                   TextDecorations="Underline"
+                                   Cursor="Hand"
+                                   PointerPressed="OnRepoLinkPressed"/>
+                    </StackPanel>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6"
+                               Text="This software is an unofficial, community-made Linux port of the WireView Pro II application. It is not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. All trademarks belong to their respective owners."/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

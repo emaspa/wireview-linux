@@ -1,0 +1,56 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:WireView2"
+             x:Class="WireView2.App"
+             RequestedThemeVariant="Default">
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="SystemAccentColor">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight1">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight2">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight3">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark1">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark2">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark3">#FFE02A25</Color>
+                    <ImageBrush x:Key="AppBackgroundBrush"
+                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE_inv.png"
+                                Stretch="UniformToFill"
+                                AlignmentX="Center" AlignmentY="Center"
+                                Opacity="1.0"/>
+                    <SolidColorBrush x:Key="NavPaneBackgroundBrush" Color="#FFF9E275"/>
+                    <SolidColorBrush x:Key="NavPaneBorderBrush" Color="#33000000"/>
+                    <SolidColorBrush x:Key="SideNavHoverBrush" Color="#22000000"/>
+                    <SolidColorBrush x:Key="SideNavPressedBrush" Color="#33000000"/>
+                    <SolidColorBrush x:Key="OverlayPanelBrush" Color="#F2FFFFFF"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="SystemAccentColor">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight1">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight2">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorLight3">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark1">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark2">#FFE02A25</Color>
+                    <Color x:Key="SystemAccentColorDark3">#FFE02A25</Color>
+                    <ImageBrush x:Key="AppBackgroundBrush"
+                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE.png"
+                                Stretch="UniformToFill"
+                                AlignmentX="Center" AlignmentY="Center"
+                                Opacity="0.5"/>
+                    <SolidColorBrush x:Key="NavPaneBackgroundBrush" Color="#CC1E1E1E"/>
+                    <SolidColorBrush x:Key="NavPaneBorderBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="SideNavHoverBrush" Color="#22FFFFFF"/>
+                    <SolidColorBrush x:Key="SideNavPressedBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="OverlayPanelBrush" Color="#22000000"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

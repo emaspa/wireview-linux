@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WireView2.ViewModels"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="WireView2.Views.OverviewView"
+             x:DataType="vm:OverviewViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="16">
+            <TextBlock Text="Overview" FontSize="24" FontWeight="Bold"/>
+
+            <!-- Per-wire bar chart -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Per-Wire Breakdown" FontWeight="SemiBold" FontSize="16"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <CheckBox Content="Current" IsChecked="{Binding ShowCurrent}"/>
+                        <CheckBox Content="Voltage" IsChecked="{Binding ShowVoltage}"/>
+                        <CheckBox Content="Power" IsChecked="{Binding ShowPower}"/>
+                    </StackPanel>
+                    <lvc:CartesianChart Height="250" Series="{Binding BarSeries}"
+                                       XAxes="{Binding XAxes}" YAxes="{Binding YAxes}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Totals gauges -->
+            <Grid ColumnDefinitions="*,*,*" Height="180">
+                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                    <lvc:PieChart Height="140" Series="{Binding TotalPowerSeries}"
+                                  InitialRotation="-90" MaxAngle="360"/>
+                    <TextBlock Text="{Binding TotalPowerW, StringFormat='{}{0:0.#} W'}"
+                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                    <lvc:PieChart Height="140" Series="{Binding TotalCurrentSeries}"
+                                  InitialRotation="-90" MaxAngle="360"/>
+                    <TextBlock Text="{Binding TotalCurrentA, StringFormat='{}{0:0.###} A'}"
+                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <lvc:PieChart Height="140" Series="{Binding AvgVoltageSeries}"
+                                  InitialRotation="-90" MaxAngle="360"/>
+                    <TextBlock Text="{Binding AvgVoltageV, StringFormat='{}{0:0.###} V'}"
+                               HorizontalAlignment="Center" FontWeight="Bold"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Temperature gauges -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Temperatures" FontWeight="SemiBold" FontSize="16"/>
+                    <Grid ColumnDefinitions="*,*,*,*" Height="160">
+                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                            <lvc:PieChart Height="120" Series="{Binding TempInSeries}"
+                                          InitialRotation="-90" MaxAngle="360"/>
+                            <TextBlock Text="{Binding OnboardTempInC, StringFormat='{}{0:0.#} \u00B0C In'}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                            <lvc:PieChart Height="120" Series="{Binding TempOutSeries}"
+                                          InitialRotation="-90" MaxAngle="360"/>
+                            <TextBlock Text="{Binding OnboardTempOutC, StringFormat='{}{0:0.#} \u00B0C Out'}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                            <lvc:PieChart Height="120" Series="{Binding TempExt1Series}"
+                                          InitialRotation="-90" MaxAngle="360"/>
+                            <TextBlock Text="{Binding ExternalTemp1C, StringFormat='{}{0:0.#} \u00B0C Ext1'}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                            <lvc:PieChart Height="120" Series="{Binding TempExt2Series}"
+                                          InitialRotation="-90" MaxAngle="360"/>
+                            <TextBlock Text="{Binding ExternalTemp2C, StringFormat='{}{0:0.#} \u00B0C Ext2'}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

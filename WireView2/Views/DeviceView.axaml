@@ -1,0 +1,297 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WireView2.ViewModels"
+             x:Class="WireView2.Views.DeviceView"
+             x:DataType="vm:DeviceViewModel">
+    <ScrollViewer>
+        <StackPanel Margin="16" Spacing="16">
+            <TextBlock Text="Device" FontSize="24" FontWeight="Bold"/>
+
+            <!-- Device Information -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Device Information" FontWeight="SemiBold" FontSize="16"/>
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Device:"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DeviceName}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Firmware:"/>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding FirmwareVersion}"/>
+                            <TextBlock Text="{Binding DeviceBuildString}" Opacity="0.6"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Unique ID:"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding UniqueId}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Status:"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ConfigStatus}" TextWrapping="Wrap"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Screen Navigation -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Device Screen" FontWeight="SemiBold" FontSize="16"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Go to screen:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding DeviceScreenTargets}"
+                                  SelectedItem="{Binding SelectedDeviceScreenTarget}" Width="160"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Firmware Update -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Firmware Update" FontWeight="SemiBold" FontSize="16"/>
+                    <ProgressBar Value="{Binding BootloaderProgress}" Maximum="1"
+                                 IsVisible="{Binding IsBootloaderBusy}"/>
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Content="Enter Bootloader" Margin="0,0,8,8"
+                                Command="{Binding EnterBootloaderCommand}"/>
+                        <Button Content="Find Bootloader" Margin="0,0,8,8"
+                                Command="{Binding FindBootloaderDeviceCommand}"
+                                IsEnabled="{Binding FindBootloaderEnabled}"/>
+                        <Button Content="Update Firmware" Margin="0,0,8,8"
+                                Command="{Binding UpdateFirmwareCommand}"/>
+                        <Button Content="Exit Bootloader" Margin="0,0,8,8"
+                                Command="{Binding ExitBootloaderCommand}"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Device Configuration -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16"
+                    IsVisible="{Binding ConfigLoaded}">
+                <StackPanel Spacing="16">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="Device Configuration" FontWeight="SemiBold" FontSize="16"
+                                   VerticalAlignment="Center"/>
+                        <WrapPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="Reload" Margin="0,0,6,0"
+                                    Command="{Binding ReloadConfigCommand}"/>
+                            <Button Content="Apply" Margin="0,0,6,0"
+                                    Command="{Binding ApplyConfigCommand}"/>
+                            <Button Content="Store to NVM" Margin="0,0,6,0"
+                                    Command="{Binding StoreConfigCommand}"/>
+                            <Button Content="Reset"
+                                    Command="{Binding ResetConfigCommand}"/>
+                        </WrapPanel>
+                    </DockPanel>
+
+                    <!-- Profiles -->
+                    <Border Background="{DynamicResource SideNavHoverBrush}" CornerRadius="6" Padding="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Profiles" FontWeight="SemiBold" Opacity="0.7"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ComboBox ItemsSource="{Binding ProfileNames}"
+                                          SelectedItem="{Binding SelectedProfileName}"
+                                          Width="200" PlaceholderText="Select profile..."/>
+                                <Button Content="Load" Command="{Binding LoadProfileCommand}"/>
+                                <Button Content="Delete" Command="{Binding DeleteProfileCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox Text="{Binding NewProfileName}" Width="200"
+                                         Watermark="New profile name..."/>
+                                <Button Content="Save Current as Profile"
+                                        Command="{Binding SaveProfileCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Separator/>
+
+                    <!-- General -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="General" FontWeight="SemiBold" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="6">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Friendly Name:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding FriendlyName}" Width="200" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Backlight Duty (%):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding BacklightDuty}"
+                                           Minimum="0" Maximum="100" Width="120" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Separator/>
+
+                    <!-- Fan Settings -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Fan Settings" FontWeight="SemiBold" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="180,*,60" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Fan Mode:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" ItemsSource="{Binding FanModes}"
+                                      SelectedItem="{Binding FanMode}" Width="160" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Temp Source:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" ItemsSource="{Binding TempSources}"
+                                      SelectedItem="{Binding FanTempSource}" Width="160" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Duty Min:" VerticalAlignment="Center"/>
+                            <Slider Grid.Row="2" Grid.Column="1" Value="{Binding FanDutyMin}"
+                                    Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding FanDutyMin, StringFormat='{}{0}%'}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Duty Max:" VerticalAlignment="Center"/>
+                            <Slider Grid.Row="3" Grid.Column="1" Value="{Binding FanDutyMax}"
+                                    Minimum="0" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"/>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding FanDutyMax, StringFormat='{}{0}%'}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Temp Min:" VerticalAlignment="Center"/>
+                            <Slider Grid.Row="4" Grid.Column="1" Value="{Binding FanTempMinC}"
+                                    Minimum="-50" Maximum="150" TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding FanTempMinC, StringFormat='{}{0:F1}°C'}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Temp Max:" VerticalAlignment="Center"/>
+                            <Slider Grid.Row="5" Grid.Column="1" Value="{Binding FanTempMaxC}"
+                                    Minimum="-50" Maximum="150" TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding FanTempMaxC, StringFormat='{}{0:F1}°C'}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Separator/>
+
+                    <!-- Display Settings -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Display Settings" FontWeight="SemiBold" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Current Scale:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding CurrentScales}"
+                                      SelectedItem="{Binding UiCurrentScale}" Width="160"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Power Scale:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding PowerScales}"
+                                      SelectedItem="{Binding UiPowerScale}" Width="160"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Theme:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Themes}"
+                                      SelectedItem="{Binding UiTheme}" Width="160"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Display Rotation:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding DisplayRotations}"
+                                      SelectedItem="{Binding UiRotation}" Width="160"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Timeout Mode:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding TimeoutModes}"
+                                      SelectedItem="{Binding UiTimeoutMode}" Width="160"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Cycle Time (s):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="5" Grid.Column="1" Value="{Binding UiCycleTimeSeconds}"
+                                           Minimum="1" Maximum="60" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Timeout (s):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="6" Grid.Column="1" Value="{Binding UiTimeoutSeconds}"
+                                           Minimum="0" Maximum="255" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Averaging:" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="7" Grid.Column="1" ItemsSource="{Binding AveragingOptions}"
+                                      SelectedItem="{Binding Averaging}" Width="160"
+                                      IsEnabled="{Binding IsAveragingSupported}"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Separator/>
+
+                    <!-- Fault Alarm Settings -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Fault Alarm Settings" FontWeight="SemiBold" Opacity="0.7"/>
+                        <TextBlock Text="Enable alarms per fault type:" Opacity="0.6" FontSize="12"/>
+
+                        <!-- Fault matrix header -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto" Margin="0,4,0,0">
+                            <TextBlock Grid.Column="0" Text="" />
+                            <TextBlock Grid.Column="1" Text="Display" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="Buzzer" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="3" Text="Soft Off" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="4" Text="Hard Off" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- OTP (Temperature) -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Over-Temp (OTP)" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DisplayOtpTs}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="2" IsChecked="{Binding BuzzerOtpTs}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="3" IsChecked="{Binding SoftPowerOtpTs}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="4" IsChecked="{Binding HardPowerOtpTs}" HorizontalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- OCP -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Over-Current (OCP)" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DisplayOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="2" IsChecked="{Binding BuzzerOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="3" IsChecked="{Binding SoftPowerOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="4" IsChecked="{Binding HardPowerOcp}" HorizontalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Wire OCP -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Wire Over-Current" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DisplayWireOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="2" IsChecked="{Binding BuzzerWireOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="3" IsChecked="{Binding SoftPowerWireOcp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="4" IsChecked="{Binding HardPowerWireOcp}" HorizontalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- OPP -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Over-Power (OPP)" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DisplayOpp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="2" IsChecked="{Binding BuzzerOpp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="3" IsChecked="{Binding SoftPowerOpp}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="4" IsChecked="{Binding HardPowerOpp}" HorizontalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Current Imbalance -->
+                        <Grid ColumnDefinitions="180,80,80,80,80" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Current Imbalance" VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding DisplayCurrentImbalance}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="2" IsChecked="{Binding BuzzerCurrentImbalance}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="3" IsChecked="{Binding SoftPowerCurrentImbalance}" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="4" IsChecked="{Binding HardPowerCurrentImbalance}" HorizontalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Separator/>
+
+                    <!-- Fault Thresholds -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Fault Thresholds" FontWeight="SemiBold" Opacity="0.7"/>
+                        <Grid ColumnDefinitions="220,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Temp Threshold (°C):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding TsFaultThresholdC}"
+                                           Minimum="0" Maximum="200" Increment="0.5" FormatString="F1"
+                                           Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="OCP Threshold (A):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding OcpFaultThresholdA}"
+                                           Minimum="0" Maximum="255" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Wire OCP Threshold (A):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding WireOcpFaultThresholdA}"
+                                           Minimum="0" Maximum="25.5" Increment="0.1" FormatString="F1"
+                                           Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="OPP Threshold (W):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding OppFaultThresholdW}"
+                                           Minimum="0" Maximum="65535" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Current Imbalance (%):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="4" Grid.Column="1" Value="{Binding CurrentImbalanceFaultThresholdPercent}"
+                                           Minimum="0" Maximum="100" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Imbalance Min Load (A):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="5" Grid.Column="1" Value="{Binding CurrentImbalanceFaultMinLoadA}"
+                                           Minimum="0" Maximum="255" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Shutdown Wait Time (s):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="6" Grid.Column="1" Value="{Binding ShutdownWaitTimeSeconds}"
+                                           Minimum="0" Maximum="255" Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Logging Interval (s):" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="7" Grid.Column="1" Value="{Binding LoggingIntervalSeconds}"
+                                           Minimum="0" Maximum="255" Width="120" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </StackPanel>
+
+
+
+                </StackPanel>
+            </Border>
+
+            <!-- Not Connected placeholder -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16"
+                    IsVisible="{Binding !ConfigLoaded}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Device Configuration" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBlock Text="{Binding ConfigStatus}" TextWrapping="Wrap" Opacity="0.7"/>
+                    <Button Content="Reload Config" Command="{Binding ReloadConfigCommand}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WireView2.ViewModels"
+             x:Class="WireView2.Views.LoggingView"
+             x:DataType="vm:LoggingViewModel">
+    <Grid Margin="16" RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="Device Logging" FontSize="24" FontWeight="Bold"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Read Log" Command="{Binding ReadCommand}"/>
+                <Button Content="Export CSV..." Command="{Binding ExportCsvCommand}"/>
+                <Button Content="Clear" Command="{Binding ClearCommand}"/>
+            </StackPanel>
+            <TextBlock Text="{Binding StatusText}" Margin="0,4"/>
+        </StackPanel>
+        <DataGrid Grid.Row="1" ItemsSource="{Binding Items}" IsReadOnly="True"
+                  AutoGenerateColumns="True" Margin="0,8,0,0"/>
+    </Grid>
+</UserControl>

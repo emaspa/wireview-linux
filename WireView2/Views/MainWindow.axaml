@@ -1,0 +1,163 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:WireView2.ViewModels"
+        xmlns:views="using:WireView2.Views"
+        xmlns:conv="using:WireView2.Converters"
+        x:Class="WireView2.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/Icons/bear.ico"
+        Title="WireView Pro II - Linux Unofficial Client"
+        Width="1200" Height="800"
+        TransparencyLevelHint="None">
+
+    <Window.Resources>
+        <conv:BoolToBrushConverter x:Key="BoolToBrush"
+            TrueBrush="#FF00C000" FalseBrush="#FF808080"/>
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button.side-nav">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinHeight" Value="40"/>
+        </Style>
+        <Style Selector="Button.side-nav:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SideNavHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.side-nav:pressed">
+            <Setter Property="Background" Value="{DynamicResource SideNavPressedBrush}"/>
+        </Style>
+        <Style Selector="Border#FaultBar">
+            <Setter Property="Background" Value="#B3C62828"/>
+            <Setter Property="BorderBrush" Value="#FFFFA347"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.DataTemplates>
+        <DataTemplate DataType="{x:Type vm:OverviewViewModel}">
+            <views:OverviewView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MonitoringViewModel}">
+            <views:MonitoringView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LoggingViewModel}">
+            <views:LoggingView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:DeviceViewModel}">
+            <views:DeviceView/>
+        </DataTemplate>
+    </Window.DataTemplates>
+
+    <Grid ColumnDefinitions="Auto,*">
+        <!-- Background image -->
+        <Border Grid.ColumnSpan="2"
+                Background="{DynamicResource AppBackgroundBrush}"
+                IsHitTestVisible="False"/>
+
+        <!-- Navigation Pane -->
+        <Border Name="NavPane" Grid.Column="0"
+                Width="48" ClipToBounds="True"
+                Background="{DynamicResource NavPaneBackgroundBrush}"
+                BorderBrush="{DynamicResource NavPaneBorderBrush}"
+                BorderThickness="0,0,1,0">
+            <Border.Transitions>
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="0:0:0.16"/>
+                </Transitions>
+            </Border.Transitions>
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <Button Classes="side-nav" Grid.Row="0" ToolTip.Tip="Overview" ToolTip.Placement="Right"
+                        Command="{Binding ShowOverviewCommand}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/overview.png"/>
+                        <TextBlock Text="Overview" VerticalAlignment="Center"
+                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="side-nav" Grid.Row="1" ToolTip.Tip="Monitoring" ToolTip.Placement="Right"
+                        Command="{Binding ShowMonitoringCommand}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/monitoring.png"/>
+                        <TextBlock Text="Monitoring" VerticalAlignment="Center"
+                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="side-nav" Grid.Row="2" ToolTip.Tip="Logging" ToolTip.Placement="Right"
+                        Command="{Binding ShowLoggingCommand}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/logging.png"/>
+                        <TextBlock Text="Logging" VerticalAlignment="Center"
+                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="side-nav" Grid.Row="3" ToolTip.Tip="Device" ToolTip.Placement="Right"
+                        Command="{Binding ShowDeviceCommand}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/device.png"/>
+                        <TextBlock Text="Device" VerticalAlignment="Center"
+                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="side-nav" Grid.Row="4" ToolTip.Tip="Settings" ToolTip.Placement="Right"
+                        Command="{Binding ShowSettingsCommand}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/settings.png"/>
+                        <TextBlock Text="Settings" VerticalAlignment="Center"
+                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Main Content Area -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+            <!-- Fault Bar -->
+            <Border Name="FaultBar" Grid.Row="0"
+                    IsVisible="{Binding ConnectionStatus.HasFault}">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Left" Text="&#x26A0;" FontSize="16" FontWeight="Bold"
+                               Foreground="#FFFFE082" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <Button DockPanel.Dock="Right" Content="Dismiss fault &#x2715;"
+                            Background="Transparent" BorderBrush="Transparent"
+                            Foreground="White" Padding="8,0" VerticalAlignment="Center"
+                            HorizontalAlignment="Right"
+                            Command="{Binding ConnectionStatus.DismissFaultCommand}"/>
+                    <TextBlock Text="{Binding ConnectionStatus.FaultText}"
+                               FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center" TextWrapping="Wrap"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Top Bar -->
+            <Border Name="TopBar" Grid.Row="1" Padding="12,8">
+                <DockPanel LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                 Fill="{Binding ConnectionStatus.IsConnected, Converter={StaticResource BoolToBrush}}"/>
+                        <TextBlock Text="{Binding ConnectionStatus.StatusText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="16" Margin="24,0,0,0">
+                        <TextBlock Text="{Binding Overview.TotalCurrentA, StringFormat='Total I: {0:0.###} A'}"/>
+                        <TextBlock Text="{Binding Overview.TotalPowerW, StringFormat='Total P: {0:0.###} W'}"/>
+                        <TextBlock Text="{Binding Overview.AvgVoltageV, StringFormat='Avg V: {0:0.###} V'}"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                               Text="{Binding Overview.PowerCableRatingText, StringFormat='Cable rating: {0}'}"/>
+                </DockPanel>
+            </Border>
+
+            <!-- Content -->
+            <ContentControl Grid.Row="2" Content="{Binding CurrentPageViewModel}"/>
+        </Grid>
+    </Grid>
+</Window>

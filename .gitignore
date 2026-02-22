@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# Intermediate/extracted artifacts
+decompiled/
+extracted/
+
+# Avalonia extraction artifacts
+!__AvaloniaDefaultWindowIcon
+!AvaloniaResourceXamlInfo
+
+# OS
+.DS_Store
+Thumbs.db

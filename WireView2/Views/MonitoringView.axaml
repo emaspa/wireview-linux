@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:WireView2.ViewModels"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="WireView2.Views.MonitoringView"
+             x:DataType="vm:MonitoringViewModel">
+    <Grid RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="16,8">
+            <TextBlock Text="Window (s):" VerticalAlignment="Center"/>
+            <NumericUpDown Value="{Binding XWindowSeconds}" Minimum="1" Maximum="3600" Width="100"/>
+            <TextBlock Text="Interval (ms):" VerticalAlignment="Center"/>
+            <NumericUpDown Value="{Binding UpdateIntervalMs}" Minimum="50" Maximum="5000" Increment="50" Width="100"/>
+            <Button Content="{Binding ExportCsvButtonText}" Command="{Binding ToggleCsvExportCommand}"/>
+        </StackPanel>
+        <lvc:CartesianChart Grid.Row="1" Series="{Binding Series}"
+                           XAxes="{Binding XAxes}" YAxes="{Binding YAxes}"
+                           ZoomMode="X"/>
+    </Grid>
+</UserControl>
