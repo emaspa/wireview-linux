@@ -2,7 +2,7 @@
 
 Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/products/wireview) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
 
-![Screenshot](docs/screenshot.png?v=2)
+![Screenshot](docs/screenshot-v2.png)
 
 ## Features
 
