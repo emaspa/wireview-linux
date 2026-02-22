@@ -13,8 +13,8 @@ decompiled/
 extracted/
 
 # Avalonia extraction artifacts
-!__AvaloniaDefaultWindowIcon
-!AvaloniaResourceXamlInfo
+\!__AvaloniaDefaultWindowIcon
+\!AvaloniaResourceXamlInfo
 
 # OS
 .DS_Store
