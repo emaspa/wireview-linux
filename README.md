@@ -12,7 +12,7 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Data logging** — On-device log readback and CSV export
 - **Desktop notifications** — Via `notify-send`
 
-> **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch.
+> **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
 
 ## Requirements
 
