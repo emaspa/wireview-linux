@@ -16,13 +16,33 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 ## Requirements
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
 - Linux with USB support (tested on Ubuntu 24.04+)
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
 
-### Quick start
+### Option 1: Pre-built binary (no .NET required)
+
+Download the latest release from the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
+
+```bash
+# Download and extract
+tar xzf wireview-linux-v1.0.2-linux-x64.tar.gz -C ~/wireview-linux
+
+# Set up USB permissions
+sudo cp udev/99-wireview.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo usermod -aG dialout $USER
+sudo usermod -aG plugdev $USER
+
+# Log out and back in, then run
+~/wireview-linux/WireView2
+```
+
+### Option 2: Build from source
+
+Requires [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later.
 
 ```bash
 git clone https://github.com/emaspa/wireview-linux.git
@@ -37,12 +57,9 @@ The install script will:
 
 **You must log out and back in** for the group changes to take effect.
 
-### Manual installation
-
-If you prefer to do it step by step:
+Or manually step by step:
 
 ```bash
-# Clone the repo
 git clone https://github.com/emaspa/wireview-linux.git
 cd wireview-linux
 
@@ -55,8 +72,9 @@ sudo udevadm trigger
 sudo usermod -aG dialout $USER
 sudo usermod -aG plugdev $USER
 
-# Log out and back in, then build
+# Log out and back in, then build and run
 dotnet build -c Release
+dotnet run --project WireView2/ -c Release
 ```
 
 ### Quick permissions fix (no reboot)
@@ -68,12 +86,6 @@ sudo chmod 666 /dev/ttyACM0
 ```
 
 This is temporary and resets when the device is unplugged.
-
-## Running
-
-```bash
-dotnet run --project WireView2/ -c Release
-```
 
 ## Usage
 
