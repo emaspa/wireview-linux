@@ -2,6 +2,8 @@
 
 Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/products/wireview) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
 
+![Screenshot](docs/screenshot.png)
+
 ## Features
 
 - **Real-time monitoring** — Voltage, current, and power readings across all 6 pins with live charts
