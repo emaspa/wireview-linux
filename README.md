@@ -148,7 +148,7 @@ sudo usermod -aG dialout $USER
 
 This software is an unofficial, community-made Linux port of the WireView Pro II application. It is **not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs**. All trademarks belong to their respective owners.
 
-Use at your own risk. This software interacts with hardware — while every effort has been made to ensure correctness, the authors are not responsible for any damage to your device.
+Use at your own risk. This software interacts with hardware, while every effort has been made to ensure correctness, the authors are not responsible for any damage to your device.
 
 ## License
 
