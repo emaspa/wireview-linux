@@ -224,7 +224,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             {
                 Labels = Enumerable.Repeat(string.Empty, _wiresCount).ToArray(),
                 TicksPaint = null,
-                SeparatorsPaint = null
+                SeparatorsPaint = null,
+                LabelsPaint = new SolidColorPaint(SKColors.White) { SKTypeface = SKTypeface.FromFamilyName(null, SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright) },
+                TextSize = 14
             }
         };
 
