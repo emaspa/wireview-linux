@@ -30,6 +30,8 @@ The app auto-detects the connection mode at startup. If the [wireview-hwmon](htt
 
 If the kernel module is not loaded, the app falls back to direct serial communication automatically.
 
+> **Warning:** DFU firmware updates have not been fully tested and could potentially brick your device. Use at your own risk.
+
 ## Requirements
 
 - Linux with USB support (tested on Ubuntu 24.04+ and Arch Linux)
