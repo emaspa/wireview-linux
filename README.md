@@ -121,7 +121,6 @@ wireview-linux/
 │   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
 │   └── Device/                 # Serial protocol, port finder
-├── tools/                      # Asset extraction utilities
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script
 ```
