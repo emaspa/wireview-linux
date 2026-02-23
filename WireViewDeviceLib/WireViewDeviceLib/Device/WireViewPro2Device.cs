@@ -190,20 +190,26 @@ namespace WireView2.Device
             lock (_port)
             {
                 _port!.Open();
-                _port!.DiscardInBuffer();
-
-                const int maxPayloadPerFrame = 62;
-
-                for (int offset = 0; offset < payload.Length && offset <= 255; offset += maxPayloadPerFrame)
+                try
                 {
-                    int bytesToWrite = Math.Min(maxPayloadPerFrame, payload.Length - offset);
+                    _port!.DiscardInBuffer();
 
-                    frame[1] = (byte)offset;
-                    Buffer.BlockCopy(payload, offset, frame, 2, bytesToWrite);
+                    const int maxPayloadPerFrame = 62;
 
-                    _port!.Write(frame, 0, bytesToWrite + 2);
+                    for (int offset = 0; offset < payload.Length && offset <= 255; offset += maxPayloadPerFrame)
+                    {
+                        int bytesToWrite = Math.Min(maxPayloadPerFrame, payload.Length - offset);
+
+                        frame[1] = (byte)offset;
+                        Buffer.BlockCopy(payload, offset, frame, 2, bytesToWrite);
+
+                        _port!.Write(frame, 0, bytesToWrite + 2);
+                    }
                 }
-                _port!.Close();
+                finally
+                {
+                    _port!.Close();
+                }
             }
         }
 
@@ -333,24 +339,30 @@ namespace WireView2.Device
             lock (_port)
             {
                 _port!.Open();
-                _port!.DiscardInBuffer();
-                if (rts)
+                try
                 {
-                    _port!.RtsEnable = true;
-                    Thread.Sleep(10);
+                    _port!.DiscardInBuffer();
+                    if (rts)
+                    {
+                        _port!.RtsEnable = true;
+                        Thread.Sleep(10);
+                    }
+                    if (data.Length > 0)
+                        _port!.Write(data, 0, data.Length);
+                    if (responseSize > 0)
+                    {
+                        buf = ReadExact(responseSize);
+                    }
+                    if (rts)
+                    {
+                        Thread.Sleep(10);
+                        _port!.RtsEnable = false;
+                    }
                 }
-                if (data.Length > 0)
-                    _port!.Write(data, 0, data.Length);
-                if (responseSize > 0)
+                finally
                 {
-                    buf = ReadExact(responseSize);
+                    _port!.Close();
                 }
-                if (rts)
-                {
-                    Thread.Sleep(10);
-                    _port!.RtsEnable = false;
-                }
-                _port!.Close();
             }
             return buf;
         }
@@ -360,9 +372,9 @@ namespace WireView2.Device
             var buf = new byte[size];
             int offset = 0;
             int timeout = 1000;
-            var start = Environment.TickCount;
+            var start = Environment.TickCount64;
 
-            while (offset < size && Environment.TickCount - start < timeout)
+            while (offset < size && Environment.TickCount64 - start < timeout)
             {
                 if (_port!.BytesToRead > 0)
                 {

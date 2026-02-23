@@ -99,33 +99,38 @@ public partial class WireViewPro2Device
             // Disable UI updates
             lock (_port) {
                 _port!.Open();
-                _port!.DiscardInBuffer();
-                _port!.Write(new byte[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)SCREEN_CMD.SCREEN_PAUSE_UPDATES }, 0, 2);
-
-                while (read < len)
+                try
                 {
-                    uint remaining = len - read;
-                    uint toRead = (uint)Math.Min(SpiFlashMaxReadLen, remaining);
+                    _port!.DiscardInBuffer();
+                    _port!.Write(new byte[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)SCREEN_CMD.SCREEN_PAUSE_UPDATES }, 0, 2);
 
-                    //var chunk = SpiFlashReadPageNoLock(addr + read, toRead);
-                    BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(1, 4), addr + read);
-                    BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(5, 4), toRead);
+                    while (read < len)
+                    {
+                        uint remaining = len - read;
+                        uint toRead = (uint)Math.Min(SpiFlashMaxReadLen, remaining);
 
-                    _port!.Write(frame, 0, frame.Length);
-                    var chunk = ReadExact((int)toRead);
+                        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(1, 4), addr + read);
+                        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(5, 4), toRead);
 
-                    if (chunk is null || chunk.Length != toRead)
-                        throw new TimeoutException("SPI flash read error.");
+                        _port!.Write(frame, 0, frame.Length);
+                        var chunk = ReadExact((int)toRead);
 
-                    Buffer.BlockCopy(chunk, 0, result, (int)read, (int)toRead);
+                        if (chunk is null || chunk.Length != toRead)
+                            throw new TimeoutException("SPI flash read error.");
 
-                    read += toRead;
-                    progress?.Report((double)read / len);
+                        Buffer.BlockCopy(chunk, 0, result, (int)read, (int)toRead);
+
+                        read += toRead;
+                        progress?.Report((double)read / len);
+                    }
+
+                    // Enable UI updates
+                    _port!.Write(new byte[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)SCREEN_CMD.SCREEN_RESUME_UPDATES }, 0, 2);
                 }
-
-                // Enable UI updates
-                _port!.Write(new byte[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)SCREEN_CMD.SCREEN_RESUME_UPDATES }, 0, 2);
-                _port!.Close();
+                finally
+                {
+                    _port!.Close();
+                }
             }
 
             return result;
