@@ -11,6 +11,7 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Configuration profiles** — Save, load, and manage named device configurations
 - **Data logging** — On-device log readback and CSV export
 - **Desktop notifications** — Via `notify-send`
+- **Software shutdown on fault** — Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
 
 > **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
 
