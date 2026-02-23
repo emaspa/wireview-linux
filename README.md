@@ -16,7 +16,7 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 ## Requirements
 
-- Linux with USB support (tested on Ubuntu 24.04+)
+- Linux with USB support (tested on Ubuntu 24.04+ and Arch Linux)
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
