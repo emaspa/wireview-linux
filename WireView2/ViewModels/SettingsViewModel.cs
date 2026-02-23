@@ -19,6 +19,7 @@ public class SettingsViewModel : ViewModelBase
     private AppSettings.BackgroundColorMode _backgroundColorPreference;
     private double _backgroundOpacity;
     private AppSettings.StartupScreen _screenAfterConnection;
+    private bool _softwareShutdownOnFault;
 
     // ======================== Properties ========================
 
@@ -115,6 +116,19 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool SoftwareShutdownOnFault
+    {
+        get => _softwareShutdownOnFault;
+        set
+        {
+            if (Set(ref _softwareShutdownOnFault, value))
+            {
+                AppSettings.Current.SoftwareShutdownOnFault = value;
+                AppSettings.SaveCurrent();
+            }
+        }
+    }
+
     public string BuildDateText
     {
         get
@@ -155,6 +169,7 @@ public class SettingsViewModel : ViewModelBase
         _backgroundOpacity = ClampOpacity(AppSettings.Current.BackgroundOpacity);
         ApplyBackgroundOpacity(_backgroundOpacity);
         _screenAfterConnection = AppSettings.Current.ScreenAfterConnection;
+        _softwareShutdownOnFault = AppSettings.Current.SoftwareShutdownOnFault;
         AppSettings.Saved += OnSettingsSaved;
     }
 
@@ -191,6 +206,10 @@ public class SettingsViewModel : ViewModelBase
         if (Set(ref _screenAfterConnection, AppSettings.Current.ScreenAfterConnection,
                 nameof(ScreenAfterConnection)))
             OnPropertyChanged(nameof(ScreenAfterConnection));
+
+        if (Set(ref _softwareShutdownOnFault, AppSettings.Current.SoftwareShutdownOnFault,
+                nameof(SoftwareShutdownOnFault)))
+            OnPropertyChanged(nameof(SoftwareShutdownOnFault));
     }
 
     // ======================== Theme / appearance ========================

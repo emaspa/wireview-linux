@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
@@ -165,6 +166,19 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             _lastToastUtc = DateTime.UtcNow;
             string message = FaultText ?? "Fault detected.";
             _toast.Show("WireView Fault", message);
+
+            if (AppSettings.Current.SoftwareShutdownOnFault)
+            {
+                try
+                {
+                    Process.Start("systemctl", "poweroff");
+                }
+                catch
+                {
+                    // Fallback if systemctl is not available
+                    try { Process.Start("shutdown", "-h now"); } catch { }
+                }
+            }
         }
     }
 

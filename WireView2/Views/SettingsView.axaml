@@ -38,6 +38,14 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Safety" FontWeight="SemiBold" FontSize="16"/>
+                    <CheckBox Content="Shut down computer on device fault" IsChecked="{Binding SoftwareShutdownOnFault}"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="When enabled, the system will shut down when the device reports a fault alarm. This is an alternative to the hardware shutdown header for eGPU or other setups where the cable cannot be connected."/>
+                </StackPanel>
+            </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
                 <StackPanel Spacing="8">
                     <TextBlock Text="About" FontWeight="SemiBold" FontSize="16"/>

@@ -77,6 +77,8 @@ public class AppSettings
     public string? ForcedComPort { get; set; }
 
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
+    public bool SoftwareShutdownOnFault { get; set; }
+
     public int MonitoringXWindowSeconds { get; set; } = 30;
 
     public MonitoringAxisSettings MonitoringYV { get; set; } = new MonitoringAxisSettings();
