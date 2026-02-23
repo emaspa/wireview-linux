@@ -39,7 +39,7 @@ If the kernel module is not loaded, the app falls back to direct serial communic
 
 ### Arch Linux (AUR)
 
-An AUR package is available, maintained by [arakmar](https://aur.archlinux.org/account/arakmar):
+An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available, maintained by [arakmar](https://aur.archlinux.org/account/arakmar):
 
 ```bash
 yay -S wireview-linux
