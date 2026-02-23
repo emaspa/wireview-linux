@@ -135,6 +135,11 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             device.ClearFaults(0);
             device.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
+        else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
+        {
+            hwmon.ClearFaults(0);
+            hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
+        }
 
         if (Dispatcher.UIThread.CheckAccess())
         {
@@ -250,6 +255,9 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
 
     private static string FormatFaults(ushort faultStatus)
     {
+        if (faultStatus == 0xFFFF)
+            return "FAULT (details unavailable via hwmon)";
+
         var parts = new List<string>();
         foreach (var fault in Enum.GetValues<WireViewPro2Device.FAULT>())
         {

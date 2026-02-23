@@ -70,7 +70,7 @@ namespace WireView2.Device
         private struct SensorStruct
         {
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
-            public short[] Ts; // 0.1 °C
+            public short[] Ts; // 0.1 ï¿½C
             public ushort Vdd; // mV
             public byte FanDuty; // %
 
@@ -239,7 +239,7 @@ namespace WireView2.Device
             public ushort FaultBuzzerEnable;
             public ushort FaultSoftPowerEnable;
             public ushort FaultHardPowerEnable;
-            public short TsFaultThreshold; // 0.1 °C
+            public short TsFaultThreshold; // 0.1 ï¿½C
             public byte OcpFaultThreshold; // A
             public byte WireOcpFaultThreshold; // 0.1A
             public ushort OppFaultThreshold; // W
@@ -266,7 +266,7 @@ namespace WireView2.Device
             public ushort FaultBuzzerEnable;
             public ushort FaultSoftPowerEnable;
             public ushort FaultHardPowerEnable;
-            public short TsFaultThreshold; // 0.1 °C
+            public short TsFaultThreshold; // 0.1 ï¿½C
             public byte OcpFaultThreshold; // A
             public byte WireOcpFaultThreshold; // 0.1A
             public ushort OppFaultThreshold; // W
@@ -279,7 +279,7 @@ namespace WireView2.Device
         }
 
         // Default DeviceConfigStruct = V2
-        DeviceConfigStructV1 ConvertConfigV2ToV1(DeviceConfigStructV2 configV2)
+        internal static DeviceConfigStructV1 ConvertConfigV2ToV1(DeviceConfigStructV2 configV2)
         {
             DeviceConfigStructV1 configV1 = new DeviceConfigStructV1
             {
@@ -305,7 +305,7 @@ namespace WireView2.Device
             return configV1;
         }
 
-        DeviceConfigStructV2 ConvertConfigV1ToV2(DeviceConfigStructV1 configV1)
+        internal static DeviceConfigStructV2 ConvertConfigV1ToV2(DeviceConfigStructV1 configV1)
         {
             DeviceConfigStructV2 configV2 = new DeviceConfigStructV2
             {

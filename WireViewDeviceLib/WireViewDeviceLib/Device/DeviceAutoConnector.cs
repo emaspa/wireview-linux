@@ -13,7 +13,7 @@ namespace WireView2.Device
         private CancellationTokenSource? _cts;
         private Task? _worker;
 
-        private WireViewPro2Device? _device;
+        private IWireViewDevice? _device;
         private int _pollMs = 1000;
 
         public event EventHandler<bool>? ConnectionChanged; // true=connected
@@ -54,7 +54,10 @@ namespace WireView2.Device
             _pollMs = Math.Clamp(ms, 50, 5000);
             lock (_gate)
             {
-                if (_device != null) _device.PollIntervalMs = _pollMs;
+                if (_device is WireViewPro2Device serial)
+                    serial.PollIntervalMs = _pollMs;
+                else if (_device is HwmonDevice hwmon)
+                    hwmon.PollIntervalMs = _pollMs;
             }
         }
 
@@ -90,14 +93,45 @@ namespace WireView2.Device
                     DisconnectInternal();
                 }
 
+                // Strategy 1: Try hwmon sysfs (when kernel module is loaded and daemon is feeding it)
+                if (OperatingSystem.IsLinux())
+                {
+                    string? hwmonPath = HwmonDevice.FindHwmonPath();
+                    if (hwmonPath != null)
+                    {
+                        var hwmon = new HwmonDevice(hwmonPath) { PollIntervalMs = _pollMs };
+                        try
+                        {
+                            hwmon.Connect();
+                            if (hwmon.Connected)
+                            {
+                                _device = hwmon;
+                                hwmon.ConnectionChanged += OnDeviceConnectionChanged;
+                                _dataForwardHandler ??= (_, d) => DataUpdated?.Invoke(this, d);
+                                hwmon.DataUpdated += _dataForwardHandler;
+                                ConnectionChanged?.Invoke(this, true);
+                                return;
+                            }
+                            else
+                            {
+                                hwmon.Dispose();
+                            }
+                        }
+                        catch
+                        {
+                            try { hwmon.Dispose(); } catch { }
+                        }
+                    }
+                }
+
+                // Strategy 2: Try serial port (direct USB connection)
                 var ports = Stm32PortFinder.FindMatchingComPorts();
                 if (ports.Count == 0)
                 {
                     return;
                 }
 
-                // Try connect to all matching ports
-                foreach(var port in ports) { 
+                foreach(var port in ports) {
 
                     var dev = new WireViewPro2Device(port)
                     {
@@ -108,7 +142,6 @@ namespace WireView2.Device
                         dev.Connect();
                         if (dev.Connected)
                         {
-                            // success
                             _device = dev;
                             dev.ConnectionChanged += OnDeviceConnectionChanged;
                             _dataForwardHandler ??= (_, d) => DataUpdated?.Invoke(this, d);
@@ -158,7 +191,7 @@ namespace WireView2.Device
                         _device.DataUpdated -= _dataForwardHandler;
 
                     _device.Disconnect();
-                    _device.Dispose();
+                    (_device as IDisposable)?.Dispose();
                 }
             }
             catch { }

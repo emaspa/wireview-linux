@@ -523,11 +523,16 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     private void ClearFault(WireViewPro2Device.FAULT fault)
     {
+        ushort mask = (ushort)(~(1 << (int)fault));
         if (_connector.Device is WireViewPro2Device device)
         {
-            ushort mask = (ushort)(~(1 << (int)fault));
             device.ClearFaults(mask, mask);
             device.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
+        }
+        else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
+        {
+            hwmon.ClearFaults(mask, mask);
+            hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
     }
 }

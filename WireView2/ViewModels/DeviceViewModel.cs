@@ -254,6 +254,44 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         RefreshProfileList();
     }
 
+    // ======================== Device dispatch helpers ========================
+
+    private bool IsDeviceCommandCapable =>
+        _device is WireViewPro2Device ||
+        _device is HwmonDevice { DaemonAvailable: true };
+
+    private void DeviceScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
+    {
+        if (_device is WireViewPro2Device pro2) pro2.ScreenCmd(cmd);
+        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.ScreenCmd(cmd);
+    }
+
+    private void DeviceNvmCmd(WireViewPro2Device.NVM_CMD cmd)
+    {
+        if (_device is WireViewPro2Device pro2) pro2.NvmCmd(cmd);
+        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.NvmCmd(cmd);
+    }
+
+    private WireViewPro2Device.DeviceConfigStructV2? DeviceReadConfig()
+    {
+        if (_device is WireViewPro2Device pro2) return pro2.ReadConfig();
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadConfig();
+        return null;
+    }
+
+    private void DeviceWriteConfig(WireViewPro2Device.DeviceConfigStructV2 config)
+    {
+        if (_device is WireViewPro2Device pro2) pro2.WriteConfig(config);
+        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.WriteConfig(config);
+    }
+
+    private string? DeviceReadBuildString()
+    {
+        if (_device is WireViewPro2Device pro2) return pro2.ReadBuildString();
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadBuildString();
+        return null;
+    }
+
     // ======================== Connection event ========================
 
     private void OnConnectionChanged(object? sender, bool connected)
@@ -274,14 +312,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         else if (_device != null)
         {
             DeviceName = _device.DeviceName;
-            FirmwareVersion = "v" + _device.FirmwareVersion.ToString().PadLeft(2, '0');
-            UniqueId = _device.UniqueId;
+            FirmwareVersion = string.IsNullOrEmpty(_device.FirmwareVersion)
+                ? "N/A" : "v" + _device.FirmwareVersion.ToString().PadLeft(2, '0');
+            UniqueId = string.IsNullOrEmpty(_device.UniqueId) ? "N/A" : _device.UniqueId;
             DeviceBuildString = null;
 
             if (AppSettings.Current.ScreenAfterConnection != AppSettings.StartupScreen.NoChange
-                && _device is WireViewPro2Device pro2)
+                && IsDeviceCommandCapable)
             {
-                pro2.ScreenCmd(AppSettings.Current.ScreenAfterConnection switch
+                DeviceScreenCmd(AppSettings.Current.ScreenAfterConnection switch
                 {
                     AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
                     AppSettings.StartupScreen.Current     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_CURRENT,
@@ -291,8 +330,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 });
             }
 
-            TryReloadConfig();
-            _ = ReadBuildStringAsync();
+            if (IsDeviceCommandCapable)
+            {
+                TryReloadConfig();
+                _ = ReadBuildStringAsync();
+            }
         }
     }
 
@@ -303,10 +345,10 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
-            if (_device is not WireViewPro2Device pro2) { ConfigStatus = "Unsupported device."; return; }
+            if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
             if (SelectedDeviceScreenTarget == AppSettings.StartupScreen.NoChange) { ConfigStatus = "Select a screen."; return; }
 
-            pro2.ScreenCmd(SelectedDeviceScreenTarget switch
+            DeviceScreenCmd(SelectedDeviceScreenTarget switch
             {
                 AppSettings.StartupScreen.Main        => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
                 AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
@@ -325,11 +367,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     private async Task ReadBuildStringAsync()
     {
-        if (_device is WireViewPro2Device pro2)
-        {
-            string text = await Task.Run(() => pro2.ReadBuildString()).ConfigureAwait(false);
-            DeviceBuildString = string.IsNullOrWhiteSpace(text) ? null : "(" + text.Trim() + ")";
-        }
+        string? text = await Task.Run(() => DeviceReadBuildString()).ConfigureAwait(false);
+        DeviceBuildString = string.IsNullOrWhiteSpace(text) ? null : "(" + text.Trim() + ")";
     }
 
     // ======================== Fault mask helpers ========================
@@ -392,7 +431,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 IsAveragingSupported = false;
                 return;
             }
-            if (_device is not WireViewPro2Device pro2)
+            if (!IsDeviceCommandCapable)
             {
                 ConfigLoaded = false;
                 ConfigStatus = "Unsupported device.";
@@ -400,7 +439,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            var cfg = pro2.ReadConfig();
+            var cfg = DeviceReadConfig();
             if (!cfg.HasValue)
             {
                 ConfigLoaded = false;
@@ -427,11 +466,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
-            if (_device is not WireViewPro2Device pro2) { ConfigStatus = "Unsupported device."; return; }
+            if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
 
             var config = BuildConfigFromEditor();
-            pro2.WriteConfig(config);
-            pro2.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
+            DeviceWriteConfig(config);
+            DeviceScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
         }
         catch (Exception ex)
@@ -446,9 +485,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
-            if (_device is not WireViewPro2Device pro2) { ConfigStatus = "Unsupported device."; return; }
+            if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
 
-            pro2.NvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
+            DeviceNvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
             ConfigStatus = "Config stored (NVM).";
         }
         catch (Exception ex)
@@ -463,9 +502,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
-            if (_device is not WireViewPro2Device pro2) { ConfigStatus = "Unsupported device."; return; }
+            if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
 
-            pro2.NvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
+            DeviceNvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
             Task.Delay(75).Wait();
             TryReloadConfig();
             ConfigStatus = "Config reset.";
@@ -512,7 +551,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     private WireViewPro2Device.DeviceConfigStructV2 BuildConfigFromEditor()
     {
-        var cfg = ((_device as WireViewPro2Device)?.ReadConfig()).GetValueOrDefault();
+        var cfg = (DeviceReadConfig()).GetValueOrDefault();
         cfg.FriendlyName = EncodeDeviceString(FriendlyName, 32);
         cfg.BacklightDuty = (byte)Math.Clamp(BacklightDuty, 0, 100);
         cfg.FanConfig.Mode = FanMode;
