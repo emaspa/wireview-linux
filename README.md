@@ -15,6 +15,8 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 > **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
 
+> **hwmon integration**: If you want sensor data exposed to `sensors`, Grafana, conky, btop, and other monitoring tools via `/sys/class/hwmon/`, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon). It works standalone without this app.
+
 ## Requirements
 
 - Linux with USB support (tested on Ubuntu 24.04+ and Arch Linux)
