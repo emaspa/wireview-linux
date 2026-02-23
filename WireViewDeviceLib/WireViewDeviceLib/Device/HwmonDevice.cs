@@ -174,6 +174,9 @@ namespace WireView2.Device
                     byte status = respHdr[0];
                     int respLen = respHdr[1] | (respHdr[2] << 8);
 
+                    if (respLen > 1024)
+                        return (0xFF, null);
+
                     byte[]? respData = null;
                     if (respLen > 0)
                     {
@@ -245,9 +248,13 @@ namespace WireView2.Device
                 var v1 = BytesToStruct<WireViewPro2Device.DeviceConfigStructV1>(configBytes);
                 return WireViewPro2Device.ConvertConfigV1ToV2(v1);
             }
-            else
+            else if (configVer == 1)
             {
                 return BytesToStruct<WireViewPro2Device.DeviceConfigStructV2>(configBytes);
+            }
+            else
+            {
+                return null;
             }
         }
 

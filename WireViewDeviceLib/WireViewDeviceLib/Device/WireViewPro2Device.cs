@@ -194,7 +194,7 @@ namespace WireView2.Device
 
                 const int maxPayloadPerFrame = 62;
 
-                for (int offset = 0; offset < payload.Length; offset += maxPayloadPerFrame)
+                for (int offset = 0; offset < payload.Length && offset <= 255; offset += maxPayloadPerFrame)
                 {
                     int bytesToWrite = Math.Min(maxPayloadPerFrame, payload.Length - offset);
 

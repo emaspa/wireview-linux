@@ -112,28 +112,24 @@ public static class DeviceLogParser
 
                 switch (type)
                 {
-                    default:
-                    case ENTRY_TYPE.ENTRY_TYPE_SYSTEM_TIME:
-                        index++;
-                        continue;
-
-                    case ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
-                        break;
-
                     case ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
+                    case ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
+                    {
+                        var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
+                        if (entry.HpwrSense > 3)
+                        {
+                            index++;
+                            break;
+                        }
+                        results.Add(entry);
+                        firstEntryFound = true;
+                        index++;
+                        break;
+                    }
+                    default:
+                        index++;
                         break;
                 }
-
-                var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
-                if (entry.HpwrSense > 3)
-                {
-                    index++;
-                    continue;
-                }
-
-                results.Add(entry);
-                firstEntryFound = true;
-                index++;
             }
         }
 
