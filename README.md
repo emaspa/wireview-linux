@@ -166,7 +166,7 @@ wireview-linux/
 │   ├── Services/               # App settings, profiles, notifications
 │   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
-│   └── Device/                 # Serial protocol, port finder
+│   └── Device/                 # Serial protocol, port finder, DFU
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script
 ```
