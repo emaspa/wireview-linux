@@ -21,6 +21,14 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 ## Installation
 
+### Arch Linux (AUR)
+
+An AUR package is available, maintained by [arakmar](https://aur.archlinux.org/account/arakmar):
+
+```bash
+yay -S wireview-linux
+```
+
 ### Option 1: Pre-built binary (no .NET required)
 
 Download the latest release from the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
