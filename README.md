@@ -1,6 +1,6 @@
 # WireView Pro II - Linux Unofficial Client
 
-Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/products/wireview) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
+Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
 
 ![Screenshot](docs/screenshot-v2.png)
 
