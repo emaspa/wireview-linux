@@ -16,6 +16,9 @@ extracted/
 \!__AvaloniaDefaultWindowIcon
 \!AvaloniaResourceXamlInfo
 
+# Draft posts
+reddit-post.md
+
 # OS
 .DS_Store
 Thumbs.db
