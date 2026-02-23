@@ -32,15 +32,13 @@ yay -S wireview-linux
 
 ### Option 1: Pre-built binary (no .NET required)
 
-Download the latest release from the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
-
 ```bash
-# Download and extract
+# Download and extract the latest release
 mkdir -p ~/wireview-linux
-tar xzf wireview-linux-v1.0.2.1-linux-x64.tar.gz -C ~/wireview-linux
+curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz -C ~/wireview-linux
 
 # Set up USB permissions
-sudo cp udev/99-wireview.rules /etc/udev/rules.d/
+sudo cp ~/wireview-linux/udev/99-wireview.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 sudo usermod -aG dialout $USER
