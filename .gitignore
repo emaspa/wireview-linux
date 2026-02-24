@@ -16,6 +16,9 @@ extracted/
 \!__AvaloniaDefaultWindowIcon
 \!AvaloniaResourceXamlInfo
 
+# Kernel module build artifacts
+driver/
+
 # Draft posts
 reddit-post.md
 
