@@ -57,10 +57,10 @@ sudo apt install wireview-hwmon wireview-hwmon-dkms
 
 ### Ubuntu / Debian (.deb package)
 
-A pre-built `.deb` package is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
+A pre-built `.deb` package is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. Download it and install:
 
 ```bash
-sudo apt install ./wireview-linux_1.0.3.3_amd64.deb
+sudo apt install ./wireview-linux_*_amd64.deb
 ```
 
 ### Arch Linux (AUR)
