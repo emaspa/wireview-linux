@@ -74,10 +74,18 @@ public class App : Application
         };
         _autoStartMenuItem.Click += (_, _) =>
         {
-            bool isChecked = _autoStartMenuItem.IsChecked;
-            AutoStartService.SetAutoStart(isChecked);
-            AppSettings.Current.AutoStart = isChecked;
-            AppSettings.SaveCurrent();
+            try
+            {
+                bool newState = !AppSettings.Current.AutoStart;
+                AutoStartService.SetAutoStart(newState);
+                AppSettings.Current.AutoStart = newState;
+                AppSettings.SaveCurrent();
+                _autoStartMenuItem.IsChecked = newState;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Auto-start toggle failed: {ex.Message}");
+            }
         };
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => desktop.Shutdown();
