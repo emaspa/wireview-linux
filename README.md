@@ -51,6 +51,14 @@ To also install the hwmon kernel module and daemon for system-wide sensor integr
 sudo apt install wireview-hwmon wireview-hwmon-dkms
 ```
 
+### Ubuntu / Debian (.deb package)
+
+A pre-built `.deb` package is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
+
+```bash
+sudo apt install ./wireview-linux_1.0.3.2_amd64.deb
+```
+
 ### Arch Linux (AUR)
 
 An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available, maintained by arakmar:
