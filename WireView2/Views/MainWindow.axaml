@@ -5,7 +5,7 @@
         xmlns:conv="using:WireView2.Converters"
         x:Class="WireView2.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/Icons/bear.ico"
+        Icon="/Assets/Icons/bear.png"
         Title="WireView Pro II - Linux Unofficial Client"
         Width="1200" Height="800"
         TransparencyLevelHint="None">

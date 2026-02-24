@@ -58,7 +58,7 @@ public class App : Application
 
     private void InitializeTray(IClassicDesktopStyleApplicationLifetime desktop)
     {
-        var stream = AssetLoader.Open(new Uri("avares://WireView2/Assets/Icons/bear.ico"));
+        var stream = AssetLoader.Open(new Uri("avares://WireView2/Assets/Icons/bear.png"));
         _trayIcon = new TrayIcon
         {
             Icon = new WindowIcon(stream),
