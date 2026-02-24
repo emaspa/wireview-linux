@@ -37,6 +37,20 @@ If the kernel module is not loaded, the app falls back to direct serial communic
 
 ## Installation
 
+### Ubuntu 24.04 (PPA)
+
+```bash
+sudo add-apt-repository ppa:sparvoli/wireview-hwmon
+sudo apt update
+sudo apt install wireview-linux
+```
+
+To also install the hwmon kernel module and daemon for system-wide sensor integration:
+
+```bash
+sudo apt install wireview-hwmon wireview-hwmon-dkms
+```
+
 ### Arch Linux (AUR)
 
 An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available, maintained by arakmar:
