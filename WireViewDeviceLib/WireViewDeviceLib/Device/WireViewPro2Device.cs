@@ -24,7 +24,7 @@ namespace WireView2.Device
         public string FirmwareVersion { get; private set; } = string.Empty;
         public string UniqueId { get; private set; } = string.Empty;
 
-        private int ConfigVersion = 0;
+        public int ConfigVersion { get; private set; }
 
         private int _pollIntervalMs = 1000;
         public int PollIntervalMs
@@ -60,7 +60,13 @@ namespace WireView2.Device
                 HardwareRevision = $"{vd.Value.VendorId:X2}{vd.Value.ProductId:X2}";
                 FirmwareVersion = vd.Value.FwVersion.ToString();
 
-                ConfigVersion = vd.Value.FwVersion > 2 ? 1 : 0;
+                int? cfgVer = ReadConfigVersion();
+                if (!cfgVer.HasValue)
+                {
+                    Connected = false;
+                    return;
+                }
+                ConfigVersion = cfgVer.Value;
 
                 UniqueId = ReadUid() ?? string.Empty;
 
@@ -74,8 +80,6 @@ namespace WireView2.Device
             {
                 Connected = false;
             }
-            _port.RtsEnable = false;
-            _port.Close();
 
             if (Connected)
             {
@@ -125,64 +129,46 @@ namespace WireView2.Device
             try { Disconnect(); } catch { }
         }
 
-        public DeviceConfigStructV2? ReadConfig()
+        public DeviceConfigStructV3? ReadConfig()
         {
             if (!Connected || _port == null) return null;
 
-            var size = 0;
-
-
+            int size;
             if (ConfigVersion == 0)
-            {
                 size = Marshal.SizeOf<DeviceConfigStructV1>();
-            }
             else if (ConfigVersion == 1)
-            {
                 size = Marshal.SizeOf<DeviceConfigStructV2>();
-            }
+            else if (ConfigVersion == 2)
+                size = Marshal.SizeOf<DeviceConfigStructV3>();
             else
-            {
                 return null;
-            }
 
             byte[]? buf = SendCmd(UsbCmd.CMD_READ_CONFIG, size);
-
             if (buf == null) return null;
 
             if (ConfigVersion == 0)
-            {
-                var _s = BytesToStruct<DeviceConfigStructV1>(buf);
-                return ConvertConfigV1ToV2(_s);
-            }
+                return ConvertConfigV1ToV3(BytesToStruct<DeviceConfigStructV1>(buf));
             else if (ConfigVersion == 1)
-            {
-                return BytesToStruct<DeviceConfigStructV2>(buf);
-            }
+                return ConvertConfigV2ToV3(BytesToStruct<DeviceConfigStructV2>(buf));
+            else if (ConfigVersion == 2)
+                return BytesToStruct<DeviceConfigStructV3>(buf);
             else
-            {
                 return null;
-            }
         }
 
-        public void WriteConfig(DeviceConfigStructV2 config)
+        public void WriteConfig(DeviceConfigStructV3 config)
         {
             if (!Connected || _port == null) return;
 
-            var payload = new byte[0];
-
+            byte[] payload;
             if (ConfigVersion == 0)
-            {
-                DeviceConfigStructV1 _s = ConvertConfigV2ToV1(config);
-                payload = StructToBytes(_s);
-            }
+                payload = StructToBytes(ConvertConfigV3ToV1(config));
             else if (ConfigVersion == 1)
-            {
+                payload = StructToBytes(ConvertConfigV3ToV2(config));
+            else if (ConfigVersion == 2)
                 payload = StructToBytes(config);
-            }
             else
-            {
                 return;
-            }
 
             var frame = new byte[64];
             frame[0] = (byte)UsbCmd.CMD_WRITE_CONFIG;
@@ -250,6 +236,14 @@ namespace WireView2.Device
             {
                 Disconnect();
             }
+        }
+
+        private int? ReadConfigVersion()
+        {
+            if (_port == null) return null;
+            byte[]? buf = SendCmd(UsbCmd.CMD_READ_CONFIG, 4);
+            if (buf == null) return null;
+            return buf[2];
         }
 
         private bool ReadWelcomeMessage(bool sendCmd = false)

@@ -199,7 +199,7 @@ namespace WireView2.Device
         }
 
         public enum AVG : byte
-        { 
+        {
             AVG_22MS,
             AVG_44MS,
             AVG_89MS,
@@ -210,8 +210,29 @@ namespace WireView2.Device
             AVG_NUM
         }
 
+        public enum DISPLAY_INVERSION : byte
+        {
+            DISPLAY_INVERSION_OFF,
+            DISPLAY_INVERSION_ON,
+            DISPLAY_INVERSION_NUM
+        }
+
+        public enum THEME_BACKGROUND : byte
+        {
+            ThermalGrizzlyOrange = 1,
+            ThermalGrizzlyDark = 2,
+            Disabled = byte.MaxValue
+        }
+
+        public enum THEME_FAN : byte
+        {
+            ThermalGrizzlyOrange = 100,
+            ThermalGrizzlyDark = 117,
+            ThermalGrizzlyBlackWhite = 152
+        }
+
         [StructLayout(LayoutKind.Sequential, Pack = 4)]
-        public struct UiConfigStruct
+        public struct UiConfigStructV1
         {
             public CurrentScale CurrentScale;
             public PowerScale PowerScale;
@@ -247,7 +268,7 @@ namespace WireView2.Device
             public byte CurrentImbalanceFaultMinLoad; // A
             public byte ShutdownWaitTime; // seconds
             public byte LoggingInterval; // seconds
-            public UiConfigStruct Ui;
+            public UiConfigStructV1 Ui;
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 4, CharSet = CharSet.Ansi)]
@@ -275,8 +296,72 @@ namespace WireView2.Device
             public byte ShutdownWaitTime; // seconds
             public byte LoggingInterval; // seconds
             public AVG Average;
-            public UiConfigStruct Ui;
+            public UiConfigStructV1 Ui;
         }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 4)]
+        public struct UiConfigStructV2
+        {
+            public Screen DefaultScreen;
+            public CurrentScale CurrentScale;
+            public PowerScale PowerScale;
+            public DisplayRotation DisplayRotation;
+            public TimeoutMode TimeoutMode;
+            public byte CycleScreens;
+            public byte CycleTime;
+            public byte Timeout;
+            public uint PrimaryColor;
+            public uint SecondaryColor;
+            public uint HighlightColor;
+            public uint BackgroundColor;
+            public byte BackgroundBitmapId;
+            public byte FanBitmapId;
+            public DISPLAY_INVERSION DisplayInversion;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 4, CharSet = CharSet.Ansi)]
+        public struct DeviceConfigStructV3
+        {
+            public ushort Crc;
+            public byte Version;
+
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = DEVICE_STR_LEN)]
+            public byte[] FriendlyName;
+
+            public FanConfigStruct FanConfig;
+            public byte BacklightDuty;
+
+            public ushort FaultDisplayEnable;
+            public ushort FaultBuzzerEnable;
+            public ushort FaultSoftPowerEnable;
+            public ushort FaultHardPowerEnable;
+            public short TsFaultThreshold;
+            public byte OcpFaultThreshold;
+            public byte WireOcpFaultThreshold;
+            public ushort OppFaultThreshold;
+            public byte CurrentImbalanceFaultThreshold;
+            public byte CurrentImbalanceFaultMinLoad;
+            public byte ShutdownWaitTime;
+            public byte LoggingInterval;
+            public AVG Average;
+            public UiConfigStructV2 Ui;
+        }
+
+        // Theme color constants (ARGB)
+        public const uint THEME_PRIMARY_COLOR_TG1 = uint.MaxValue;
+        public const uint THEME_SECONDARY_COLOR_TG1 = 4284769380u;
+        public const uint THEME_HIGHLIGHT_COLOR_TG1 = 4293280033u;
+        public const uint THEME_BACKGROUND_COLOR_TG1 = 4278190080u;
+
+        public const uint THEME_PRIMARY_COLOR_TG2 = uint.MaxValue;
+        public const uint THEME_SECONDARY_COLOR_TG2 = 4284769380u;
+        public const uint THEME_HIGHLIGHT_COLOR_TG2 = 4290690750u;
+        public const uint THEME_BACKGROUND_COLOR_TG2 = 4278190080u;
+
+        public const uint THEME_PRIMARY_COLOR_TG3 = 4288059030u;
+        public const uint THEME_SECONDARY_COLOR_TG3 = 4283453520u;
+        public const uint THEME_HIGHLIGHT_COLOR_TG3 = uint.MaxValue;
+        public const uint THEME_BACKGROUND_COLOR_TG3 = 4278190080u;
 
         // Default DeviceConfigStruct = V2
         internal static DeviceConfigStructV1 ConvertConfigV2ToV1(DeviceConfigStructV2 configV2)
@@ -330,6 +415,95 @@ namespace WireView2.Device
                 Ui = configV1.Ui
             };
             return configV2;
+        }
+
+        internal static DeviceConfigStructV3 ConvertConfigV2ToV3(DeviceConfigStructV2 configV2)
+        {
+            return new DeviceConfigStructV3
+            {
+                Crc = configV2.Crc,
+                Version = configV2.Version,
+                FriendlyName = configV2.FriendlyName,
+                FanConfig = configV2.FanConfig,
+                BacklightDuty = configV2.BacklightDuty,
+                FaultDisplayEnable = configV2.FaultDisplayEnable,
+                FaultBuzzerEnable = configV2.FaultBuzzerEnable,
+                FaultSoftPowerEnable = configV2.FaultSoftPowerEnable,
+                FaultHardPowerEnable = configV2.FaultHardPowerEnable,
+                TsFaultThreshold = configV2.TsFaultThreshold,
+                OcpFaultThreshold = configV2.OcpFaultThreshold,
+                WireOcpFaultThreshold = configV2.WireOcpFaultThreshold,
+                OppFaultThreshold = configV2.OppFaultThreshold,
+                CurrentImbalanceFaultThreshold = configV2.CurrentImbalanceFaultThreshold,
+                CurrentImbalanceFaultMinLoad = configV2.CurrentImbalanceFaultMinLoad,
+                ShutdownWaitTime = configV2.ShutdownWaitTime,
+                LoggingInterval = configV2.LoggingInterval,
+                Average = configV2.Average,
+                Ui = new UiConfigStructV2
+                {
+                    DefaultScreen = Screen.ScreenMain,
+                    CurrentScale = configV2.Ui.CurrentScale,
+                    PowerScale = configV2.Ui.PowerScale,
+                    DisplayRotation = configV2.Ui.DisplayRotation,
+                    TimeoutMode = configV2.Ui.TimeoutMode,
+                    CycleScreens = configV2.Ui.CycleScreens,
+                    CycleTime = configV2.Ui.CycleTime,
+                    Timeout = configV2.Ui.Timeout,
+                    PrimaryColor = configV2.Ui.Theme == Theme.ThemeTg1 ? THEME_PRIMARY_COLOR_TG1 : configV2.Ui.Theme == Theme.ThemeTg2 ? THEME_PRIMARY_COLOR_TG2 : THEME_PRIMARY_COLOR_TG3,
+                    SecondaryColor = configV2.Ui.Theme == Theme.ThemeTg1 ? THEME_SECONDARY_COLOR_TG1 : configV2.Ui.Theme == Theme.ThemeTg2 ? THEME_SECONDARY_COLOR_TG2 : THEME_SECONDARY_COLOR_TG3,
+                    HighlightColor = configV2.Ui.Theme == Theme.ThemeTg1 ? THEME_HIGHLIGHT_COLOR_TG1 : configV2.Ui.Theme == Theme.ThemeTg2 ? THEME_HIGHLIGHT_COLOR_TG2 : THEME_HIGHLIGHT_COLOR_TG3,
+                    BackgroundColor = configV2.Ui.Theme == Theme.ThemeTg1 ? THEME_BACKGROUND_COLOR_TG1 : configV2.Ui.Theme == Theme.ThemeTg2 ? THEME_BACKGROUND_COLOR_TG2 : THEME_BACKGROUND_COLOR_TG3,
+                    BackgroundBitmapId = (byte)(configV2.Ui.Theme == Theme.ThemeTg1 ? 1 : configV2.Ui.Theme == Theme.ThemeTg2 ? 2 : byte.MaxValue),
+                    FanBitmapId = (byte)(configV2.Ui.Theme == Theme.ThemeTg1 ? 100 : configV2.Ui.Theme == Theme.ThemeTg2 ? 117 : 152),
+                    DisplayInversion = DISPLAY_INVERSION.DISPLAY_INVERSION_OFF
+                }
+            };
+        }
+
+        internal static DeviceConfigStructV2 ConvertConfigV3ToV2(DeviceConfigStructV3 configV3)
+        {
+            return new DeviceConfigStructV2
+            {
+                Crc = configV3.Crc,
+                Version = configV3.Version,
+                FriendlyName = configV3.FriendlyName,
+                FanConfig = configV3.FanConfig,
+                BacklightDuty = configV3.BacklightDuty,
+                FaultDisplayEnable = configV3.FaultDisplayEnable,
+                FaultBuzzerEnable = configV3.FaultBuzzerEnable,
+                FaultSoftPowerEnable = configV3.FaultSoftPowerEnable,
+                FaultHardPowerEnable = configV3.FaultHardPowerEnable,
+                TsFaultThreshold = configV3.TsFaultThreshold,
+                OcpFaultThreshold = configV3.OcpFaultThreshold,
+                WireOcpFaultThreshold = configV3.WireOcpFaultThreshold,
+                OppFaultThreshold = configV3.OppFaultThreshold,
+                CurrentImbalanceFaultThreshold = configV3.CurrentImbalanceFaultThreshold,
+                CurrentImbalanceFaultMinLoad = configV3.CurrentImbalanceFaultMinLoad,
+                ShutdownWaitTime = configV3.ShutdownWaitTime,
+                LoggingInterval = configV3.LoggingInterval,
+                Average = configV3.Average,
+                Ui = new UiConfigStructV1
+                {
+                    Theme = configV3.Ui.BackgroundBitmapId == 1 ? Theme.ThemeTg1 : configV3.Ui.BackgroundBitmapId == 2 ? Theme.ThemeTg2 : Theme.ThemeTg3,
+                    CurrentScale = configV3.Ui.CurrentScale,
+                    PowerScale = configV3.Ui.PowerScale,
+                    DisplayRotation = configV3.Ui.DisplayRotation,
+                    TimeoutMode = configV3.Ui.TimeoutMode,
+                    CycleScreens = configV3.Ui.CycleScreens,
+                    CycleTime = configV3.Ui.CycleTime,
+                    Timeout = configV3.Ui.Timeout
+                }
+            };
+        }
+
+        internal static DeviceConfigStructV1 ConvertConfigV3ToV1(DeviceConfigStructV3 configV3)
+        {
+            return ConvertConfigV2ToV1(ConvertConfigV3ToV2(configV3));
+        }
+
+        internal static DeviceConfigStructV3 ConvertConfigV1ToV3(DeviceConfigStructV1 configV1)
+        {
+            return ConvertConfigV2ToV3(ConvertConfigV1ToV2(configV1));
         }
 
     }

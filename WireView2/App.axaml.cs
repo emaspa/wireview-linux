@@ -23,6 +23,8 @@ public class App : Application
     private readonly object _mainWindowGate = new object();
     private bool _isShowingMainWindow;
 
+    public static event EventHandler<bool>? MainWindowVisibilityChanged;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -35,6 +37,12 @@ public class App : Application
             DisableAvaloniaDataAnnotationValidation();
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             AppSettings.Reload();
+            bool osAutoStart = AutoStartService.GetAutoStart();
+            if (AppSettings.Current.AutoStart != osAutoStart)
+            {
+                AppSettings.Current.AutoStart = osAutoStart;
+                AppSettings.SaveCurrent();
+            }
             ApplyTheme(AppSettings.Current.ThemePreference);
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;
@@ -112,6 +120,20 @@ public class App : Application
             if (window == null || !window.IsVisible)
             {
                 window = new MainWindow { DataContext = new MainWindowViewModel() };
+                window.PropertyChanged += (_, args) =>
+                {
+                    if (args.Property == Window.WindowStateProperty || args.Property == Visual.IsVisibleProperty)
+                    {
+                        bool visible = window.IsVisible && window.WindowState != WindowState.Minimized;
+                        MainWindowVisibilityChanged?.Invoke(this, visible);
+                    }
+                };
+                window.Closing += (_, args) =>
+                {
+                    args.Cancel = true;
+                    window.Hide();
+                    MainWindowVisibilityChanged?.Invoke(this, false);
+                };
                 if (startMinimized)
                     window.WindowState = WindowState.Minimized;
                 window.Closed += (_, _) =>
@@ -121,6 +143,7 @@ public class App : Application
                 };
                 desktop.MainWindow = window;
                 window.Show();
+                MainWindowVisibilityChanged?.Invoke(this, !startMinimized);
                 if (!startMinimized) window.Activate();
             }
             else
@@ -128,6 +151,7 @@ public class App : Application
                 if (window.WindowState == WindowState.Minimized)
                     window.WindowState = WindowState.Normal;
                 window.Activate();
+                MainWindowVisibilityChanged?.Invoke(this, true);
             }
         }
         finally
