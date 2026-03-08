@@ -220,7 +220,7 @@ namespace WireView2.Device
             SendDaemonRequest(WCMD_CLEAR_FAULTS, payload);
         }
 
-        public WireViewPro2Device.DeviceConfigStructV2? ReadConfig()
+        public WireViewPro2Device.DeviceConfigStructV3? ReadConfig()
         {
             if (!DaemonAvailable || _configVersion < 0) return null;
 
@@ -229,6 +229,8 @@ namespace WireView2.Device
                 size = Marshal.SizeOf<WireViewPro2Device.DeviceConfigStructV1>();
             else if (_configVersion == 1)
                 size = Marshal.SizeOf<WireViewPro2Device.DeviceConfigStructV2>();
+            else if (_configVersion == 2)
+                size = Marshal.SizeOf<WireViewPro2Device.DeviceConfigStructV3>();
             else
                 return null;
 
@@ -246,11 +248,16 @@ namespace WireView2.Device
             if (configVer == 0)
             {
                 var v1 = BytesToStruct<WireViewPro2Device.DeviceConfigStructV1>(configBytes);
-                return WireViewPro2Device.ConvertConfigV1ToV2(v1);
+                return WireViewPro2Device.ConvertConfigV1ToV3(v1);
             }
             else if (configVer == 1)
             {
-                return BytesToStruct<WireViewPro2Device.DeviceConfigStructV2>(configBytes);
+                var v2 = BytesToStruct<WireViewPro2Device.DeviceConfigStructV2>(configBytes);
+                return WireViewPro2Device.ConvertConfigV2ToV3(v2);
+            }
+            else if (configVer == 2)
+            {
+                return BytesToStruct<WireViewPro2Device.DeviceConfigStructV3>(configBytes);
             }
             else
             {
@@ -258,19 +265,28 @@ namespace WireView2.Device
             }
         }
 
-        public void WriteConfig(WireViewPro2Device.DeviceConfigStructV2 config)
+        public void WriteConfig(WireViewPro2Device.DeviceConfigStructV3 config)
         {
             if (!DaemonAvailable || _configVersion < 0) return;
 
             byte[] configBytes;
             if (_configVersion == 0)
             {
-                var v1 = WireViewPro2Device.ConvertConfigV2ToV1(config);
+                var v1 = WireViewPro2Device.ConvertConfigV3ToV1(config);
                 configBytes = StructToBytes(v1);
+            }
+            else if (_configVersion == 1)
+            {
+                var v2 = WireViewPro2Device.ConvertConfigV3ToV2(config);
+                configBytes = StructToBytes(v2);
+            }
+            else if (_configVersion == 2)
+            {
+                configBytes = StructToBytes(config);
             }
             else
             {
-                configBytes = StructToBytes(config);
+                return;
             }
 
             var payload = new byte[1 + configBytes.Length];

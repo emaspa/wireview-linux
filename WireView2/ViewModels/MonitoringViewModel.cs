@@ -193,6 +193,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     private int _updateIntervalMs = 1000;
     private bool _isConnected;
     private readonly DateTime _t0Utc = DateTime.UtcNow;
+    private bool _disposed;
+    private bool _isViewVisible = true;
 
     // ======================== Properties ========================
 
@@ -241,6 +243,12 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     public AxisConfig YC { get; } = new("\u00b0C");
 
     public ObservableCollection<TelemetryItem> Items { get; } = new();
+
+    public bool IsViewVisible
+    {
+        get => _isViewVisible;
+        set => Set(ref _isViewVisible, value);
+    }
 
     // ======================== Constructor ========================
 
@@ -339,6 +347,13 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(IsConnected));
             OnPropertyChanged(nameof(ConnectionText));
         });
+        App.MainWindowVisibilityChanged += OnMainWindowVisibilityChanged;
+    }
+
+    private void OnMainWindowVisibilityChanged(object? sender, bool isVisible)
+    {
+        if (!_disposed)
+            IsViewVisible = isVisible;
     }
 
     // ======================== CSV Export ========================
@@ -751,8 +766,11 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        XAxes[0].MinLimit = cutoff;
-        XAxes[0].MaxLimit = x;
+        if (IsViewVisible)
+        {
+            XAxes[0].MinLimit = cutoff;
+            XAxes[0].MaxLimit = x;
+        }
 
         lock (_gate)
         {
@@ -773,6 +791,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        App.MainWindowVisibilityChanged -= OnMainWindowVisibilityChanged;
         StopCsvExport();
         if (_ownsConnector)
         {
