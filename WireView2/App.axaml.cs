@@ -130,9 +130,12 @@ public class App : Application
                 };
                 window.Closing += (_, args) =>
                 {
-                    args.Cancel = true;
-                    window.Hide();
-                    MainWindowVisibilityChanged?.Invoke(this, false);
+                    if (args.CloseReason == WindowCloseReason.WindowClosing)
+                    {
+                        args.Cancel = true;
+                        window.Hide();
+                        MainWindowVisibilityChanged?.Invoke(this, false);
+                    }
                 };
                 if (startMinimized)
                     window.WindowState = WindowState.Minimized;
