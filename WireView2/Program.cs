@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Logging;
+using Avalonia.Media;
 using WireView2.Services;
 
 namespace WireView2;
@@ -21,6 +22,7 @@ internal static class Program
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
             .LogToTrace(LogEventLevel.Warning);
     }
 }
