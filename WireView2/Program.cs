@@ -21,8 +21,7 @@ internal static class Program
     {
         return AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .WithInterFont()
-            .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
+            .With(new FontManagerOptions { DefaultFamilyName = "avares://WireView2/Assets/Fonts/Inter-Regular.ttf#Inter" })
             .LogToTrace(LogEventLevel.Warning);
     }
 }
