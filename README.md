@@ -77,17 +77,21 @@ An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available
 yay -S wireview-linux
 ```
 
-### Granting serial access (package installs)
+### Serial access (package installs)
 
-The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule
-automatically, but you still need to be in the `dialout` group to access the
-device's serial port. Add yourself once and log out and back in:
+The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
+the system reloads it automatically, so **serial access works out of the box** —
+the rule grants the device node access directly (`MODE="0666"` plus a logind
+`uaccess` ACL for the active session), with no group membership or logout
+required.
+
+If access still fails in an unusual setup (for example over SSH, where the
+`uaccess` ACL doesn't apply), add yourself to the `dialout` group and log back
+in:
 
 ```bash
 sudo usermod -aG dialout "$USER"
 ```
-
-The precompiled tarball below does this for you via its `install.sh`.
 
 ### Option 1: Pre-built binary (no .NET required)
 
