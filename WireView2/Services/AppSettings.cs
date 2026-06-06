@@ -82,6 +82,8 @@ public class AppSettings
     // Tray icon presentation — show a second tray icon with the live total power
     // (plain text), shown as a red icon when the device is disconnected.
     public bool ShowTrayPower { get; set; } = true;
+    // Whether the tray power icon includes the unit word under the number.
+    public bool ShowTrayPowerUnit { get; set; } = true;
 
     public int MonitoringXWindowSeconds { get; set; } = 30;
 

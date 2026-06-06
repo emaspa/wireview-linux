@@ -21,6 +21,7 @@ public class SettingsViewModel : ViewModelBase
     private AppSettings.StartupScreen _screenAfterConnection;
     private bool _softwareShutdownOnFault;
     private bool _showTrayPower;
+    private bool _showTrayPowerUnit;
 
     // ======================== Properties ========================
 
@@ -143,6 +144,19 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    public bool ShowTrayPowerUnit
+    {
+        get => _showTrayPowerUnit;
+        set
+        {
+            if (Set(ref _showTrayPowerUnit, value))
+            {
+                AppSettings.Current.ShowTrayPowerUnit = value;
+                AppSettings.SaveCurrent();
+            }
+        }
+    }
+
     public string BuildDateText
     {
         get
@@ -185,6 +199,7 @@ public class SettingsViewModel : ViewModelBase
         _screenAfterConnection = AppSettings.Current.ScreenAfterConnection;
         _softwareShutdownOnFault = AppSettings.Current.SoftwareShutdownOnFault;
         _showTrayPower = AppSettings.Current.ShowTrayPower;
+        _showTrayPowerUnit = AppSettings.Current.ShowTrayPowerUnit;
         AppSettings.Saved += OnSettingsSaved;
     }
 
@@ -228,6 +243,9 @@ public class SettingsViewModel : ViewModelBase
 
         if (Set(ref _showTrayPower, AppSettings.Current.ShowTrayPower, nameof(ShowTrayPower)))
             OnPropertyChanged(nameof(ShowTrayPower));
+
+        if (Set(ref _showTrayPowerUnit, AppSettings.Current.ShowTrayPowerUnit, nameof(ShowTrayPowerUnit)))
+            OnPropertyChanged(nameof(ShowTrayPowerUnit));
     }
 
     // ======================== Theme / appearance ========================

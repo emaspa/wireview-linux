@@ -28,6 +28,7 @@ public class App : Application
     private TrayIcon? _powerTrayIcon;
     private NativeMenuItem? _autoStartMenuItem;
     private NativeMenuItem? _showPowerMenuItem;
+    private NativeMenuItem? _showUnitMenuItem;
     private NativeMenu? _trayMenu;
     private NativeMenuItem? _statusMenuItem;
     private NativeMenuItemSeparator? _statusSeparator;
@@ -92,6 +93,8 @@ public class App : Application
                 _autoStartMenuItem.IsChecked = AppSettings.Current.AutoStart;
             if (_showPowerMenuItem != null)
                 _showPowerMenuItem.IsChecked = AppSettings.Current.ShowTrayPower;
+            if (_showUnitMenuItem != null)
+                _showUnitMenuItem.IsChecked = AppSettings.Current.ShowTrayPowerUnit;
             UpdateTrayVisuals();
         });
     }
@@ -152,11 +155,26 @@ public class App : Application
             _showPowerMenuItem.IsChecked = newState;
             UpdateTrayVisuals();
         };
+        _showUnitMenuItem = new NativeMenuItem("Show unit name")
+        {
+            ToggleType = NativeMenuItemToggleType.CheckBox,
+            IsChecked = AppSettings.Current.ShowTrayPowerUnit,
+            IsEnabled = AppSettings.Current.ShowTrayPower
+        };
+        _showUnitMenuItem.Click += (_, _) =>
+        {
+            bool newState = !AppSettings.Current.ShowTrayPowerUnit;
+            AppSettings.Current.ShowTrayPowerUnit = newState;
+            AppSettings.SaveCurrent();
+            _showUnitMenuItem.IsChecked = newState;
+            UpdateTrayVisuals();
+        };
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => desktop.Shutdown();
         menu.Items.Add(showItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(_showPowerMenuItem);
+        menu.Items.Add(_showUnitMenuItem);
         menu.Items.Add(_autoStartMenuItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
@@ -237,6 +255,10 @@ public class App : Application
     {
         bool showPower = AppSettings.Current.ShowTrayPower;
         string statusText = _trayConnected ? $"{_trayWatts} W" : "Disconnected";
+
+        // The unit toggle only applies while the power icon is shown.
+        if (_showUnitMenuItem != null)
+            _showUnitMenuItem.IsEnabled = showPower;
 
         // Icon 2: create/dispose rather than toggling IsVisible. Avalonia's
         // FreeDesktop StatusNotifierItem backend throws when an icon is hidden and
@@ -344,8 +366,11 @@ public class App : Application
     private static string FormatTemp(double t) =>
         t > -100.0 && t < 200.0 ? $"{t.ToString("0.#", CultureInfo.InvariantCulture)} °C" : "N/A";
 
-    // Plain monochrome wattage number filling a square icon (no background colour);
-    // white glyphs with a dark outline stay legible on both light and dark panels.
+    // Monochrome wattage on a square icon: the number large on top with the unit
+    // word ("watt") smaller below, so the digits stay big for 2- and 3-digit
+    // values. White glyphs with a dark halo stay legible on light and dark panels.
+    private const string TrayPowerUnit = "watt";
+
     private WindowIcon RenderWattsIcon(int watts)
     {
         const int size = 64;
@@ -354,25 +379,32 @@ public class App : Application
         {
             using (var ctx = rtb.CreateDrawingContext())
             {
-                // Single uniform label, e.g. "180W", sized to fill the square.
-                string label = watts >= 1000 ? $"{watts / 1000}kW" : $"{watts}W";
+                string num = watts >= 1000 ? $"{watts / 1000}k" : watts.ToString(CultureInfo.InvariantCulture);
                 var typeface = new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold);
-                double avail = size - 8;
-                double em = avail;
-                var ft = MakeText(label, typeface, em);
-                if (ft.Width > avail) ft = MakeText(label, typeface, em * avail / ft.Width);
-                if (ft.Height > avail) ft = MakeText(label, typeface, em * avail / ft.Height);
-                double tx = (size - ft.Width) / 2.0, ty = (size - ft.Height) / 2.0;
-                var geo = ft.BuildGeometry(new Point(tx, ty));
-                if (geo != null)
+                var halo = new Pen(new SolidColorBrush(Color.Parse("#E6000000")), 5)
                 {
-                    // Dark halo underneath, solid white core on top → legible on any panel.
-                    var halo = new Pen(new SolidColorBrush(Color.Parse("#E6000000")), 6)
-                    {
-                        LineJoin = PenLineJoin.Round
-                    };
-                    ctx.DrawGeometry(null, halo, geo);
-                    ctx.DrawGeometry(Brushes.White, null, geo);
+                    LineJoin = PenLineJoin.Round
+                };
+
+                if (AppSettings.Current.ShowTrayPowerUnit)
+                {
+                    // Number row (~56% of the height) over the unit word (~30%).
+                    var numGeo = SizeGlyphs(num, typeface, size - 6, size * 0.56, out var numBounds);
+                    var unitGeo = SizeGlyphs(TrayPowerUnit, typeface, size - 3, size * 0.30, out var unitBounds);
+
+                    double gap = size * 0.03;
+                    double totalH = numBounds.Height + gap + unitBounds.Height;
+                    double top = (size - totalH) / 2.0;
+                    DrawGlyphs(ctx, numGeo, numBounds, (size - numBounds.Width) / 2.0, top, halo);
+                    DrawGlyphs(ctx, unitGeo, unitBounds, (size - unitBounds.Width) / 2.0,
+                        top + numBounds.Height + gap, halo);
+                }
+                else
+                {
+                    // Number only, filling the square.
+                    var numGeo = SizeGlyphs(num, typeface, size - 6, size - 8, out var numBounds);
+                    DrawGlyphs(ctx, numGeo, numBounds, (size - numBounds.Width) / 2.0,
+                        (size - numBounds.Height) / 2.0, halo);
                 }
             }
             using var ms = new MemoryStream();
@@ -383,6 +415,32 @@ public class App : Application
         finally
         {
             rtb.Dispose();
+        }
+    }
+
+    // Build glyph geometry for text scaled to fit maxW × maxH, returning its tight
+    // ink bounds for precise placement.
+    private static Geometry? SizeGlyphs(string text, Typeface tf, double maxW, double maxH, out Rect bounds)
+    {
+        double em = maxH * 1.4;
+        var geo = MakeText(text, tf, em).BuildGeometry(new Point(0, 0));
+        if (geo == null) { bounds = default; return null; }
+        var b = geo.Bounds;
+        double scale = Math.Min(maxW / b.Width, maxH / b.Height);
+        geo = MakeText(text, tf, em * scale).BuildGeometry(new Point(0, 0));
+        bounds = geo?.Bounds ?? default;
+        return geo;
+    }
+
+    // Draw glyph geometry so its ink top-left lands at (tx, ty): dark halo under,
+    // solid white core on top.
+    private static void DrawGlyphs(DrawingContext ctx, Geometry? geo, Rect bounds, double tx, double ty, Pen halo)
+    {
+        if (geo == null) return;
+        using (ctx.PushTransform(Matrix.CreateTranslation(tx - bounds.X, ty - bounds.Y)))
+        {
+            ctx.DrawGeometry(null, halo, geo);
+            ctx.DrawGeometry(Brushes.White, null, geo);
         }
     }
 

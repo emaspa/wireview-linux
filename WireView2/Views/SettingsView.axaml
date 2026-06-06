@@ -50,6 +50,8 @@
                 <StackPanel Spacing="12">
                     <TextBlock Text="Tray icon" FontWeight="SemiBold" FontSize="16"/>
                     <CheckBox Content="Show total power as a second tray icon" IsChecked="{Binding ShowTrayPower}"/>
+                    <CheckBox Content="Show the unit name under the number" IsChecked="{Binding ShowTrayPowerUnit}"
+                              IsEnabled="{Binding ShowTrayPower}" Margin="16,0,0,0"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
                                Text="Adds a second tray icon next to the app icon showing the live total power (e.g. 180W), or a red icon when the device is disconnected. Right-click it for a dropdown of all live sensor values (per-pin voltage, current and power, temperatures and cable rating). This icon can also be toggled from the app icon's right-click menu. On GNOME, a tray / AppIndicator extension is required to see tray icons."/>
                 </StackPanel>
