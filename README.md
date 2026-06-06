@@ -91,8 +91,6 @@ sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/ude
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-Flatpak packaging lives in [`flatpak/`](flatpak/); see [`flatpak/README.md`](flatpak/README.md) to build the bundle yourself.
-
 ### Arch Linux (AUR)
 
 An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available, maintained by arakmar:
