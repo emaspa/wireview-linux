@@ -59,15 +59,39 @@ A pre-built `.deb` package is available on the [Releases](https://github.com/ema
 sudo apt install ./wireview-linux_*_amd64.deb
 ```
 
-### Fedora (.rpm package)
+### Fedora (COPR)
 
-A pre-built `.rpm` is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. A single RPM works on all current Fedora releases (tested on 42, 43, and 44):
+```bash
+sudo dnf copr enable emaspa/wireview-linux
+sudo dnf install wireview-linux
+```
+
+Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page — a single RPM works on all current Fedora releases (tested on 42, 43, and 44):
 
 ```bash
 sudo dnf install ./wireview-linux-*.x86_64.rpm
 ```
 
-The package is a self-contained binary — no .NET runtime is required. RPM packaging lives in [`rpm/`](rpm/) (spec + build script); see [`rpm/README.md`](rpm/README.md) for building it yourself or publishing to COPR. Note: immutable, atomic distros (Bazzite, Silverblue, Kinoite) are not the target for the RPM — run the app from a `toolbox`/`distrobox` container, or use the precompiled binary above.
+The package is a self-contained binary — no .NET runtime is required. RPM packaging lives in [`rpm/`](rpm/); see [`rpm/README.md`](rpm/README.md) to build it or publish to COPR. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
+
+### Flatpak (Bazzite / Silverblue / immutable distros)
+
+A `.flatpak` bundle is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
+
+```bash
+flatpak install ./wireview-linux-*.flatpak
+flatpak run io.github.emaspa.WireViewLinux
+```
+
+The Flatpak supports direct USB serial mode. A sandbox cannot install udev rules, so install the rule on the host once:
+
+```bash
+sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \
+  -o /etc/udev/rules.d/99-wireview.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Flatpak packaging lives in [`flatpak/`](flatpak/); see [`flatpak/README.md`](flatpak/README.md) to build the bundle yourself.
 
 ### Arch Linux (AUR)
 
