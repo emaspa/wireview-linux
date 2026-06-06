@@ -66,6 +66,12 @@ sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 
+To also install the hwmon kernel module and daemon for system-wide sensor integration (same COPR repo):
+
+```bash
+sudo dnf install wireview-hwmon wireview-hwmon-dkms
+```
+
 Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page — a single RPM works on all current Fedora releases (tested on 42, 43, and 44):
 
 ```bash
@@ -103,6 +109,12 @@ A community source package, [`wireview-linux`](https://aur.archlinux.org/package
 
 ```bash
 paru -S wireview-linux
+```
+
+To also install the hwmon kernel module and daemon for system-wide sensor integration:
+
+```bash
+paru -S wireview-hwmon wireview-hwmon-dkms
 ```
 
 ### Serial access (package installs)
