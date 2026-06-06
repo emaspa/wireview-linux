@@ -91,12 +91,18 @@ sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/ude
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-### Arch Linux (AUR)
+### Arch Linux / CachyOS / EndeavourOS (AUR)
 
-An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available, maintained by arakmar:
+[`wireview-linux-bin`](https://aur.archlinux.org/packages/wireview-linux-bin) installs the pre-built release binary (no .NET SDK, no compile) and tracks the latest release:
 
 ```bash
-yay -S wireview-linux
+paru -S wireview-linux-bin   # or: yay -S wireview-linux-bin
+```
+
+A community source package, [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux) (maintained by arakmar), builds from source instead — note it may lag behind the latest release:
+
+```bash
+paru -S wireview-linux
 ```
 
 ### Serial access (package installs)
