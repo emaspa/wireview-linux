@@ -32,7 +32,7 @@ If the kernel module is not loaded, the app falls back to direct serial communic
 
 ## Requirements
 
-- Linux with USB support (tested on Ubuntu 24.04 LTS, 26.04 LTS, Fedora 42–44, and Arch Linux)
+- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 42–44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
