@@ -77,22 +77,33 @@ An [AUR package](https://aur.archlinux.org/packages/wireview-linux) is available
 yay -S wireview-linux
 ```
 
+### Granting serial access (package installs)
+
+The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule
+automatically, but you still need to be in the `dialout` group to access the
+device's serial port. Add yourself once and log out and back in:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
+The precompiled tarball below does this for you via its `install.sh`.
+
 ### Option 1: Pre-built binary (no .NET required)
+
+The tarball is self-contained: the app binary, the udev rule, and a one-time
+`install.sh` that sets up USB serial access.
 
 ```bash
 # Download and extract the latest release
-mkdir -p ~/wireview-linux
-curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz -C ~/wireview-linux
+curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz
+cd wireview-linux-*-linux-x64
 
-# Set up USB permissions
-sudo cp ~/wireview-linux/udev/99-wireview.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo usermod -aG dialout $USER
-sudo usermod -aG plugdev $USER
+# One-time USB serial setup (installs the udev rule, adds you to dialout/plugdev)
+./install.sh
 
 # Log out and back in, then run
-~/wireview-linux/WireView2
+./WireView2
 ```
 
 ### Option 2: Build from source

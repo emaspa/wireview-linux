@@ -28,3 +28,6 @@ reddit-post.md
 # OS
 .DS_Store
 Thumbs.db
+
+# Release build output
+dist/
