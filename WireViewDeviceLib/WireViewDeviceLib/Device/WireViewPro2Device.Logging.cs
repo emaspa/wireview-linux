@@ -94,7 +94,6 @@ public partial class WireViewPro2Device
 
             var frame = new byte[1 + 4 + 4];
             frame[0] = CmdSpiFlashReadPage;
-            byte[]? rx = null;
 
             // Disable UI updates
             lock (_port) {
