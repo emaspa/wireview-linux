@@ -2,6 +2,9 @@
 bin/
 obj/
 
+# RPM build artifacts
+rpm/build/
+
 # IDE
 .vs/
 .idea/
