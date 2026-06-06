@@ -46,6 +46,14 @@
                                Text="When enabled, the system will shut down when the device reports a fault alarm. This is an alternative to the hardware shutdown header for eGPU or other setups where the cable cannot be connected."/>
                 </StackPanel>
             </Border>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Tray icon" FontWeight="SemiBold" FontSize="16"/>
+                    <CheckBox Content="Show total power as a second tray icon" IsChecked="{Binding ShowTrayPower}"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Adds a second tray icon next to the app icon showing the live total power (e.g. 180W), or a red icon when the device is disconnected. Right-click it for a dropdown of all live sensor values (per-pin voltage, current and power, temperatures and cable rating). This icon can also be toggled from the app icon's right-click menu. On GNOME, a tray / AppIndicator extension is required to see tray icons."/>
+                </StackPanel>
+            </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
                 <StackPanel Spacing="8">
                     <TextBlock Text="About" FontWeight="SemiBold" FontSize="16"/>

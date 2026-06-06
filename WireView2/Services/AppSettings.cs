@@ -79,6 +79,10 @@ public class AppSettings
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
     public bool SoftwareShutdownOnFault { get; set; }
 
+    // Tray icon presentation — show a second tray icon with the live total power
+    // (plain text), shown as a red icon when the device is disconnected.
+    public bool ShowTrayPower { get; set; } = true;
+
     public int MonitoringXWindowSeconds { get; set; } = 30;
 
     public MonitoringAxisSettings MonitoringYV { get; set; } = new MonitoringAxisSettings();
