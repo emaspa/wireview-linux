@@ -103,10 +103,10 @@ The tarball is self-contained: the app binary, the udev rule, and a one-time
 curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz
 cd wireview-linux-*-linux-x64
 
-# One-time USB serial setup (installs the udev rule, adds you to dialout/plugdev)
+# One-time USB serial setup (installs the udev rule)
 ./install.sh
 
-# Log out and back in, then run
+# Run
 ./WireView2
 ```
 
