@@ -72,7 +72,7 @@ Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wire
 sudo dnf install ./wireview-linux-*.x86_64.rpm
 ```
 
-The package is a self-contained binary — no .NET runtime is required. RPM packaging lives in [`rpm/`](rpm/); see [`rpm/README.md`](rpm/README.md) to build it or publish to COPR. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
+The package is a self-contained binary — no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
 
 ### Flatpak (Bazzite / Silverblue / immutable distros)
 
