@@ -32,7 +32,7 @@ If the kernel module is not loaded, the app falls back to direct serial communic
 
 ## Requirements
 
-- Linux with USB support (tested on Ubuntu 24.04 LTS, 26.04 LTS, and Arch Linux)
+- Linux with USB support (tested on Ubuntu 24.04 LTS, 26.04 LTS, Fedora 42–44, and Arch Linux)
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
@@ -58,6 +58,16 @@ A pre-built `.deb` package is available on the [Releases](https://github.com/ema
 ```bash
 sudo apt install ./wireview-linux_*_amd64.deb
 ```
+
+### Fedora (.rpm package)
+
+A pre-built `.rpm` is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. A single RPM works on all current Fedora releases (tested on 42, 43, and 44):
+
+```bash
+sudo dnf install ./wireview-linux-*.x86_64.rpm
+```
+
+The package is a self-contained binary — no .NET runtime is required. RPM packaging lives in [`rpm/`](rpm/) (spec + build script); see [`rpm/README.md`](rpm/README.md) for building it yourself or publishing to COPR. Note: immutable, atomic distros (Bazzite, Silverblue, Kinoite) are not the target for the RPM — run the app from a `toolbox`/`distrobox` container, or use the precompiled binary above.
 
 ### Arch Linux (AUR)
 
