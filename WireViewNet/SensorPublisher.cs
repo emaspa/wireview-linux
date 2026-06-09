@@ -20,6 +20,7 @@ namespace WireView2.Net
         private readonly Func<WireViewHostSnapshot> _snapshotProvider;
         private readonly Func<string?>? _secretProvider;
         private readonly Func<WireViewCommand, bool>? _commandSink;
+        private readonly Func<string?, ConfigSnapshot?>? _configReader;
         private readonly int _maxRequestBytes;
         private readonly int _rateLimitPerMinute;
         private readonly SemaphoreSlim _slots;
@@ -34,6 +35,7 @@ namespace WireView2.Net
             Func<WireViewHostSnapshot> snapshotProvider,
             Func<string?>? secretProvider = null,
             Func<WireViewCommand, bool>? commandSink = null,
+            Func<string?, ConfigSnapshot?>? configReader = null,
             int maxConnections = 8,
             int maxRequestBytes = 8192,
             int rateLimitPerMinute = 120)
@@ -42,6 +44,7 @@ namespace WireView2.Net
             _snapshotProvider = snapshotProvider;
             _secretProvider = secretProvider;
             _commandSink = commandSink;
+            _configReader = configReader;
             _maxRequestBytes = Math.Max(1024, maxRequestBytes);
             _rateLimitPerMinute = rateLimitPerMinute;
             _slots = new SemaphoreSlim(Math.Max(1, maxConnections));
@@ -108,6 +111,23 @@ namespace WireView2.Net
                     {
                         var json = JsonSerializer.Serialize(_snapshotProvider(), WireViewJson.Options);
                         await WriteJson(stream, 200, "OK", json, cors: true).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (method == "GET" && (path == "/config" || path.StartsWith("/config?", StringComparison.Ordinal)))
+                    {
+                        string? id = null;
+                        int q = path.IndexOf("id=", StringComparison.Ordinal);
+                        if (q >= 0) id = path[(q + 3)..];
+                        var snap = _configReader?.Invoke(id);
+                        if (snap == null)
+                        {
+                            await WriteJson(stream, 503, "Service Unavailable", "{\"error\":\"no config\"}").ConfigureAwait(false);
+                            return;
+                        }
+                        string cfgJson = $"{{\"deviceId\":\"{snap.DeviceId}\",\"version\":{snap.Version}," +
+                                         $"\"data\":\"{Convert.ToBase64String(snap.Data)}\"}}";
+                        await WriteJson(stream, 200, "OK", cfgJson, cors: true).ConfigureAwait(false);
                         return;
                     }
 

@@ -40,6 +40,7 @@ namespace WireView2.Services
                     BuildSnapshot,
                     secretProvider: () => AppSettings.Current.NetworkSecret,
                     commandSink: ExecuteCommand,
+                    configReader: ReadLocalConfig,
                     maxConnections: AppSettings.Current.MaxHttpConnections,
                     maxRequestBytes: AppSettings.Current.MaxRequestBytes,
                     rateLimitPerMinute: AppSettings.Current.RateLimitPerMinute);
@@ -59,6 +60,27 @@ namespace WireView2.Services
             _publisher?.Dispose();
             _publisher = null;
             IsRunning = false;
+        }
+
+        /// <summary>Read a local device's config (for GET /config), serialized to the
+        /// device's native version layout. deviceId null selects the first local device.</summary>
+        private ConfigSnapshot? ReadLocalConfig(string? deviceId)
+        {
+            foreach (var md in DeviceManager.Shared.Devices)
+            {
+                if (md.Device is NetworkDevice) continue;
+                if (!string.IsNullOrEmpty(deviceId) && md.Device.UniqueId != deviceId) continue;
+
+                int version;
+                WireViewPro2Device.DeviceConfigStructV3? cfg;
+                if (md.Device is WireViewPro2Device p) { version = p.ConfigVersion; cfg = p.ReadConfig(); }
+                else if (md.Device is HwmonDevice { DaemonAvailable: true } h) { version = h.ConfigVersion; cfg = h.ReadConfig(); }
+                else continue;
+
+                if (cfg is not { } v3) return null;
+                return new ConfigSnapshot(md.Device.UniqueId, version, WireViewPro2Device.SerializeConfig(v3, version));
+            }
+            return null;
         }
 
         /// <summary>Relay an authenticated remote write to the matching local device.</summary>

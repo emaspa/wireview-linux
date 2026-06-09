@@ -38,6 +38,9 @@ namespace WireView2.Net
         /// <summary>The host:port this device is read from (for UI display).</summary>
         public string Endpoint => _baseUrl;
 
+        /// <summary>Config version learned from the last ReadConfigRaw (-1 until read).</summary>
+        public int ConfigVersion { get; private set; } = -1;
+
         public event EventHandler<DeviceData>? DataUpdated;
         public event EventHandler<bool>? ConnectionChanged;
 
@@ -133,6 +136,27 @@ namespace WireView2.Net
                 // HttpRequestException (refused/DNS), TaskCanceledException (timeout), etc.
                 return new CommandResult(CommandOutcome.Unreachable);
             }
+        }
+
+        /// <summary>Fetch this host's device config via GET /config. Returns the raw
+        /// config bytes in the device's version layout (decode with
+        /// WireViewPro2Device.DeserializeConfig), or null if unavailable. Synchronous,
+        /// matching the polling path; callers invoke it off the UI thread or accept a
+        /// brief block on a user-initiated reload.</summary>
+        public (int version, byte[] data)? ReadConfigRaw()
+        {
+            try
+            {
+                string json = Http.GetStringAsync($"{_baseUrl}/config").GetAwaiter().GetResult();
+                using var doc = JsonDocument.Parse(json);
+                var r = doc.RootElement;
+                int version = r.TryGetProperty("version", out var v) ? v.GetInt32() : -1;
+                string? b64 = r.TryGetProperty("data", out var d) ? d.GetString() : null;
+                if (version < 0 || string.IsNullOrEmpty(b64)) return null;
+                ConfigVersion = version;
+                return (version, Convert.FromBase64String(b64));
+            }
+            catch { return null; }
         }
 
         public void Dispose() => Disconnect();

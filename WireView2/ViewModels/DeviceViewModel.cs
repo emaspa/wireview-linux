@@ -400,13 +400,25 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     {
         if (_device is WireViewPro2Device pro2) return pro2.ReadConfig();
         if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadConfig();
+        if (_device is NetworkDevice nd)
+        {
+            var raw = nd.ReadConfigRaw();
+            return raw is { } r ? WireViewPro2Device.DeserializeConfig(r.version, r.data) : null;
+        }
         return null;
     }
 
-    private void DeviceWriteConfig(WireViewPro2Device.DeviceConfigStructV3 config)
+    private async Task<CommandResult> DeviceWriteConfigAsync(WireViewPro2Device.DeviceConfigStructV3 config)
     {
-        if (_device is WireViewPro2Device pro2) pro2.WriteConfig(config);
-        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.WriteConfig(config);
+        if (_device is WireViewPro2Device pro2) { pro2.WriteConfig(config); return CommandResult.Success; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.WriteConfig(config); return CommandResult.Success; }
+        if (_device is NetworkDevice nd)
+        {
+            int ver = nd.ConfigVersion >= 0 ? nd.ConfigVersion : 2;
+            var bytes = WireViewPro2Device.SerializeConfig(config, ver);
+            return await nd.SendCommandAsync(WireViewCommand.WriteConfig(nd.UniqueId, ver, bytes));
+        }
+        return new CommandResult(CommandOutcome.HttpError);
     }
 
     private string? DeviceReadBuildString()
@@ -582,6 +594,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             int configVersion = 0;
             if (_device is WireViewPro2Device pro2Dev) configVersion = pro2Dev.ConfigVersion;
             else if (_device is HwmonDevice hwmonDev) configVersion = hwmonDev.ConfigVersion;
+            else if (_device is NetworkDevice netDev) configVersion = netDev.ConfigVersion;
             IsAveragingSupported = configVersion >= 1;
             IsUiV2Supported = configVersion >= 2;
             OnPropertyChanged(nameof(IsLegacyThemeSelectionVisible));
@@ -605,10 +618,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
-            if (_device is NetworkDevice) { ConfigStatus = "Writing the full config to a remote device isn't supported yet."; return; }
-
             var config = BuildConfigFromEditor();
-            DeviceWriteConfig(config);
+            var w = await DeviceWriteConfigAsync(config);
+            if (!w.Ok) { ConfigStatus = $"Apply failed — {w.Describe()}."; return; }
             await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
         }

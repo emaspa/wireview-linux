@@ -156,6 +156,30 @@ namespace WireView2.Device
                 return null;
         }
 
+        /// <summary>Raw config byte length for a device config version (0=V1, 1=V2, 2=V3).</summary>
+        public static int ConfigSizeForVersion(int configVersion) => configVersion switch
+        {
+            0 => Marshal.SizeOf<DeviceConfigStructV1>(),
+            1 => Marshal.SizeOf<DeviceConfigStructV2>(),
+            _ => Marshal.SizeOf<DeviceConfigStructV3>(),
+        };
+
+        /// <summary>Decode raw config bytes (in the device's version layout) to a V3 struct.</summary>
+        public static DeviceConfigStructV3 DeserializeConfig(int configVersion, byte[] bytes) => configVersion switch
+        {
+            0 => ConvertConfigV1ToV3(BytesToStruct<DeviceConfigStructV1>(bytes)),
+            1 => ConvertConfigV2ToV3(BytesToStruct<DeviceConfigStructV2>(bytes)),
+            _ => BytesToStruct<DeviceConfigStructV3>(bytes),
+        };
+
+        /// <summary>Encode a V3 struct to raw config bytes in the device's version layout.</summary>
+        public static byte[] SerializeConfig(DeviceConfigStructV3 config, int configVersion) => configVersion switch
+        {
+            0 => StructToBytes(ConvertConfigV3ToV1(config)),
+            1 => StructToBytes(ConvertConfigV3ToV2(config)),
+            _ => StructToBytes(config),
+        };
+
         public void WriteConfig(DeviceConfigStructV3 config)
         {
             if (!Connected || _port == null) return;
