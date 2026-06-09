@@ -10,7 +10,8 @@ namespace WireView2.Net
     /// a provider (mDNS discovery + manually-configured hosts). For each endpoint
     /// it periodically fetches <c>/sensors</c> to learn which devices it exposes,
     /// then yields a NetworkDevice per remote device not already held.
-    /// Dedup-by-UniqueId in DeviceManager drops a host's view of its own devices.
+    /// Endpoints pointing back at this host are filtered upstream (the endpoints
+    /// provider), so a host never re-discovers its own locally-attached devices.
     /// </summary>
     public sealed class RemoteDeviceProbe
     {

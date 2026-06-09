@@ -59,10 +59,10 @@
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
                 <StackPanel Spacing="8">
                     <TextBlock Text="About" FontWeight="SemiBold" FontSize="16"/>
-                    <TextBlock Text="WireView Pro II - Linux Unofficial Client" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding AppTitle}" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding BuildDateText}" Opacity="0.6"/>
                     <StackPanel Orientation="Horizontal" Spacing="4" Opacity="0.8">
-                        <TextBlock Text="Linux port by"/>
+                        <TextBlock Text="{Binding PortByText}"/>
                         <TextBlock Text="emaspa" FontWeight="SemiBold"/>
                         <TextBlock Text="-"/>
                         <TextBlock Text="https://github.com/emaspa/wireview-linux"
@@ -71,8 +71,7 @@
                                    Cursor="Hand"
                                    PointerPressed="OnRepoLinkPressed"/>
                     </StackPanel>
-                    <TextBlock TextWrapping="Wrap" Opacity="0.6"
-                               Text="This software is an unofficial, community-made Linux port of the WireView Pro II application. It is not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. All trademarks belong to their respective owners."/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" Text="{Binding Disclaimer}"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6"
                                Text="Use at your own risk. This software interacts with hardware, while every effort has been made to ensure correctness, the authors are not responsible for any damage to your device."/>
                 </StackPanel>

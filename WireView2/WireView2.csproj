@@ -7,7 +7,9 @@
     <LangVersion>12.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-    <!-- ApplicationIcon is Win32-only; on Linux, window icon is set via Avalonia -->
+    <!-- Embedded into the Windows .exe apphost (PE icon resource). Ignored for
+         non-Windows apphosts, where the window icon is set via Avalonia instead. -->
+    <ApplicationIcon>Assets\Icons\bear.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>WireView Pro II</AssemblyTitle>
     <Version>1.1.0.0</Version>
@@ -31,4 +33,18 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
+
+  <!-- Windows ships the executable as wireview2-plus.exe. The assembly stays
+       "WireView2" so Avalonia's avares:// resource URIs keep resolving; only the
+       self-contained apphost file is renamed (its payload is bundled inside, so
+       renaming is safe). Linux/macOS builds are untouched. -->
+  <Target Name="RenameWindowsApphost" AfterTargets="Publish"
+          Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <Move SourceFiles="$(PublishDir)$(AssemblyName).exe"
+          DestinationFiles="$(PublishDir)wireview2-plus.exe"
+          Condition="Exists('$(PublishDir)$(AssemblyName).exe')" />
+    <Move SourceFiles="$(PublishDir)$(AssemblyName).pdb"
+          DestinationFiles="$(PublishDir)wireview2-plus.pdb"
+          Condition="Exists('$(PublishDir)$(AssemblyName).pdb')" />
+  </Target>
 </Project>

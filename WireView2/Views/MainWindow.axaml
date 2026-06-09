@@ -6,7 +6,7 @@
         x:Class="WireView2.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/Icons/bear.png"
-        Title="WireView Pro II - Linux Unofficial Client"
+        Title="WireView Pro II - Unofficial Plus Client"
         Width="1200" Height="800"
         TransparencyLevelHint="None">
 

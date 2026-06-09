@@ -181,6 +181,19 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>OS-aware app name shown in the About box, e.g.
+    /// "WireView Pro II - Unofficial Windows Plus Client v1.1.0.0".</summary>
+    public string AppTitle => AppInfo.TitleWithVersion;
+
+    /// <summary>"Windows port by" / "Linux port by" depending on the running OS.</summary>
+    public string PortByText => $"{AppInfo.Os} port by";
+
+    /// <summary>Disclaimer paragraph, with the platform substituted for the running OS.</summary>
+    public string Disclaimer =>
+        $"This software is an unofficial, community-made {AppInfo.Os} port of the WireView Pro II " +
+        "application. It is not affiliated with, endorsed by, or supported by Thermal Grizzly or " +
+        "ElmorLabs. All trademarks belong to their respective owners.";
+
     public Array ThemeModes => Enum.GetValues(typeof(AppSettings.ThemeMode));
     public Array BackgroundColorModes => Enum.GetValues(typeof(AppSettings.BackgroundColorMode));
     public Array DeviceScreens => Enum.GetValues(typeof(AppSettings.StartupScreen));
