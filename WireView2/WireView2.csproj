@@ -13,6 +13,9 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>WireView Pro II</AssemblyTitle>
     <Version>1.1.0.0</Version>
+    <!-- Displayed version (AppInfo reads this, stripping the +build suffix). Numeric
+         assembly/file version stays 1.1.0.0; this carries the "beta" label. -->
+    <InformationalVersion>1.1.0.0 beta</InformationalVersion>
     <SourceRevisionId>build$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</SourceRevisionId>
   </PropertyGroup>
 
