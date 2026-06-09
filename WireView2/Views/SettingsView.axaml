@@ -56,6 +56,15 @@
                                Text="Adds a second tray icon next to the app icon showing the live total power (e.g. 180W), or a red icon when the device is disconnected. Right-click it for a dropdown of all live sensor values (per-pin voltage, current and power, temperatures and cable rating). This icon can also be toggled from the app icon's right-click menu. On GNOME, a tray / AppIndicator extension is required to see tray icons."/>
                 </StackPanel>
             </Border>
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Remote hosts (LAN)" FontWeight="SemiBold" FontSize="16"/>
+                    <TextBox Text="{Binding RemoteHostsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Watermark="192.168.1.50:9876, 192.168.1.51"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Comma-separated list of WireView hosts to read over the network (host or host:port; port defaults to 9876). Each host's devices appear in the device picker as 'lan @ host'. Changes apply within a few seconds. Leave empty to disable remote reading."/>
+                </StackPanel>
+            </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">
                 <StackPanel Spacing="8">
                     <TextBlock Text="About" FontWeight="SemiBold" FontSize="16"/>

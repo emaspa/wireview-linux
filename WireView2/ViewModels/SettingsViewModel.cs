@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
@@ -157,6 +159,28 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Comma-separated list of remote WireView hosts to read over the LAN
+    /// (host or host:port). Backed by <see cref="AppSettings.RemoteHosts"/>; the
+    /// discovery probe re-reads it each tick, so edits apply without a restart.</summary>
+    public string RemoteHostsText
+    {
+        get => AppSettings.Current.RemoteHosts == null
+            ? string.Empty
+            : string.Join(", ", AppSettings.Current.RemoteHosts);
+        set
+        {
+            var list = (value ?? string.Empty)
+                .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            AppSettings.Current.RemoteHosts = list.Count > 0 ? list : null;
+            AppSettings.SaveCurrent();
+            OnPropertyChanged();
+        }
+    }
+
     public string BuildDateText
     {
         get
@@ -259,6 +283,8 @@ public class SettingsViewModel : ViewModelBase
 
         if (Set(ref _showTrayPowerUnit, AppSettings.Current.ShowTrayPowerUnit, nameof(ShowTrayPowerUnit)))
             OnPropertyChanged(nameof(ShowTrayPowerUnit));
+
+        OnPropertyChanged(nameof(RemoteHostsText));
     }
 
     // ======================== Theme / appearance ========================

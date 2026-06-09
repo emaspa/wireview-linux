@@ -9,15 +9,15 @@ namespace WireView2.Services
     /// <summary>
     /// Bridges all local devices to the LAN: serves every device managed by
     /// <see cref="DeviceManager.Shared"/> via <see cref="SensorPublisher"/>
-    /// (GET /sensors) + <see cref="MdnsAdvertiser"/> (_wireview._tcp). Read-only —
-    /// no command surface is exposed over the network.
+    /// (GET /sensors). Read-only — no command surface is exposed over the network.
+    /// Remote instances reach this endpoint via their configured host list; there
+    /// is no mDNS advertisement.
     /// </summary>
     public sealed class WireViewPublishService : IDisposable
     {
         public static WireViewPublishService Shared { get; } = new WireViewPublishService();
 
         private SensorPublisher? _publisher;
-        private MdnsAdvertiser? _advertiser;
 
         private static readonly string AppVersion =
             Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
@@ -38,14 +38,6 @@ namespace WireView2.Services
                 _publisher = new SensorPublisher(port, BuildSnapshot);
                 _publisher.Start();
 
-                _advertiser = new MdnsAdvertiser();
-                _advertiser.Start(
-                    instanceName: $"WireView@{Environment.MachineName}",
-                    port: port,
-                    hostName: Environment.MachineName,
-                    deviceCount: DeviceManager.Shared.Devices.Count,
-                    appVersion: AppVersion);
-
                 IsRunning = true;
             }
             catch
@@ -57,8 +49,6 @@ namespace WireView2.Services
 
         public void Stop()
         {
-            _advertiser?.Dispose();
-            _advertiser = null;
             _publisher?.Dispose();
             _publisher = null;
             IsRunning = false;

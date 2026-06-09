@@ -80,10 +80,11 @@ public class AppSettings
     public bool SoftwareShutdownOnFault { get; set; }
 
     // LAN fleet monitoring: publish this host's WireView(s) on the network
-    // (GET /sensors + mDNS _wireview._tcp) so other instances can discover them.
+    // (GET /sensors) so other instances can read them via their configured host list.
     public bool PublishEnabled { get; set; } = true;
     public int PublishPort { get; set; } = 9876;
-    // Manually-added remote hosts ("host" or "host:port") for when mDNS is unavailable.
+    // Remote hosts to read over the LAN ("host" or "host:port"; port defaults to
+    // 9876). Set in Settings as a comma-separated list. No mDNS auto-discovery.
     public List<string>? RemoteHosts { get; set; }
 
     // Tray icon presentation — show a second tray icon with the live total power

@@ -9,18 +9,18 @@ using WireView2.Net;
 namespace WireView2.Services
 {
     /// <summary>
-    /// Wires LAN discovery into the app: browses mDNS for WireView publishers,
-    /// combines them with manually-configured hosts, and registers a remote
-    /// device probe so discovered devices appear in <see cref="DeviceManager"/>
-    /// alongside local ones. Endpoints that point back at this host are filtered
-    /// out (see <see cref="IsLocalEndpoint"/>) so a host never re-discovers its
-    /// own devices over the LAN — those are already present locally.
+    /// Wires LAN reading into the app: registers a remote device probe that reads
+    /// each host listed in <see cref="AppSettings.RemoteHosts"/> (configured in
+    /// Settings as a comma-separated list) over its <c>GET /sensors</c> endpoint, so
+    /// those devices appear in <see cref="DeviceManager"/> alongside local ones.
+    /// There is no mDNS auto-discovery — remote hosts are entered explicitly.
+    /// Endpoints that resolve to this machine are filtered out (see
+    /// <see cref="IsLocalEndpoint"/>) so a host never re-reads its own devices.
     /// </summary>
     public sealed class WireViewDiscoveryService : IDisposable
     {
         public static WireViewDiscoveryService Shared { get; } = new WireViewDiscoveryService();
 
-        private MdnsBrowser? _browser;
         private bool _started;
 
         public void Start()
@@ -28,24 +28,18 @@ namespace WireView2.Services
             if (_started) return;
             _started = true;
 
-            _browser = new MdnsBrowser();
-            _browser.Start();
-
             var probe = new RemoteDeviceProbe(GetEndpoints);
             DeviceManager.Shared.RegisterProbe(probe.Probe);
         }
 
         private IEnumerable<string> GetEndpoints()
         {
-            var endpoints = new List<string>();
-            if (_browser != null) endpoints.AddRange(_browser.Endpoints);
+            // The configured host list is re-read every probe tick, so edits in
+            // Settings take effect without restarting. Drop blanks and any endpoint
+            // that points back at this host (its devices are already local).
             var manual = AppSettings.Current.RemoteHosts;
-            if (manual != null) endpoints.AddRange(manual);
-
-            // Drop endpoints that resolve to this host: its WireViews are already
-            // available locally (serial/hwmon), so reading them again over the LAN
-            // would list every local device a second time as a "lan @ self" entry.
-            return endpoints.Where(e => !IsLocalEndpoint(e));
+            if (manual == null) return Array.Empty<string>();
+            return manual.Where(e => !string.IsNullOrWhiteSpace(e) && !IsLocalEndpoint(e));
         }
 
         private static volatile HashSet<string>? _localHosts;
@@ -94,8 +88,6 @@ namespace WireView2.Services
 
         public void Dispose()
         {
-            _browser?.Dispose();
-            _browser = null;
             _started = false;
         }
     }
