@@ -22,10 +22,12 @@ namespace WireView2.Net
         private readonly object _gate = new();
         private readonly Dictionary<string, DateTime> _lastFetch = new();
         private readonly Dictionary<string, List<(string Id, string Name)>> _cache = new();
+        private readonly Func<string?>? _secretProvider;
 
-        public RemoteDeviceProbe(Func<IEnumerable<string>> endpointsProvider)
+        public RemoteDeviceProbe(Func<IEnumerable<string>> endpointsProvider, Func<string?>? secretProvider = null)
         {
             _endpoints = endpointsProvider;
+            _secretProvider = secretProvider;
         }
 
         /// <summary>The probe delegate to register with <c>DeviceManager.RegisterProbe</c>.</summary>
@@ -44,7 +46,7 @@ namespace WireView2.Net
                     if (string.IsNullOrEmpty(id)) continue;
                     string source = $"remote:{baseUrl}:{id}";
                     if (held.Contains(source)) continue;
-                    yield return (new NetworkDevice(baseUrl, id, name), source);
+                    yield return (new NetworkDevice(baseUrl, id, name, _secretProvider), source);
                 }
             }
         }

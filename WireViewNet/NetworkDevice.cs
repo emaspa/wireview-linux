@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using WireView2.Device;
 
@@ -15,14 +16,16 @@ namespace WireView2.Net
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(4) };
 
         private readonly string _baseUrl;   // e.g. http://host:9876
+        private readonly Func<string?>? _secretProvider;
         private CancellationTokenSource? _cts;
         private Task? _loop;
 
-        public NetworkDevice(string baseUrl, string deviceId, string name)
+        public NetworkDevice(string baseUrl, string deviceId, string name, Func<string?>? secretProvider = null)
         {
             _baseUrl = baseUrl.TrimEnd('/');
             UniqueId = deviceId;
             DeviceName = string.IsNullOrWhiteSpace(name) ? "WireView" : name;
+            _secretProvider = secretProvider;
         }
 
         public bool Connected { get; private set; }
@@ -95,6 +98,31 @@ namespace WireView2.Net
             if (Connected == value) return;
             Connected = value;
             ConnectionChanged?.Invoke(this, value);
+        }
+
+        /// <summary>Send an authenticated write command to this remote device. The
+        /// command's DeviceId is set to this device. Returns false if no secret is
+        /// configured or the request fails / is rejected.</summary>
+        public async Task<bool> SendCommandAsync(WireViewCommand cmd, CancellationToken ct = default)
+        {
+            string? secret = _secretProvider?.Invoke();
+            if (string.IsNullOrEmpty(secret)) return false;
+
+            string body = (cmd with { DeviceId = UniqueId }).ToJson();
+            var (ts, nonce, sig) = HmacAuth.Sign(secret, body);
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/command")
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            req.Headers.Add(HmacAuth.TsHeader, ts.ToString());
+            req.Headers.Add(HmacAuth.NonceHeader, nonce);
+            req.Headers.Add(HmacAuth.SigHeader, sig);
+            try
+            {
+                var r = await Http.SendAsync(req, ct).ConfigureAwait(false);
+                return r.IsSuccessStatusCode;
+            }
+            catch { return false; }
         }
 
         public void Dispose() => Disconnect();

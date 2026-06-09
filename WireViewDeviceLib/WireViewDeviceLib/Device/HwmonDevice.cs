@@ -296,6 +296,16 @@ namespace WireView2.Device
             SendDaemonRequest(WCMD_WRITE_CONFIG, payload);
         }
 
+        /// <summary>Write already-serialized config bytes (relayed from the network).</summary>
+        public void WriteConfigRaw(int version, byte[] configBytes)
+        {
+            if (!DaemonAvailable || configBytes == null || configBytes.Length == 0) return;
+            var payload = new byte[1 + configBytes.Length];
+            payload[0] = (byte)version;
+            Buffer.BlockCopy(configBytes, 0, payload, 1, configBytes.Length);
+            SendDaemonRequest(WCMD_WRITE_CONFIG, payload);
+        }
+
         public void ScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
         {
             if (!DaemonAvailable) return;

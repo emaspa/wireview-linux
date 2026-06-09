@@ -28,7 +28,7 @@ namespace WireView2.Services
             if (_started) return;
             _started = true;
 
-            var probe = new RemoteDeviceProbe(GetEndpoints);
+            var probe = new RemoteDeviceProbe(GetEndpoints, () => AppSettings.Current.NetworkSecret);
             DeviceManager.Shared.RegisterProbe(probe.Probe);
         }
 

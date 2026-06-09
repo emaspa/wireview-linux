@@ -87,6 +87,16 @@ public class AppSettings
     // 9876). Set in Settings as a comma-separated list. No mDNS auto-discovery.
     public List<string>? RemoteHosts { get; set; }
 
+    // Shared HMAC passphrase for authenticated remote writes (POST /command).
+    // Empty disables remote writes both ways. Stored plaintext (both ends need
+    // the real value to sign and verify).
+    public string? NetworkSecret { get; set; }
+
+    // Publisher flood-protection limits.
+    public int MaxHttpConnections { get; set; } = 8;
+    public int MaxRequestBytes { get; set; } = 8192;
+    public int RateLimitPerMinute { get; set; } = 120;
+
     // Tray icon presentation — show a second tray icon with the live total power
     // (plain text), shown as a red icon when the device is disconnected.
     public bool ShowTrayPower { get; set; } = true;

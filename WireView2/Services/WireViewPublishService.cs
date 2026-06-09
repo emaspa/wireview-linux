@@ -35,7 +35,14 @@ namespace WireView2.Services
             int port = AppSettings.Current.PublishPort;
             try
             {
-                _publisher = new SensorPublisher(port, BuildSnapshot);
+                _publisher = new SensorPublisher(
+                    port,
+                    BuildSnapshot,
+                    secretProvider: () => AppSettings.Current.NetworkSecret,
+                    commandSink: ExecuteCommand,
+                    maxConnections: AppSettings.Current.MaxHttpConnections,
+                    maxRequestBytes: AppSettings.Current.MaxRequestBytes,
+                    rateLimitPerMinute: AppSettings.Current.RateLimitPerMinute);
                 _publisher.Start();
 
                 IsRunning = true;
@@ -52,6 +59,52 @@ namespace WireView2.Services
             _publisher?.Dispose();
             _publisher = null;
             IsRunning = false;
+        }
+
+        /// <summary>Relay an authenticated remote write to the matching local device.</summary>
+        private bool ExecuteCommand(WireViewCommand cmd)
+        {
+            foreach (var md in DeviceManager.Shared.Devices)
+            {
+                if (md.Device is NetworkDevice) continue; // never relay back out to a remote
+                if (!string.IsNullOrEmpty(cmd.DeviceId) && md.Device.UniqueId != cmd.DeviceId) continue;
+                return ExecuteOn(md.Device, cmd);
+            }
+            return false;
+        }
+
+        private static bool ExecuteOn(IWireViewDevice dev, WireViewCommand cmd)
+        {
+            try
+            {
+                switch (cmd.Op)
+                {
+                    case "screen":
+                        if (dev is WireViewPro2Device s1) s1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h1) h1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
+                        else return false;
+                        return true;
+                    case "nvm":
+                        if (dev is WireViewPro2Device s2) s2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h2) h2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
+                        else return false;
+                        return true;
+                    case "clearFaults":
+                        if (dev is WireViewPro2Device s3) s3.ClearFaults(cmd.StatusMask, cmd.LogMask);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) h3.ClearFaults(cmd.StatusMask, cmd.LogMask);
+                        else return false;
+                        return true;
+                    case "writeConfig":
+                        if (cmd.ConfigData == null) return false;
+                        if (dev is WireViewPro2Device s4) s4.WriteConfigRaw(cmd.ConfigData);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h4) h4.WriteConfigRaw(cmd.ConfigVersion, cmd.ConfigData);
+                        else return false;
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+            catch { return false; }
         }
 
         private WireViewHostSnapshot BuildSnapshot()

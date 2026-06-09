@@ -181,6 +181,20 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Shared HMAC passphrase that authenticates remote writes (POST /command).
+    /// Backed by <see cref="AppSettings.NetworkSecret"/>; the same value must be set on
+    /// every host. Empty disables remote writes. Stored plaintext in settings.json.</summary>
+    public string NetworkSecretText
+    {
+        get => AppSettings.Current.NetworkSecret ?? string.Empty;
+        set
+        {
+            AppSettings.Current.NetworkSecret = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            AppSettings.SaveCurrent();
+            OnPropertyChanged();
+        }
+    }
+
     public string BuildDateText
     {
         get

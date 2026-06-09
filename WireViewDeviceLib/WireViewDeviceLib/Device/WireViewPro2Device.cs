@@ -199,6 +199,36 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>Write already-serialized config bytes (relayed from the network).</summary>
+        public void WriteConfigRaw(byte[] payload)
+        {
+            if (!Connected || _port == null || payload == null || payload.Length == 0) return;
+
+            var frame = new byte[64];
+            frame[0] = (byte)UsbCmd.CMD_WRITE_CONFIG;
+
+            lock (_port)
+            {
+                if (!_port!.Open()) return;
+                try
+                {
+                    _port!.DiscardInBuffer();
+                    const int maxPayloadPerFrame = 62;
+                    for (int offset = 0; offset < payload.Length && offset <= 255; offset += maxPayloadPerFrame)
+                    {
+                        int bytesToWrite = Math.Min(maxPayloadPerFrame, payload.Length - offset);
+                        frame[1] = (byte)offset;
+                        Buffer.BlockCopy(payload, offset, frame, 2, bytesToWrite);
+                        _port!.Write(frame, 0, bytesToWrite + 2);
+                    }
+                }
+                finally
+                {
+                    _port!.Close();
+                }
+            }
+        }
+
         public void NvmCmd(NVM_CMD cmd)
         {
             if (!Connected || _port == null) return;

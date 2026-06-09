@@ -374,18 +374,21 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     private bool IsDeviceCommandCapable =>
         _device is WireViewPro2Device ||
-        _device is HwmonDevice { DaemonAvailable: true };
+        _device is HwmonDevice { DaemonAvailable: true } ||
+        _device is NetworkDevice;
 
     private void DeviceScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
     {
         if (_device is WireViewPro2Device pro2) pro2.ScreenCmd(cmd);
         else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.ScreenCmd(cmd);
+        else if (_device is NetworkDevice nd) _ = nd.SendCommandAsync(WireViewCommand.Screen(nd.UniqueId, (int)cmd));
     }
 
     private void DeviceNvmCmd(WireViewPro2Device.NVM_CMD cmd)
     {
         if (_device is WireViewPro2Device pro2) pro2.NvmCmd(cmd);
         else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.NvmCmd(cmd);
+        else if (_device is NetworkDevice nd) _ = nd.SendCommandAsync(WireViewCommand.Nvm(nd.UniqueId, (int)cmd));
     }
 
     private WireViewPro2Device.DeviceConfigStructV3? DeviceReadConfig()
