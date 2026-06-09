@@ -151,6 +151,14 @@
                         <TextBlock Text="{Binding Overview.TotalPowerW, StringFormat='Total P: {0:0.###} W'}"/>
                         <TextBlock Text="{Binding Overview.AvgVoltageV, StringFormat='Avg V: {0:0.###} V'}"/>
                     </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Center" Margin="16,0,0,0"
+                                IsVisible="{Binding HasMultipleDevices}">
+                        <TextBlock Text="Device:" VerticalAlignment="Center"/>
+                        <ComboBox MinWidth="160"
+                                  ItemsSource="{Binding Devices}"
+                                  SelectedItem="{Binding SelectedDevice}"/>
+                    </StackPanel>
                     <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
                                Text="{Binding Overview.PowerCableRatingText, StringFormat='Cable rating: {0}'}"/>
                 </DockPanel>
