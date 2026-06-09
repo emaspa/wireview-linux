@@ -7,18 +7,15 @@ using WireView2.Net;
 namespace WireView2.Services
 {
     /// <summary>
-    /// Bridges the local device(s) to the LAN: caches the latest readings from
-    /// <see cref="DeviceAutoConnector.Shared"/> and serves them via
-    /// <see cref="SensorPublisher"/> (GET /sensors) + <see cref="MdnsAdvertiser"/>
-    /// (_wireview._tcp). Read-only — no command surface is exposed over the network.
-    /// Phase 1: single local device.
+    /// Bridges all local devices to the LAN: serves every device managed by
+    /// <see cref="DeviceManager.Shared"/> via <see cref="SensorPublisher"/>
+    /// (GET /sensors) + <see cref="MdnsAdvertiser"/> (_wireview._tcp). Read-only —
+    /// no command surface is exposed over the network.
     /// </summary>
     public sealed class WireViewPublishService : IDisposable
     {
         public static WireViewPublishService Shared { get; } = new WireViewPublishService();
 
-        private readonly object _gate = new();
-        private DeviceData? _latest;
         private SensorPublisher? _publisher;
         private MdnsAdvertiser? _advertiser;
 
@@ -32,8 +29,6 @@ namespace WireView2.Services
             if (IsRunning) return;
             if (!AppSettings.Current.PublishEnabled) return;
 
-            DeviceAutoConnector.Shared.DataUpdated += OnDataUpdated;
-
             int port = AppSettings.Current.PublishPort;
             try
             {
@@ -45,7 +40,7 @@ namespace WireView2.Services
                     instanceName: $"WireView@{Environment.MachineName}",
                     port: port,
                     hostName: Environment.MachineName,
-                    deviceCount: DeviceAutoConnector.Shared.Device != null ? 1 : 0,
+                    deviceCount: DeviceManager.Shared.Devices.Count,
                     appVersion: AppVersion);
 
                 IsRunning = true;
@@ -59,17 +54,11 @@ namespace WireView2.Services
 
         public void Stop()
         {
-            DeviceAutoConnector.Shared.DataUpdated -= OnDataUpdated;
             _advertiser?.Dispose();
             _advertiser = null;
             _publisher?.Dispose();
             _publisher = null;
             IsRunning = false;
-        }
-
-        private void OnDataUpdated(object? sender, DeviceData data)
-        {
-            lock (_gate) { _latest = data; }
         }
 
         private WireViewHostSnapshot BuildSnapshot()
@@ -81,13 +70,10 @@ namespace WireView2.Services
                 Devices = new List<WireViewSensorDto>(),
             };
 
-            var device = DeviceAutoConnector.Shared.Device;
-            DeviceData? latest;
-            lock (_gate) { latest = _latest; }
-
-            if (device != null && latest != null)
+            foreach (var md in DeviceManager.Shared.Devices)
             {
-                snapshot.Devices.Add(WireViewSensorDto.FromDevice(device, latest));
+                if (md.Latest != null)
+                    snapshot.Devices.Add(WireViewSensorDto.FromDevice(md.Device, md.Latest));
             }
 
             return snapshot;

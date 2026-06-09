@@ -1,207 +1,60 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System;
 
 namespace WireView2.Device
 {
+    /// <summary>
+    /// Facade over <see cref="DeviceManager"/> that presents the single
+    /// <b>selected</b> device, preserving the original single-device API the
+    /// ViewModels were built against (<c>Shared</c>, <c>Device</c>,
+    /// <c>DataUpdated</c>, <c>ConnectionChanged</c>, <c>Start</c>/<c>Stop</c>,
+    /// <c>SetPollInterval</c>). All hardware is owned by <see cref="DeviceManager"/>;
+    /// this just forwards the selected device's events so existing UI keeps working
+    /// while the app gains multi-device support.
+    /// </summary>
     public sealed class DeviceAutoConnector : IDisposable
     {
-        // Shared singleton for the whole app
         public static DeviceAutoConnector Shared { get; } = new DeviceAutoConnector();
 
-        private readonly object _gate = new();
-        private CancellationTokenSource? _cts;
-        private Task? _worker;
-
-        private IWireViewDevice? _device;
-        private int _pollMs = 1000;
+        private readonly DeviceManager _mgr = DeviceManager.Shared;
 
         public event EventHandler<bool>? ConnectionChanged; // true=connected
         public event EventHandler<DeviceData>? DataUpdated;
 
-        // Keep the handler we attach so we can detach the exact same delegate
-        private EventHandler<DeviceData>? _dataForwardHandler;
-
-        public IWireViewDevice? Device
+        private DeviceAutoConnector()
         {
-            get
-            {
-                lock (_gate)
-                {
-                    return _device;
-                }
-            }
+            _mgr.DataUpdated += OnManagerData;
+            _mgr.SelectedChanged += OnSelectedChanged;
         }
 
-        public void Start()
+        /// <summary>The currently selected device (or first available), or null.</summary>
+        public IWireViewDevice? Device => _mgr.Selected?.Device;
+
+        public void Start() => _mgr.Start();
+
+        public void Stop() => _mgr.Stop();
+
+        public void SetPollInterval(int ms) => _mgr.SetPollInterval(ms);
+
+        private void OnManagerData(object? sender, (string Id, DeviceData Data) e)
         {
-            if (_worker != null) return;
-            _cts = new CancellationTokenSource();
-            _worker = Task.Run(() => LoopAsync(_cts.Token));
+            // Forward only the selected device's stream to the single-device UI.
+            if (e.Id == _mgr.SelectedId)
+                DataUpdated?.Invoke(this, e.Data);
         }
 
-        public void Stop()
+        private void OnSelectedChanged(object? sender, EventArgs e)
         {
-            _cts?.Cancel();
-            try { _worker?.Wait(500); } catch { }
-            _worker = null;
-            _cts = null;
-            DisconnectInternal();
+            var selected = _mgr.Selected;
+            ConnectionChanged?.Invoke(this, selected?.Device.Connected ?? false);
+            // Push the latest frame so the UI updates immediately on selection change.
+            if (selected?.Latest != null)
+                DataUpdated?.Invoke(this, selected.Latest);
         }
 
-        public void SetPollInterval(int ms)
+        public void Dispose()
         {
-            _pollMs = Math.Clamp(ms, 50, 5000);
-            lock (_gate)
-            {
-                if (_device is WireViewPro2Device serial)
-                    serial.PollIntervalMs = _pollMs;
-                else if (_device is HwmonDevice hwmon)
-                    hwmon.PollIntervalMs = _pollMs;
-            }
+            _mgr.DataUpdated -= OnManagerData;
+            _mgr.SelectedChanged -= OnSelectedChanged;
         }
-
-        private async Task LoopAsync(CancellationToken ct)
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                try
-                {
-                    EnsureDevice();
-                }
-                catch
-                {
-                    // ignore and retry
-                }
-
-                await Task.Delay(_pollMs, ct).ConfigureAwait(false);
-            }
-        }
-
-        private void EnsureDevice()
-        {
-            lock (_gate)
-            {
-                if (_device is { Connected: true })
-                {
-                    return;
-                }
-
-                // If we have a stale/disconnected instance, drop it so we can reconnect cleanly.
-                if (_device != null)
-                {
-                    DisconnectInternal();
-                }
-
-                // Strategy 1: Try hwmon sysfs (when kernel module is loaded and daemon is feeding it)
-                if (OperatingSystem.IsLinux())
-                {
-                    string? hwmonPath = HwmonDevice.FindHwmonPath();
-                    if (hwmonPath != null)
-                    {
-                        var hwmon = new HwmonDevice(hwmonPath) { PollIntervalMs = _pollMs };
-                        try
-                        {
-                            hwmon.Connect();
-                            if (hwmon.Connected)
-                            {
-                                _device = hwmon;
-                                hwmon.ConnectionChanged += OnDeviceConnectionChanged;
-                                _dataForwardHandler ??= (_, d) => DataUpdated?.Invoke(this, d);
-                                hwmon.DataUpdated += _dataForwardHandler;
-                                ConnectionChanged?.Invoke(this, true);
-                                return;
-                            }
-                            else
-                            {
-                                hwmon.Dispose();
-                            }
-                        }
-                        catch
-                        {
-                            try { hwmon.Dispose(); } catch { }
-                        }
-                    }
-                }
-
-                // Strategy 2: Try serial port (direct USB connection)
-                var ports = Stm32PortFinder.FindMatchingComPorts();
-                if (ports.Count == 0)
-                {
-                    return;
-                }
-
-                foreach(var port in ports) {
-
-                    var dev = new WireViewPro2Device(port)
-                    {
-                        PollIntervalMs = _pollMs
-                    };
-                    try
-                    {
-                        dev.Connect();
-                        if (dev.Connected)
-                        {
-                            _device = dev;
-                            dev.ConnectionChanged += OnDeviceConnectionChanged;
-                            _dataForwardHandler ??= (_, d) => DataUpdated?.Invoke(this, d);
-                            dev.DataUpdated += _dataForwardHandler;
-                            ConnectionChanged?.Invoke(this, true);
-                            return;
-                        }
-                        else
-                        {
-                            dev.Dispose();
-                        }
-                    }
-                    catch
-                    {
-                        try
-                        {
-                            dev.Dispose();
-                        }
-                        catch
-                        {
-                        }
-                    }
-
-                }
-            }
-        }
-
-        private void OnDeviceConnectionChanged(object? sender, bool connected)
-        {
-            if (!connected)
-            {
-                // drop and let loop reconnect
-                DisconnectInternal();
-            }
-            ConnectionChanged?.Invoke(this, connected);
-        }
-
-        private void DisconnectInternal()
-        {
-            try
-            {
-                if (_device != null)
-                {
-                    _device.ConnectionChanged -= OnDeviceConnectionChanged;
-
-                    if (_dataForwardHandler != null)
-                        _device.DataUpdated -= _dataForwardHandler;
-
-                    _device.Disconnect();
-                    (_device as IDisposable)?.Dispose();
-                }
-            }
-            catch { }
-            finally
-            {
-                _device = null;
-                ConnectionChanged?.Invoke(this, false);
-            }
-        }
-
-        public void Dispose() => Stop();
     }
 }
