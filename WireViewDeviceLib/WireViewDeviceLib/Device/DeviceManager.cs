@@ -207,10 +207,11 @@ namespace WireView2.Device
 
                 lock (_gate)
                 {
-                    // Prefer the stable chip UID (dedups a chip seen on two sources);
-                    // fall back to the source so a device whose UID query failed still
-                    // appears instead of vanishing.
-                    string id = !string.IsNullOrEmpty(device.UniqueId) ? device.UniqueId : source;
+                    // Key by source so every distinct connection is its own selectable
+                    // entry — hwmon, serial, and each LAN endpoint, including this host's
+                    // own device discovered over the LAN. (Re-probing a held source is
+                    // already skipped; this just guards races.)
+                    string id = source;
                     if (_byId.ContainsKey(id))
                     {
                         Dispose(device);

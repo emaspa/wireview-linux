@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
+using WireView2.Net;
 
 namespace WireView2.ViewModels;
 
@@ -32,10 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>All known WireView devices (local now; remote in a later phase).</summary>
     public ObservableCollection<DeviceItem> Devices { get; } = new();
 
-    /// <summary>Show the picker only when there's a choice to make.</summary>
-    public bool HasMultipleDevices => Devices.Count > 1;
-
-    /// <summary>The device the whole UI is currently bound to. Setting it switches the active device.</summary>
+    /// <summary>The device/connection the whole UI is currently bound to. Setting it switches the active one.</summary>
     public DeviceItem? SelectedDevice
     {
         get => _selectedDevice;
@@ -90,8 +88,6 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var item in Devices.Where(d => managed.All(m => m.Id != d.Id)).ToList())
             Devices.Remove(item);
 
-        OnPropertyChanged(nameof(HasMultipleDevices));
-
         // reflect manager's selection into the picker (guarded against feedback)
         string? selId = DeviceManager.Shared.SelectedId;
         var selItem = Devices.FirstOrDefault(d => d.Id == selId);
@@ -103,13 +99,25 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Picker label: "&lt;name&gt; -&lt;transport&gt; · &lt;id&gt;", transport being serial / hwmon / lan@host.</summary>
     private static string DisplayFor(ManagedDevice md)
     {
         string name = md.Device.DeviceName;
+        int paren = name.IndexOf(" (", StringComparison.Ordinal); // strip the device's own "(hwmon)" suffix
+        if (paren > 0) name = name[..paren];
         if (string.IsNullOrWhiteSpace(name)) name = "WireView";
-        string shortId = md.Id.Length > 6 ? md.Id[^6..] : md.Id;
-        string prefix = md.Source.StartsWith("remote:", StringComparison.Ordinal) ? "\U0001F310 " : "";
-        return $"{prefix}{name} · {shortId}";
+
+        string uid = md.Device.UniqueId;
+        string shortId = uid.Length >= 6 ? uid[^6..] : uid;
+
+        if (md.Device is NetworkDevice nd)
+            return $"\U0001F310 {name} - lan @ {nd.Endpoint.Replace("http://", string.Empty)} · {shortId}";
+
+        string transport =
+            md.Source.StartsWith("hwmon", StringComparison.Ordinal) ? "hwmon" :
+            md.Source.StartsWith("serial:", StringComparison.Ordinal) ? "serial" :
+            md.Source;
+        return $"{name} - {transport} · {shortId}";
     }
 
     [RelayCommand]

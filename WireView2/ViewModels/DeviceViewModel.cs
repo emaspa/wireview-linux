@@ -9,6 +9,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
 using MsgBox;
 using WireView2.Device;
+using WireView2.Net;
 using WireView2.Services;
 
 namespace WireView2.ViewModels;
@@ -430,7 +431,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
         else if (_device != null)
         {
-            DeviceName = _device.DeviceName;
+            DeviceName = _device is NetworkDevice nd
+                ? $"{_device.DeviceName}  ·  remote @ {nd.Endpoint.Replace("http://", string.Empty)}"
+                : _device.DeviceName;
             FirmwareVersion = string.IsNullOrEmpty(_device.FirmwareVersion)
                 ? "N/A" : "v" + _device.FirmwareVersion.ToString().PadLeft(2, '0');
             UniqueId = string.IsNullOrEmpty(_device.UniqueId) ? "N/A" : _device.UniqueId;
