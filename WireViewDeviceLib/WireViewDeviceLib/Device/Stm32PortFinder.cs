@@ -58,6 +58,16 @@ namespace WireView2.Device
                 _ = WindowsSetupApi.SetupDiDestroyDeviceInfoList(devInfo);
             }
 
+            // Fallback: some Windows setups don't expose the VID/PID match or a
+            // "(COMx)" friendly name (driver quirks, localized names). Offer every
+            // COM port — the WireView handshake (ReadWelcomeMessage, which only
+            // reads) identifies the real device and sends nothing to the others.
+            if (ports.Count == 0)
+            {
+                try { ports.AddRange(System.IO.Ports.SerialPort.GetPortNames()); }
+                catch { /* ignore */ }
+            }
+
             return ports;
         }
 
