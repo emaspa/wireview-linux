@@ -175,7 +175,7 @@ namespace WireView2.Device
 
             lock (_port)
             {
-                _port!.Open();
+                if (!_port!.Open()) return; // bus busy / port unavailable
                 try
                 {
                     _port!.DiscardInBuffer();
@@ -335,7 +335,7 @@ namespace WireView2.Device
             byte[]? buf = null;
             lock (_port)
             {
-                _port!.Open();
+                if (!_port!.Open()) return null; // bus busy / port unavailable -> failed read
                 try
                 {
                     _port!.DiscardInBuffer();
