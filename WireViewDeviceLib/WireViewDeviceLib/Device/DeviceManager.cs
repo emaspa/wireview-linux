@@ -45,16 +45,23 @@ namespace WireView2.Device
         private int _pollMs = 1000;
         private string? _selectedId;
 
-        // Yields candidate (unconnected) devices to attempt, skipping sources we already hold.
-        // Default probes real hwmon + serial; tests inject fakes.
-        private readonly Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>> _probe;
+        // Each probe yields candidate (unconnected) devices to attempt, skipping
+        // sources already held. The default probes real hwmon + serial; the app
+        // registers a remote probe; tests inject fakes.
+        private readonly List<Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>> _probes = new();
 
         public DeviceManager() : this(null) { }
 
-        /// <summary>Test/extension hook: supply a custom device probe.</summary>
+        /// <summary>Test/extension hook: supply a custom device probe (replaces the default).</summary>
         public DeviceManager(Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>? probe)
         {
-            _probe = probe ?? DefaultProbe;
+            _probes.Add(probe ?? DefaultProbe);
+        }
+
+        /// <summary>Add another device source (e.g. the remote/network probe).</summary>
+        public void RegisterProbe(Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>> probe)
+        {
+            lock (_gate) { _probes.Add(probe); }
         }
 
         private static IEnumerable<(IWireViewDevice, string)> DefaultProbe(ISet<string> held)
@@ -161,9 +168,15 @@ namespace WireView2.Device
         private void Discover()
         {
             ISet<string> held;
-            lock (_gate) { held = new HashSet<string>(_openSources); }
+            List<Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>> probes;
+            lock (_gate)
+            {
+                held = new HashSet<string>(_openSources);
+                probes = _probes.ToList();
+            }
 
-            foreach (var (device, source) in _probe(held))
+            foreach (var probe in probes)
+            foreach (var (device, source) in probe(held))
             {
                 if (HoldsSource(source)) { Dispose(device); continue; }
                 ApplyPoll(device);

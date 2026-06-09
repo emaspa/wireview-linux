@@ -77,6 +77,7 @@ public class App : Application
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;
             WireViewPublishService.Shared.Start();
+            WireViewDiscoveryService.Shared.Start();
             StartActivationListener(desktop);
             if (!AppSettings.Current.StartMinimized)
             {

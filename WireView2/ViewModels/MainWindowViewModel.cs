@@ -108,7 +108,8 @@ public partial class MainWindowViewModel : ViewModelBase
         string name = md.Device.DeviceName;
         if (string.IsNullOrWhiteSpace(name)) name = "WireView";
         string shortId = md.Id.Length > 6 ? md.Id[^6..] : md.Id;
-        return $"{name} · {shortId}";
+        string prefix = md.Source.StartsWith("remote:", StringComparison.Ordinal) ? "\U0001F310 " : "";
+        return $"{prefix}{name} · {shortId}";
     }
 
     [RelayCommand]
