@@ -377,18 +377,23 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         _device is HwmonDevice { DaemonAvailable: true } ||
         _device is NetworkDevice;
 
-    private void DeviceScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
+    // Returns whether the command was delivered. Local devices act synchronously
+    // (true unless they throw); a remote NetworkDevice returns false when the signed
+    // POST is refused — e.g. no network secret set locally, or the remote rejects it.
+    private async Task<bool> DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD cmd)
     {
-        if (_device is WireViewPro2Device pro2) pro2.ScreenCmd(cmd);
-        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.ScreenCmd(cmd);
-        else if (_device is NetworkDevice nd) _ = nd.SendCommandAsync(WireViewCommand.Screen(nd.UniqueId, (int)cmd));
+        if (_device is WireViewPro2Device pro2) { pro2.ScreenCmd(cmd); return true; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.ScreenCmd(cmd); return true; }
+        if (_device is NetworkDevice nd) return await nd.SendCommandAsync(WireViewCommand.Screen(nd.UniqueId, (int)cmd));
+        return false;
     }
 
-    private void DeviceNvmCmd(WireViewPro2Device.NVM_CMD cmd)
+    private async Task<bool> DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD cmd)
     {
-        if (_device is WireViewPro2Device pro2) pro2.NvmCmd(cmd);
-        else if (_device is HwmonDevice { DaemonAvailable: true } hwmon) hwmon.NvmCmd(cmd);
-        else if (_device is NetworkDevice nd) _ = nd.SendCommandAsync(WireViewCommand.Nvm(nd.UniqueId, (int)cmd));
+        if (_device is WireViewPro2Device pro2) { pro2.NvmCmd(cmd); return true; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.NvmCmd(cmd); return true; }
+        if (_device is NetworkDevice nd) return await nd.SendCommandAsync(WireViewCommand.Nvm(nd.UniqueId, (int)cmd));
+        return false;
     }
 
     private WireViewPro2Device.DeviceConfigStructV3? DeviceReadConfig()
@@ -445,7 +450,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             if (AppSettings.Current.ScreenAfterConnection != AppSettings.StartupScreen.NoChange
                 && IsDeviceCommandCapable)
             {
-                DeviceScreenCmd(AppSettings.Current.ScreenAfterConnection switch
+                _ = DeviceScreenCmdAsync(AppSettings.Current.ScreenAfterConnection switch
                 {
                     AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
                     AppSettings.StartupScreen.Current     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_CURRENT,
@@ -465,7 +470,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     // ======================== Screen navigation ========================
 
-    private void GoToSelectedScreen()
+    private async void GoToSelectedScreen()
     {
         try
         {
@@ -473,7 +478,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
             if (SelectedDeviceScreenTarget == AppSettings.StartupScreen.NoChange) { ConfigStatus = "Select a screen."; return; }
 
-            DeviceScreenCmd(SelectedDeviceScreenTarget switch
+            bool ok = await DeviceScreenCmdAsync(SelectedDeviceScreenTarget switch
             {
                 AppSettings.StartupScreen.Main        => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
                 AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
@@ -482,7 +487,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 AppSettings.StartupScreen.Status      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS,
                 _                                     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
             });
-            ConfigStatus = $"Switched to {SelectedDeviceScreenTarget}.";
+            ConfigStatus = ok
+                ? $"Switched to {SelectedDeviceScreenTarget}."
+                : "Command failed — set the network secret (Settings) to match the remote host.";
         }
         catch (Exception ex)
         {
@@ -592,16 +599,17 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void ApplyConfig()
+    private async Task ApplyConfig()
     {
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
+            if (_device is NetworkDevice) { ConfigStatus = "Writing the full config to a remote device isn't supported yet."; return; }
 
             var config = BuildConfigFromEditor();
             DeviceWriteConfig(config);
-            DeviceScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
+            await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
         }
         catch (Exception ex)
@@ -611,15 +619,17 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void StoreConfig()
+    private async Task StoreConfig()
     {
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
 
-            DeviceNvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
-            ConfigStatus = "Config stored (NVM).";
+            bool ok = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
+            ConfigStatus = ok
+                ? "Config stored (NVM)."
+                : "Store failed — set the network secret (Settings) to match the remote host.";
         }
         catch (Exception ex)
         {
@@ -628,16 +638,24 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void ResetConfig()
+    private async Task ResetConfig()
     {
         try
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
 
-            DeviceNvmCmd(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
-            Task.Delay(75).Wait();
-            TryReloadConfig();
+            bool ok = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
+            if (!ok)
+            {
+                ConfigStatus = "Reset failed — set the network secret (Settings) to match the remote host.";
+                return;
+            }
+            if (_device is not NetworkDevice)
+            {
+                await Task.Delay(75);
+                TryReloadConfig();
+            }
             ConfigStatus = "Config reset.";
         }
         catch (Exception ex)
