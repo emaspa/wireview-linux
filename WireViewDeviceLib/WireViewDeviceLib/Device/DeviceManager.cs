@@ -9,16 +9,18 @@ namespace WireView2.Device
     /// <summary>A connected local WireView plus its most recent reading.</summary>
     public sealed class ManagedDevice
     {
-        public ManagedDevice(IWireViewDevice device, string source)
+        public ManagedDevice(IWireViewDevice device, string source, string id)
         {
             Device = device;
             Source = source;
+            Id = id;
         }
 
         public IWireViewDevice Device { get; }
         /// <summary>Where it came from, e.g. "hwmon" or "serial:/dev/ttyACM0". Used to avoid re-opening the same source.</summary>
         public string Source { get; }
-        public string Id => Device.UniqueId;
+        /// <summary>Collection key: the stable chip UID, or the source if the UID is unavailable.</summary>
+        public string Id { get; }
         public DeviceData? Latest { get; internal set; }
     }
 
@@ -205,15 +207,17 @@ namespace WireView2.Device
 
                 lock (_gate)
                 {
-                    string id = device.UniqueId;
-                    // Same physical chip already managed (e.g. via the other source): keep the existing one.
-                    if (string.IsNullOrEmpty(id) || _byId.ContainsKey(id))
+                    // Prefer the stable chip UID (dedups a chip seen on two sources);
+                    // fall back to the source so a device whose UID query failed still
+                    // appears instead of vanishing.
+                    string id = !string.IsNullOrEmpty(device.UniqueId) ? device.UniqueId : source;
+                    if (_byId.ContainsKey(id))
                     {
                         Dispose(device);
                         return;
                     }
 
-                    var md = new ManagedDevice(device, source);
+                    var md = new ManagedDevice(device, source, id);
                     _byId[id] = md;
                     _openSources.Add(source);
 
