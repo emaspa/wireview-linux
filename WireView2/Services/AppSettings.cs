@@ -79,6 +79,13 @@ public class AppSettings
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
     public bool SoftwareShutdownOnFault { get; set; }
 
+    // LAN fleet monitoring: publish this host's WireView(s) on the network
+    // (GET /sensors + mDNS _wireview._tcp) so other instances can discover them.
+    public bool PublishEnabled { get; set; } = true;
+    public int PublishPort { get; set; } = 9876;
+    // Manually-added remote hosts ("host" or "host:port") for when mDNS is unavailable.
+    public List<string>? RemoteHosts { get; set; }
+
     // Tray icon presentation — show a second tray icon with the live total power
     // (plain text), shown as a red icon when the device is disconnected.
     public bool ShowTrayPower { get; set; } = true;

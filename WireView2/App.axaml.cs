@@ -76,6 +76,7 @@ public class App : Application
             ApplyTheme(AppSettings.Current.ThemePreference);
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;
+            WireViewPublishService.Shared.Start();
             StartActivationListener(desktop);
             if (!AppSettings.Current.StartMinimized)
             {

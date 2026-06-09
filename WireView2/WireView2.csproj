@@ -10,7 +10,7 @@
     <!-- ApplicationIcon is Win32-only; on Linux, window icon is set via Avalonia -->
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>WireView Pro II</AssemblyTitle>
-    <Version>1.0.6.0</Version>
+    <Version>1.1.0.0</Version>
     <SourceRevisionId>build$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</SourceRevisionId>
   </PropertyGroup>
 
@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WireViewDeviceLib\WireViewDeviceLib\WireViewDeviceLib.csproj" />
+    <ProjectReference Include="..\WireViewNet\WireViewNet.csproj" />
   </ItemGroup>
 
   <ItemGroup>
