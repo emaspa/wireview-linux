@@ -271,7 +271,10 @@ namespace WireView2.Device
 
         private string? ReadUid()
         {
-            if (!Connected || _port == null) return null;
+            // NB: called from Connect() before Connected is set, so guard only on
+            // the port (matching ReadVendorData/ReadConfigVersion). A stale
+            // "!Connected" check here left UniqueId empty for serial devices.
+            if (_port == null) return null;
 
             const int uidBytes = 12;
             byte[]? buf = SendCmd(UsbCmd.CMD_READ_UID, uidBytes);
