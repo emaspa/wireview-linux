@@ -100,13 +100,13 @@ namespace WireView2.Net
             ConnectionChanged?.Invoke(this, value);
         }
 
-        /// <summary>Send an authenticated write command to this remote device. The
-        /// command's DeviceId is set to this device. Returns false if no secret is
-        /// configured or the request fails / is rejected.</summary>
-        public async Task<bool> SendCommandAsync(WireViewCommand cmd, CancellationToken ct = default)
+        /// <summary>Send an authenticated write command to this remote device (its
+        /// DeviceId is set to this device). The result distinguishes no-local-secret,
+        /// a remote rejection (401/403), an unreachable host, and other HTTP errors.</summary>
+        public async Task<CommandResult> SendCommandAsync(WireViewCommand cmd, CancellationToken ct = default)
         {
             string? secret = _secretProvider?.Invoke();
-            if (string.IsNullOrEmpty(secret)) return false;
+            if (string.IsNullOrEmpty(secret)) return new CommandResult(CommandOutcome.NoLocalSecret);
 
             string body = (cmd with { DeviceId = UniqueId }).ToJson();
             var (ts, nonce, sig) = HmacAuth.Sign(secret, body);
@@ -120,9 +120,19 @@ namespace WireView2.Net
             try
             {
                 var r = await Http.SendAsync(req, ct).ConfigureAwait(false);
-                return r.IsSuccessStatusCode;
+                if (r.IsSuccessStatusCode) return CommandResult.Success;
+                return (int)r.StatusCode switch
+                {
+                    401 => new CommandResult(CommandOutcome.Unauthorized, 401),
+                    403 => new CommandResult(CommandOutcome.WritesDisabled, 403),
+                    var code => new CommandResult(CommandOutcome.HttpError, code),
+                };
             }
-            catch { return false; }
+            catch
+            {
+                // HttpRequestException (refused/DNS), TaskCanceledException (timeout), etc.
+                return new CommandResult(CommandOutcome.Unreachable);
+            }
         }
 
         public void Dispose() => Disconnect();
