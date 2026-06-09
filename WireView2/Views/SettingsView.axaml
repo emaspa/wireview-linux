@@ -58,6 +58,14 @@
             </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="8">
+                    <StackPanel Spacing="8" IsVisible="{Binding ShowPublishToggle}">
+                        <TextBlock Text="Publish this host on the LAN" FontWeight="SemiBold" FontSize="16"/>
+                        <CheckBox IsChecked="{Binding PublishEnabled, Mode=TwoWay}"
+                                  Content="Open the network listener (GET /sensors + authenticated writes)"/>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                                   Text="Off by default. When enabled, this host opens port 9876 so other instances on the LAN can read its device(s) — and, with a network secret set, write to them. Independent of reading remote hosts below: you can read remotes without exposing this host."/>
+                        <Separator Margin="0,8"/>
+                    </StackPanel>
                     <TextBlock Text="Remote hosts (LAN)" FontWeight="SemiBold" FontSize="16"/>
                     <TextBox Text="{Binding RemoteHostsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                              Watermark="192.168.1.50:9876, 192.168.1.51"/>

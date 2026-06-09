@@ -79,9 +79,11 @@ public class AppSettings
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
     public bool SoftwareShutdownOnFault { get; set; }
 
-    // LAN fleet monitoring: publish this host's WireView(s) on the network
-    // (GET /sensors) so other instances can read them via their configured host list.
-    public bool PublishEnabled { get; set; } = true;
+    // LAN fleet monitoring: open the network listener that publishes this host's
+    // WireView(s) (GET /sensors) and, with a secret, accepts authenticated writes
+    // (POST /command). OFF by default — opening a port is opt-in and independent of
+    // reading remote hosts.
+    public bool PublishEnabled { get; set; } = false;
     public int PublishPort { get; set; } = 9876;
     // Remote hosts to read over the LAN ("host" or "host:port"; port defaults to
     // 9876). Set in Settings as a comma-separated list. No mDNS auto-discovery.

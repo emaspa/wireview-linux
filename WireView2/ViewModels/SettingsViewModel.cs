@@ -159,6 +159,28 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The in-app publisher only runs on Windows/macOS; on Linux the wireviewd
+    /// daemon owns publishing, so the toggle is hidden there.</summary>
+    public bool ShowPublishToggle => !OperatingSystem.IsLinux();
+
+    /// <summary>Whether this host opens the LAN listener — publishing GET /sensors and,
+    /// with a secret, accepting authenticated POST /command writes. OFF by default;
+    /// opening a port is opt-in and independent of reading remote hosts below. Toggling
+    /// starts/stops the listener live (no-op on Linux, where the daemon publishes).</summary>
+    public bool PublishEnabled
+    {
+        get => AppSettings.Current.PublishEnabled;
+        set
+        {
+            if (AppSettings.Current.PublishEnabled == value) return;
+            AppSettings.Current.PublishEnabled = value;
+            AppSettings.SaveCurrent();
+            if (value) WireViewPublishService.Shared.Start();
+            else WireViewPublishService.Shared.Stop();
+            OnPropertyChanged();
+        }
+    }
+
     /// <summary>Comma-separated list of remote WireView hosts to read over the LAN
     /// (host or host:port). Backed by <see cref="AppSettings.RemoteHosts"/>; the
     /// discovery probe re-reads it each tick, so edits apply without a restart.</summary>
