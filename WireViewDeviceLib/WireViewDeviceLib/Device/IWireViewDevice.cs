@@ -7,6 +7,8 @@
         string HardwareRevision { get; }
         string FirmwareVersion { get; }
         string UniqueId { get; }
+        /// <summary>Firmware build string (e.g. "TG-WV-PRO2-FW_20260225_1902"), or empty if unknown.</summary>
+        string BuildString { get; }
 
         void Connect();
         void Disconnect();

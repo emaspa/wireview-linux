@@ -32,6 +32,7 @@ namespace WireView2.Net
         public string DeviceName { get; private set; }
         public string HardwareRevision { get; private set; } = "";
         public string FirmwareVersion { get; private set; } = "";
+        public string BuildString { get; private set; } = "";
         public string UniqueId { get; }
         public int PollIntervalMs { get; set; } = 1000;
 
@@ -87,6 +88,7 @@ namespace WireView2.Net
                 DeviceName = string.IsNullOrWhiteSpace(dto.Name) ? DeviceName : dto.Name;
                 HardwareRevision = dto.HwRev;
                 FirmwareVersion = dto.FwVer;
+                BuildString = dto.BuildString ?? "";
                 DataUpdated?.Invoke(this, dto.ToDeviceData());
                 return true;
             }

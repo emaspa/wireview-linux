@@ -425,6 +425,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     {
         if (_device is WireViewPro2Device pro2) return pro2.ReadBuildString();
         if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadBuildString();
+        // Remote devices carry the build string in the published snapshot.
+        if (_device is NetworkDevice nd) return string.IsNullOrWhiteSpace(nd.BuildString) ? null : nd.BuildString;
         return null;
     }
 

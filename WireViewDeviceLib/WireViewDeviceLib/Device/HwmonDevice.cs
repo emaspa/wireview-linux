@@ -32,6 +32,7 @@ namespace WireView2.Device
 
         private string _firmwareVersion = string.Empty;
         private string _uniqueId = string.Empty;
+        private string _buildString = string.Empty;
         private int _configVersion = -1;
 
         public event EventHandler<DeviceData>? DataUpdated;
@@ -44,6 +45,7 @@ namespace WireView2.Device
         public string HardwareRevision => string.Empty;
         public string FirmwareVersion => _firmwareVersion;
         public string UniqueId => _uniqueId;
+        public string BuildString => _buildString;
         public bool DaemonAvailable { get; private set; }
         public int ConfigVersion => _configVersion;
 
@@ -122,7 +124,7 @@ namespace WireView2.Device
                     {
                         int end = Array.IndexOf(data, (byte)0, 14);
                         if (end < 0) end = data.Length;
-                        // store build string if needed later
+                        _buildString = System.Text.Encoding.ASCII.GetString(data, 14, end - 14).Trim();
                     }
 
                     _firmwareVersion = fwVersion.ToString();

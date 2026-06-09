@@ -23,6 +23,7 @@ namespace WireView2.Device
         public string HardwareRevision { get; private set; } = string.Empty;
         public string FirmwareVersion { get; private set; } = string.Empty;
         public string UniqueId { get; private set; } = string.Empty;
+        public string BuildString { get; private set; } = string.Empty;
 
         public int ConfigVersion { get; private set; }
 
@@ -74,6 +75,9 @@ namespace WireView2.Device
                 ScreenCmd(SCREEN_CMD.SCREEN_RESUME_UPDATES);
 
                 Connected = true;
+                // Cache the firmware build string once (static for the session) so it
+                // can be shown locally and published to remote viewers over the LAN.
+                BuildString = ReadBuildString() ?? string.Empty;
                 ConnectionChanged?.Invoke(this, true);
             }
             else
@@ -104,6 +108,7 @@ namespace WireView2.Device
             HardwareRevision = string.Empty;
             FirmwareVersion = string.Empty;
             UniqueId = string.Empty;
+            BuildString = string.Empty;
 
             ConnectionChanged?.Invoke(this, false);
         }

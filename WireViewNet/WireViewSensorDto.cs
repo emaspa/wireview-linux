@@ -17,6 +17,8 @@ namespace WireView2.Net
         public bool Connected { get; set; }
         public string HwRev { get; set; } = "";
         public string FwVer { get; set; } = "";
+        /// <summary>Firmware build string (e.g. "TG-WV-PRO2-FW_20260225_1902"), empty if unknown.</summary>
+        public string BuildString { get; set; } = "";
         public DateTime Timestamp { get; set; }
 
         public double[] PinVoltage { get; set; } = new double[6];
@@ -42,6 +44,7 @@ namespace WireView2.Net
             Connected = d.Connected,
             HwRev = d.HardwareRevision,
             FwVer = d.FirmwareVersion,
+            BuildString = dev.BuildString,
             Timestamp = d.Timestamp,
             PinVoltage = (double[])d.PinVoltage.Clone(),
             PinCurrent = (double[])d.PinCurrent.Clone(),
