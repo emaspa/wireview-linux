@@ -28,6 +28,9 @@ namespace WireView2.Services
         {
             if (IsRunning) return;
             if (!AppSettings.Current.PublishEnabled) return;
+            // On Linux the wireviewd daemon owns LAN publishing (and works headless on
+            // servers); the GUI only publishes where there's no daemon (Windows/macOS).
+            if (OperatingSystem.IsLinux()) return;
 
             int port = AppSettings.Current.PublishPort;
             try
