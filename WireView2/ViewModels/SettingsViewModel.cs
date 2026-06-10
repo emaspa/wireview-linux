@@ -181,6 +181,27 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Port the in-app publisher listens on (Windows/macOS). Changing it rebinds
+    /// the listener if publishing is on; remote readers then connect with host:port.</summary>
+    public string PublishPortText
+    {
+        get => AppSettings.Current.PublishPort.ToString();
+        set
+        {
+            if (int.TryParse(value, out int p) && p > 0 && p < 65536 && p != AppSettings.Current.PublishPort)
+            {
+                AppSettings.Current.PublishPort = p;
+                AppSettings.SaveCurrent();
+                if (AppSettings.Current.PublishEnabled)
+                {
+                    WireViewPublishService.Shared.Stop();
+                    WireViewPublishService.Shared.Start();
+                }
+            }
+            OnPropertyChanged();
+        }
+    }
+
     /// <summary>Comma-separated list of remote WireView hosts to read over the LAN
     /// (host or host:port). Backed by <see cref="AppSettings.RemoteHosts"/>; the
     /// discovery probe re-reads it each tick, so edits apply without a restart.</summary>
