@@ -42,6 +42,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.1.0.0" date="2026-06-10">
+      <description>
+        <p>Beta: LAN monitoring - read, publish, and remotely configure WireViews on other machines over the LAN (HMAC-authenticated, off by default).</p>
+      </description>
+    </release>
     <release version="1.0.6.0" date="2026-06-06">
       <description>
         <p>Adds a system-tray power readout with a live hwmon values dropdown.</p>
