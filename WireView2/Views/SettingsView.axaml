@@ -76,6 +76,11 @@
                              PasswordChar="●" Watermark="shared passphrase"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
                                Text="Shared passphrase that authenticates writing settings to (and from) remote hosts via signed requests. Set the SAME value on every host. Leave empty to disable remote writes. Stored in plaintext in settings.json."/>
+                    <TextBlock Text="Audit log retention (days)" FontWeight="SemiBold" FontSize="16" Margin="0,12,0,0"/>
+                    <TextBox Text="{Binding LogRetentionDaysText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                             Watermark="14" Width="140" HorizontalAlignment="Left"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="How many days of daily-rotating logs to keep. Remote command activity (sent / received / executed) is recorded here. 0 keeps logs forever. Files live under the settings folder's logs/ subdirectory."/>
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16" Margin="0,16,0,0">

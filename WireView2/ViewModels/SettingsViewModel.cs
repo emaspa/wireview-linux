@@ -217,6 +217,22 @@ public class SettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Days of daily-rotating audit logs to keep (0 = forever). Applied live.</summary>
+    public string LogRetentionDaysText
+    {
+        get => AppSettings.Current.LogRetentionDays.ToString();
+        set
+        {
+            if (int.TryParse(value, out int days) && days >= 0)
+            {
+                AppSettings.Current.LogRetentionDays = days;
+                AppSettings.SaveCurrent();
+                WireView2.Net.FileLog.SetRetentionDays(days);
+            }
+            OnPropertyChanged();
+        }
+    }
+
     public string BuildDateText
     {
         get

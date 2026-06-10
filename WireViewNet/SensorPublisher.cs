@@ -148,7 +148,7 @@ namespace WireView2.Net
                         }
                         int bodyLen = Math.Min(want, total - bodyStart);
                         string body = bodyLen > 0 ? Encoding.UTF8.GetString(buf, bodyStart, bodyLen) : "";
-                        await HandleCommand(stream, headers, body).ConfigureAwait(false);
+                        await HandleCommand(stream, headers, body, ip).ConfigureAwait(false);
                         return;
                     }
 
@@ -165,11 +165,12 @@ namespace WireView2.Net
             }
         }
 
-        private async Task HandleCommand(NetworkStream stream, string headers, string body)
+        private async Task HandleCommand(NetworkStream stream, string headers, string body, string ip)
         {
             string? secret = _secretProvider?.Invoke();
             if (string.IsNullOrEmpty(secret) || _commandSink == null)
             {
+                FileLog.Warn($"command from {ip} rejected: writes disabled");
                 await WriteJson(stream, 403, "Forbidden", "{\"error\":\"writes disabled\"}").ConfigureAwait(false);
                 return;
             }
@@ -178,6 +179,7 @@ namespace WireView2.Net
                                  Header(headers, HmacAuth.NonceHeader),
                                  Header(headers, HmacAuth.SigHeader), body))
             {
+                FileLog.Warn($"command from {ip} rejected: bad/expired signature");
                 await WriteJson(stream, 401, "Unauthorized", "{\"error\":\"auth\"}").ConfigureAwait(false);
                 return;
             }
@@ -185,12 +187,14 @@ namespace WireView2.Net
             var cmd = WireViewCommand.Parse(body);
             if (cmd == null)
             {
+                FileLog.Warn($"command from {ip} rejected: bad command body");
                 await WriteJson(stream, 400, "Bad Request", "{\"error\":\"bad command\"}").ConfigureAwait(false);
                 return;
             }
 
             bool ok;
             try { ok = _commandSink(cmd); } catch { ok = false; }
+            FileLog.Write(ok ? "INFO" : "WARN", $"command from {ip}: op={cmd.Op} -> {(ok ? "executed" : "relay failed")}");
             await WriteJson(stream, ok ? 200 : 500, ok ? "OK" : "Internal Server Error",
                             ok ? "{\"ok\":true}" : "{\"error\":\"relay failed\"}").ConfigureAwait(false);
         }

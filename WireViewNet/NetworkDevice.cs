@@ -107,8 +107,16 @@ namespace WireView2.Net
 
         /// <summary>Send an authenticated write command to this remote device (its
         /// DeviceId is set to this device). The result distinguishes no-local-secret,
-        /// a remote rejection (401/403), an unreachable host, and other HTTP errors.</summary>
+        /// a remote rejection (401/403), an unreachable host, and other HTTP errors.
+        /// The outcome is written to the audit log.</summary>
         public async Task<CommandResult> SendCommandAsync(WireViewCommand cmd, CancellationToken ct = default)
+        {
+            var result = await SendCommandInnerAsync(cmd, ct).ConfigureAwait(false);
+            FileLog.Write(result.Ok ? "INFO" : "WARN", $"sent {cmd.Op} to {Endpoint} -> {result.Outcome}");
+            return result;
+        }
+
+        private async Task<CommandResult> SendCommandInnerAsync(WireViewCommand cmd, CancellationToken ct)
         {
             string? secret = _secretProvider?.Invoke();
             if (string.IsNullOrEmpty(secret)) return new CommandResult(CommandOutcome.NoLocalSecret);

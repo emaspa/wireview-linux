@@ -67,6 +67,11 @@ public class App : Application
             DisableAvaloniaDataAnnotationValidation();
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             AppSettings.Reload();
+            WireView2.Net.FileLog.Init(
+                System.IO.Path.Combine(
+                    System.IO.Path.GetDirectoryName(AppSettings.GetSettingsPath())!, "logs"),
+                AppSettings.Current.LogRetentionDays);
+            WireView2.Net.FileLog.Info($"WireView2 started on {AppInfo.Os} v{AppInfo.Version}");
             bool osAutoStart = AutoStartService.GetAutoStart();
             if (AppSettings.Current.AutoStart != osAutoStart)
             {

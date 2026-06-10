@@ -99,6 +99,10 @@ public class AppSettings
     public int MaxRequestBytes { get; set; } = 8192;
     public int RateLimitPerMinute { get; set; } = 120;
 
+    // Days of audit logs to keep (daily-rotating wireview2-*.log under the
+    // settings folder's logs/ subdir). 0 = keep forever.
+    public int LogRetentionDays { get; set; } = 14;
+
     // Tray icon presentation — show a second tray icon with the live total power
     // (plain text), shown as a red icon when the device is disconnected.
     public bool ShowTrayPower { get; set; } = true;
