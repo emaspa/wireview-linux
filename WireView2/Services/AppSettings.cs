@@ -79,7 +79,7 @@ public class AppSettings
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
     public bool SoftwareShutdownOnFault { get; set; }
 
-    // LAN fleet monitoring: open the network listener that publishes this host's
+    // LAN monitoring: open the network listener that publishes this host's
     // WireView(s) (GET /sensors) and, with a secret, accepts authenticated writes
     // (POST /command). OFF by default — opening a port is opt-in and independent of
     // reading remote hosts.

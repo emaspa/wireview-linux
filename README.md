@@ -12,6 +12,7 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Data logging** — On-device log readback and CSV export
 - **Desktop notifications** — Via `notify-send`
 - **Software shutdown on fault** — Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
+- **LAN monitoring** — Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
 
 > **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
 
@@ -29,6 +30,41 @@ The app supports two ways of communicating with the device:
 The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands — configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
 
 If the kernel module is not loaded, the app falls back to direct serial communication automatically.
+
+## LAN monitoring
+
+Beyond the single local device, the app can monitor and control **WireViews on
+other machines** over the LAN — one desktop reading several servers, or two PCs
+watching each other.
+
+### Reading remote devices
+
+In **Settings → Remote hosts**, add a comma-separated list of hosts
+(`192.168.1.50`, or `host:port` for a custom port — default `9876`). Each remote
+device appears in the device picker as `lan @ host` alongside local ones, with
+full live monitoring. A remote host is typically the
+[wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or
+another copy of this app with publishing enabled (Windows/macOS).
+
+### Publishing this host (Windows / macOS)
+
+**Settings → Publish this host on the LAN** opens a listener (default port
+`9876`, configurable) so other instances can read this machine's device. **Off
+by default.** On Linux the `wireviewd` daemon owns publishing, so the toggle is
+hidden there.
+
+### Remote control & configuration (authenticated)
+
+Set the same **Network secret** on the publisher and the reader to allow
+*writing* to a remote device — screen changes, NVM store/reset, clear-faults,
+and the full configuration editor all work against a remote device. Requests are
+signed with HMAC-SHA256 (the secret never crosses the wire; replays rejected).
+Reading a remote needs no secret; only writes do, and failures are surfaced
+precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
+*"the remote host is unreachable"*).
+
+> Publishing is independent of reading — you can read remote hosts without
+> exposing your own. There is no TLS; this targets a trusted LAN.
 
 ## Requirements
 
@@ -207,7 +243,7 @@ The app has five pages accessible from the left sidebar:
 | **Monitoring** | Real-time charts for voltage, current, power, and temperature |
 | **Logging** | Read device logs and export to CSV |
 | **Device** | Device info and full device configuration (fan, display, alarms, thresholds) |
-| **Settings** | App theme, startup behavior, background customization |
+| **Settings** | App theme, startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
 
 ### Configuration profiles
 
@@ -229,7 +265,8 @@ wireview-linux/
 │   ├── Services/               # App settings, profiles, notifications
 │   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
-│   └── Device/                 # Serial protocol, port finder
+│   └── Device/                 # Serial + hwmon + network devices, port finder
+├── WireViewNet/                # LAN layer — /sensors publisher, remote device client, HMAC auth
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script
 ```

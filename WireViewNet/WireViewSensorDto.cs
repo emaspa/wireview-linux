@@ -11,7 +11,7 @@ namespace WireView2.Net
     /// </summary>
     public sealed class WireViewSensorDto
     {
-        /// <summary>Stable 12-byte chip UID (hex). Used as the fleet-wide device key.</summary>
+        /// <summary>Stable 12-byte chip UID (hex). Used as the network-wide device key.</summary>
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public bool Connected { get; set; }

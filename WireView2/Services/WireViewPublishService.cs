@@ -142,7 +142,7 @@ namespace WireView2.Services
             {
                 // Publish only locally-attached devices. Re-exporting devices we
                 // discovered over the LAN would advertise another host's device as
-                // ours, duplicating it across the fleet (and risking relay loops).
+                // ours, duplicating it across the network (and risking relay loops).
                 if (md.Device is NetworkDevice) continue;
                 if (md.Latest != null)
                     snapshot.Devices.Add(WireViewSensorDto.FromDevice(md.Device, md.Latest));
