@@ -32,6 +32,7 @@ namespace WireView2.Net
         public int PsuCapW { get; set; }
         public int FaultStatus { get; set; }
         public int FaultLog { get; set; }
+        public int Fan { get; set; }   // live fan duty %
 
         // Convenience totals (also recomputable from the pin arrays).
         public double SumCurrentA { get; set; }
@@ -55,6 +56,7 @@ namespace WireView2.Net
             PsuCapW = d.PsuCapabilityW,
             FaultStatus = d.FaultStatus,
             FaultLog = d.FaultLog,
+            Fan = d.FanDuty,
             SumCurrentA = d.SumCurrentA,
             SumPowerW = d.SumPowerW,
         };
@@ -75,6 +77,7 @@ namespace WireView2.Net
             PsuCapabilityW = PsuCapW,
             FaultStatus = (ushort)FaultStatus,
             FaultLog = (ushort)FaultLog,
+            FanDuty = Fan,
         };
     }
 

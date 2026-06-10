@@ -371,7 +371,8 @@ namespace WireView2.Device
                                   ss.HpwrCapability == HpwrCapability.PSU_CAP_150W ? 150 : 0,
 
                 FaultStatus = ss.FaultStatus,
-                FaultLog = ss.FaultLog
+                FaultLog = ss.FaultLog,
+                FanDuty = ss.FanDuty
             };
 
             for (int i = 0; i < 6; i++)

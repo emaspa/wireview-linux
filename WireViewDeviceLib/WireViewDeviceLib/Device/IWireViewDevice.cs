@@ -38,5 +38,7 @@
 
         public ushort FaultStatus { get; set; }
         public ushort FaultLog { get; set; }
+
+        public int FanDuty { get; set; }   // live fan duty %
     }
 }
