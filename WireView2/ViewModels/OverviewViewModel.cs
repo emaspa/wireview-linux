@@ -35,20 +35,25 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     // --------------- Bar chart series ---------------
 
+    // Explicit fills so the bars stay distinct regardless of the chart theme's
+    // auto-palette (voltage = green, current = blue, power = orange).
     private readonly ColumnSeries<double> _seriesCurrent = new()
     {
         Name = "Current (A)",
-        ScalesYAt = 1
+        ScalesYAt = 1,
+        Fill = new SolidColorPaint(new SKColor(33, 150, 243))
     };
     private readonly ColumnSeries<double> _seriesVoltage = new()
     {
         Name = "Voltage (V)",
-        ScalesYAt = 0
+        ScalesYAt = 0,
+        Fill = new SolidColorPaint(new SKColor(76, 175, 80))
     };
     private readonly ColumnSeries<double> _seriesPower = new()
     {
         Name = "Power (W)",
-        ScalesYAt = 2
+        ScalesYAt = 2,
+        Fill = new SolidColorPaint(new SKColor(255, 152, 0))
     };
 
     private double[] _lastVoltages = Array.Empty<double>();
