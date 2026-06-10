@@ -2,6 +2,8 @@
 
 Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
 
+> A **Windows** build (**WireView Plus**) is also available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page - see [Windows](#windows-x64) under Installation.
+
 ![Screenshot](docs/screenshot-v2.png)
 
 ## Features
@@ -72,6 +74,10 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
+
+### Windows (x64)
+
+A self-contained Windows build, **WireView Plus**, is published on the [Releases](https://github.com/emaspa/wireview-linux/releases) page (`wireview-plus-<version>-windows-x64.zip`). Extract it and run the executable - no installation or .NET runtime required.
 
 ### Ubuntu 24.04 / 26.04 LTS (PPA)
 
