@@ -5,7 +5,7 @@ Flatpak build for `wireview-linux`, primarily for immutable / atomic distros
 on any distro with Flatpak.
 
 Like the other packages, the manifest installs the **pre-built self-contained
-binary** from the GitHub release tarball — no compilation in the Flatpak builder.
+binary** from the GitHub release tarball - no compilation in the Flatpak builder.
 
 ## Files
 

@@ -84,7 +84,7 @@ sudo usermod -aG dialout "$USER"
 
 ## Notes
 
-- **Bazzite / immutable Fedora** (rpm-ostree) is *not* the target here — layering
+- **Bazzite / immutable Fedora** (rpm-ostree) is *not* the target here - layering
   RPMs is discouraged on those. A Flatpak is the idiomatic path for them; this
   COPR package targets Fedora Workstation/Server and Silverblue toolbox/distrobox.
 - The hwmon kernel module (`wireview-hwmon`) is a separate concern and is only a

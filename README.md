@@ -6,13 +6,13 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 ## Features
 
-- **Real-time monitoring** — Voltage, current, and power readings across all 6 pins with live charts
-- **Device configuration** — Fan speed, display settings, fault alarms, thresholds
-- **Configuration profiles** — Save, load, and manage named device configurations
-- **Data logging** — On-device log readback and CSV export
-- **Desktop notifications** — Via `notify-send`
-- **Software shutdown on fault** — Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
-- **LAN monitoring** — Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
+- **Real-time monitoring** - Voltage, current, and power readings across all 6 pins with live charts
+- **Device configuration** - Fan speed, display settings, fault alarms, thresholds
+- **Configuration profiles** - Save, load, and manage named device configurations
+- **Data logging** - On-device log readback and CSV export
+- **Desktop notifications** - Via `notify-send`
+- **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
+- **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
 
 > **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
 
@@ -27,20 +27,20 @@ The app supports two ways of communicating with the device:
 | **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
 
-The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands — configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
+The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands - configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
 
 If the kernel module is not loaded, the app falls back to direct serial communication automatically.
 
 ## LAN monitoring
 
 Beyond the single local device, the app can monitor and control **WireViews on
-other machines** over the LAN — one desktop reading several servers, or two PCs
+other machines** over the LAN - one desktop reading several servers, or two PCs
 watching each other.
 
 ### Reading remote devices
 
 In **Settings → Remote hosts**, add a comma-separated list of hosts
-(`192.168.1.50`, or `host:port` for a custom port — default `9876`). Each remote
+(`192.168.1.50`, or `host:port` for a custom port - default `9876`). Each remote
 device appears in the device picker as `lan @ host` alongside local ones, with
 full live monitoring. A remote host is typically the
 [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or
@@ -56,19 +56,19 @@ hidden there.
 ### Remote control & configuration (authenticated)
 
 Set the same **Network secret** on the publisher and the reader to allow
-*writing* to a remote device — screen changes, NVM store/reset, clear-faults,
+*writing* to a remote device - screen changes, NVM store/reset, clear-faults,
 and the full configuration editor all work against a remote device. Requests are
 signed with HMAC-SHA256 (the secret never crosses the wire; replays rejected).
 Reading a remote needs no secret; only writes do, and failures are surfaced
 precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 *"the remote host is unreachable"*).
 
-> Publishing is independent of reading — you can read remote hosts without
+> Publishing is independent of reading - you can read remote hosts without
 > exposing your own. There is no TLS; this targets a trusted LAN.
 
 ## Requirements
 
-- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 42–44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
+- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 42-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II device connected via USB
 
 ## Installation
@@ -102,7 +102,7 @@ sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 
-Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page — a single RPM works on all current Fedora releases (tested on 42, 43, and 44):
+Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page - a single RPM works on all current Fedora releases (tested on 42, 43, and 44):
 
 ```bash
 sudo dnf install ./wireview-linux-*.x86_64.rpm
@@ -114,7 +114,7 @@ To also install the hwmon kernel module and daemon for system-wide sensor integr
 sudo dnf install wireview-hwmon wireview-hwmon-dkms
 ```
 
-The package is a self-contained binary — no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
+The package is a self-contained binary - no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
 
 ### Flatpak (Bazzite / Silverblue / immutable distros)
 
@@ -141,7 +141,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 paru -S wireview-linux-bin   # or: yay -S wireview-linux-bin
 ```
 
-A community source package, [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux) (maintained by arakmar), builds from source instead — note it may lag behind the latest release:
+A community source package, [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux) (maintained by arakmar), builds from source instead - note it may lag behind the latest release:
 
 ```bash
 paru -S wireview-linux
@@ -156,7 +156,7 @@ paru -S wireview-hwmon wireview-hwmon-dkms
 ### Serial access (package installs)
 
 The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
-the system reloads it automatically, so **serial access works out of the box** —
+the system reloads it automatically, so **serial access works out of the box** -
 the rule grants the device node access directly (`MODE="0666"` plus a logind
 `uaccess` ACL for the active session), with no group membership or logout
 required.
@@ -266,18 +266,18 @@ wireview-linux/
 │   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
 │   └── Device/                 # Serial + hwmon + network devices, port finder
-├── WireViewNet/                # LAN layer — /sensors publisher, remote device client, HMAC auth
+├── WireViewNet/                # LAN layer - /sensors publisher, remote device client, HMAC auth
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script
 ```
 
 ## Tech stack
 
-- **.NET 8.0** — Runtime and build system
-- **Avalonia UI 11.3** — Cross-platform MVVM UI framework
-- **CommunityToolkit.Mvvm 8.4** — MVVM source generators
-- **LiveChartsCore + SkiaSharp** — Real-time chart rendering
-- **System.IO.Ports** — Serial communication with the device
+- **.NET 8.0** - Runtime and build system
+- **Avalonia UI 11.3** - Cross-platform MVVM UI framework
+- **CommunityToolkit.Mvvm 8.4** - MVVM source generators
+- **LiveChartsCore + SkiaSharp** - Real-time chart rendering
+- **System.IO.Ports** - Serial communication with the device
 
 ## Troubleshooting
 

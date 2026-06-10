@@ -1,6 +1,6 @@
 # AUR packaging (`wireview-linux-bin`)
 
-A binary AUR package that installs the pre-built release tarball — no `dotnet-sdk`
+A binary AUR package that installs the pre-built release tarball - no `dotnet-sdk`
 build dependency and no compile step, so it installs in seconds.
 
 It `provides`/`conflicts` `wireview-linux`, so it coexists with the community
