@@ -20,6 +20,8 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     private ushort _lastFaultStatus;
     private ushort _lastFaultLog;
     private DateTime _lastToastUtc = DateTime.MinValue;
+    private bool _prevRawFaultAny;
+    private ushort _lastShownFaultStatus;
 
     private static readonly TimeSpan ToastCooldown = TimeSpan.FromSeconds(10.0);
 
@@ -162,14 +164,31 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
 
     private void OnDataUpdated(object? sender, DeviceData data)
     {
-        ushort prevStatus = FaultStatusMask;
-        SetFault(data.FaultStatus, data.FaultLog);
+        // Debounce: the serial protocol has no framing/CRC, so a desynced
+        // read can pulse garbage into the fault fields for a single poll.
+        // Real faults persist until cleared (the device latches them in the
+        // fault log), so only honor fault bits seen on two consecutive polls.
+        ushort rawStatus = data.FaultStatus;
+        ushort rawLog = data.FaultLog;
+        bool prevRawAny = _prevRawFaultAny;
+        _prevRawFaultAny = (rawStatus | rawLog) != 0;
+        if ((rawStatus | rawLog) != 0 && !prevRawAny)
+        {
+            rawStatus = 0;
+            rawLog = 0;
+        }
 
-        if (prevStatus == 0 && data.FaultStatus != 0
+        ushort prevShown = _lastShownFaultStatus;
+        _lastShownFaultStatus = rawStatus;
+        SetFault(rawStatus, rawLog);
+
+        if (prevShown == 0 && rawStatus != 0
             && DateTime.UtcNow - _lastToastUtc > ToastCooldown)
         {
             _lastToastUtc = DateTime.UtcNow;
-            string message = FaultText ?? "Fault detected.";
+            // Format from the data directly: the FaultText property is set
+            // via a UI-thread post and may not be updated yet on this thread.
+            string message = FormatFaults(rawStatus);
             _toast.Show("WireView Fault", message);
 
             if (AppSettings.Current.SoftwareShutdownOnFault)
