@@ -351,6 +351,18 @@ namespace WireView2.Device
             byte[]? buf = SendCmd(UsbCmd.CMD_READ_SENSOR_VALUES, size);
 
             if (buf == null) return null;
+
+            // The serial protocol has no framing/CRC, so a desynced read
+            // corrupts arbitrary fields for one poll (including the trailing
+            // fault masks). Real frames always carry zero padding bytes and a
+            // fan duty <= 100 - discard anything else; the next poll's input
+            // flush realigns the stream. Wire layout: fan duty at offset 10,
+            // pad1 at 11, pad2 five bytes from the end (before the two
+            // 16-bit fault masks).
+            if (buf.Length > 11 &&
+                (buf[10] > 100 || buf[11] != 0 || buf[buf.Length - 5] != 0))
+                return null;
+
             return BytesToStruct<SensorStruct>(buf);
         }
 
