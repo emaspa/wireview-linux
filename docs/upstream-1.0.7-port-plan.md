@@ -25,7 +25,17 @@ Status (updated 2026-07-09):
   a serial handover: wireviewd gained WCMD_SUSPEND/RESUME_SERIAL (wireview-hwmon repo)
   and the app a DirectSerialSession helper with heartbeat re-arm — the same mechanism
   the theme editor's SPI writes will use.
-- REMAINING: §5 theme editor suite, §6 dependency migration.
+- DONE §5 theme editor suite (WireViewPro2Device.Theme.cs SPI write/erase + asset
+  API; DeviceViewModel.Theme.cs + DeviceView UI: live preview w/ fan animation,
+  V2 preset/color UI, background import with pure-Avalonia rasterizer replacing
+  upstream's GDI+, .wv2t files, factory restore from bundled ext_flash.bin).
+  Verified on hardware incl. byte-level flash read-back. Gotchas encoded in code
+  comments: preview reads/uploads suspend the daemon (order device relay commands
+  BEFORE property updates that trigger a preview refresh); the firmware re-blits
+  backgrounds only on screen ENTRY with device-paced timing (~1 s settle, ~3 s on
+  the detour screen); the protocol cannot query the current screen.
+- REMAINING: §6 dependency migration (Avalonia 12 / LiveCharts 2.0.2 / SkiaSharp 3)
+  — deliberately deferred, nothing above requires it.
 - RELEASE CHECKLIST (v1.2.0.0): when assembling the PPA source package, extend
   debian/control to `Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util`
   (rpm Recommends / AUR optdepends / flatpak modules already committed here).
