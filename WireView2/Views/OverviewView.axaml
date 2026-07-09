@@ -1,49 +1,85 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WireView2.ViewModels"
-             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:controls="using:WireView2.Controls"
+             xmlns:conv="using:WireView2.Converters"
              x:Class="WireView2.Views.OverviewView"
              x:DataType="vm:OverviewViewModel">
+    <UserControl.Resources>
+        <conv:BoolToOkFaultConverter x:Key="OkFault"/>
+        <conv:BoolToOkFaultBrushConverter x:Key="OkFaultBrush"/>
+    </UserControl.Resources>
     <ScrollViewer>
         <StackPanel Margin="16" Spacing="16">
             <TextBlock Text="Overview" FontSize="24" FontWeight="Bold"/>
 
-            <!-- Per-wire bar chart -->
-            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Per-Wire Breakdown" FontWeight="SemiBold" FontSize="16"/>
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <CheckBox Content="Current" IsChecked="{Binding ShowCurrent}"/>
-                        <CheckBox Content="Voltage" IsChecked="{Binding ShowVoltage}"/>
-                        <CheckBox Content="Power" IsChecked="{Binding ShowPower}"/>
+            <!-- Per-wire bar chart + fault table side by side -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <Border Grid.Column="0" Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <TextBlock Grid.Row="0" Text="Per-Wire Breakdown" FontWeight="SemiBold" FontSize="16"/>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,8">
+                            <CheckBox Content="Current" IsChecked="{Binding ShowCurrent}"/>
+                            <CheckBox Content="Voltage" IsChecked="{Binding ShowVoltage}"/>
+                            <CheckBox Content="Power" IsChecked="{Binding ShowPower}"/>
+                        </StackPanel>
+                        <controls:SimpleBarChart Grid.Row="2" MinHeight="220" ShowBarValues="True"
+                                                 Series="{Binding BarSeries}"
+                                                 XAxes="{Binding XAxes}" YAxes="{Binding YAxes}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Fault table -->
+                <Border Grid.Column="1" MinWidth="360" Background="{DynamicResource OverlayPanelBrush}"
+                        CornerRadius="8" Padding="16">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,60,60,80" Margin="0,0,0,6">
+                            <TextBlock Grid.Column="0" Text="Fault" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Grid.Column="1" Text="Status" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="Log" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Faults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:OverviewViewModel+FaultItem">
+                                    <Grid ColumnDefinitions="*,60,60,80" Margin="0,3">
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding StatusFault, Converter={StaticResource OkFault}}"
+                                                   Foreground="{Binding StatusFault, Converter={StaticResource OkFaultBrush}}"/>
+                                        <TextBlock Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding LogFault, Converter={StaticResource OkFault}}"
+                                                   Foreground="{Binding LogFault, Converter={StaticResource OkFaultBrush}}"/>
+                                        <Button Grid.Column="3" Content="Clear" HorizontalAlignment="Right"
+                                                Padding="14,4" Command="{Binding ClearCommand}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
-                    <lvc:CartesianChart Height="250" Series="{Binding BarSeries}"
-                                       XAxes="{Binding XAxes}" YAxes="{Binding YAxes}"/>
-                </StackPanel>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- Totals gauges -->
-            <Grid ColumnDefinitions="*,*,*" Height="200">
+            <Grid ColumnDefinitions="*,*,*" Height="190">
                 <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
                     <TextBlock Text="Total Power" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                    <lvc:PieChart Height="140" Width="140" Series="{Binding TotalPowerSeries}"
-                                  InitialRotation="-90" MaxAngle="360"/>
-                    <TextBlock Text="{Binding TotalPowerW, StringFormat='{}{0:0.#} W'}"
-                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
+                    <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
+                                               Value="{Binding TotalPowerW}" Max="{Binding PowerMaxW}"
+                                               Unit="W" AccentBrush="MediumPurple"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
                     <TextBlock Text="Total Current" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                    <lvc:PieChart Height="140" Width="140" Series="{Binding TotalCurrentSeries}"
-                                  InitialRotation="-90" MaxAngle="360"/>
-                    <TextBlock Text="{Binding TotalCurrentA, StringFormat='{}{0:0.###} A'}"
-                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
+                    <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
+                                               Value="{Binding TotalCurrentA}" Max="{Binding CurrentMaxA}"
+                                               Unit="A" AccentBrush="DarkTurquoise"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
                     <TextBlock Text="Avg Voltage" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                    <lvc:PieChart Height="140" Width="140" Series="{Binding AvgVoltageSeries}"
-                                  InitialRotation="-90" MaxAngle="360"/>
-                    <TextBlock Text="{Binding AvgVoltageV, StringFormat='{}{0:0.###} V'}"
-                               HorizontalAlignment="Center" FontWeight="Bold" FontSize="16"/>
+                    <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
+                                               Value="{Binding AvgVoltageV}" Max="{Binding VoltageMaxV}"
+                                               Unit="V" AccentBrush="Gold"/>
                 </StackPanel>
             </Grid>
 
@@ -51,47 +87,43 @@
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Temperatures" FontWeight="SemiBold" FontSize="16"/>
-                    <Grid ColumnDefinitions="*,*,*,*" Height="180">
-                        <!-- Onboard In -->
+                    <Grid ColumnDefinitions="*,*,*,*" Height="160">
                         <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
                             <TextBlock Text="Onboard In" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempInSeries}"
-                                          InitialRotation="-90" MaxAngle="360"
-                                          IsVisible="{Binding TempInAvailable}"/>
-                            <TextBlock Text="{Binding TempInText}"
-                                       HorizontalAlignment="Center" FontWeight="Bold"/>
+                            <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
+                                                       Value="{Binding TempInGauge}" Max="{Binding TempMaxC}"
+                                                       Unit="°C" AccentBrush="DodgerBlue"
+                                                       IsVisible="{Binding TempInAvailable}"/>
+                            <TextBlock Text="{Binding TempInText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <!-- Onboard Out -->
                         <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
                             <TextBlock Text="Onboard Out" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempOutSeries}"
-                                          InitialRotation="-90" MaxAngle="360"
-                                          IsVisible="{Binding TempOutAvailable}"/>
-                            <TextBlock Text="{Binding TempOutText}"
-                                       HorizontalAlignment="Center" FontWeight="Bold"/>
+                            <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
+                                                       Value="{Binding TempOutGauge}" Max="{Binding TempMaxC}"
+                                                       Unit="°C" AccentBrush="MediumSeaGreen"
+                                                       IsVisible="{Binding TempOutAvailable}"/>
+                            <TextBlock Text="{Binding TempOutText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <!-- External 1 -->
                         <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
                             <TextBlock Text="External 1" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempExt1Series}"
-                                          InitialRotation="-90" MaxAngle="360"
-                                          IsVisible="{Binding TempExt1Available}"/>
-                            <TextBlock Text="{Binding TempExt1Text}"
-                                       HorizontalAlignment="Center" FontWeight="Bold"
-                                       />
+                            <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
+                                                       Value="{Binding TempExt1Gauge}" Max="{Binding TempMaxC}"
+                                                       Unit="°C" AccentBrush="Orange"
+                                                       IsVisible="{Binding TempExt1Available}"/>
+                            <TextBlock Text="{Binding TempExt1Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <!-- External 2 -->
                         <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="2">
                             <TextBlock Text="External 2" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
-                            <lvc:PieChart Height="120" Width="120" Series="{Binding TempExt2Series}"
-                                          InitialRotation="-90" MaxAngle="360"
-                                          IsVisible="{Binding TempExt2Available}"/>
-                            <TextBlock Text="{Binding TempExt2Text}"
-                                       HorizontalAlignment="Center" FontWeight="Bold"/>
+                            <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
+                                                       Value="{Binding TempExt2Gauge}" Max="{Binding TempMaxC}"
+                                                       Unit="°C" AccentBrush="IndianRed"
+                                                       IsVisible="{Binding TempExt2Available}"/>
+                            <TextBlock Text="{Binding TempExt2Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
             </Border>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

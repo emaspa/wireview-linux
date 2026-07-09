@@ -157,10 +157,11 @@
                                  Fill="{Binding ConnectionStatus.IsConnected, Converter={StaticResource BoolToBrush}}"/>
                         <TextBlock Text="{Binding ConnectionStatus.StatusText}" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="16" Margin="24,0,0,0">
-                        <TextBlock Text="{Binding Overview.TotalCurrentA, StringFormat='Total I: {0:0.###} A'}"/>
-                        <TextBlock Text="{Binding Overview.TotalPowerW, StringFormat='Total P: {0:0.###} W'}"/>
-                        <TextBlock Text="{Binding Overview.AvgVoltageV, StringFormat='Avg V: {0:0.###} V'}"/>
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="16" Margin="24,0,0,0"
+                                VerticalAlignment="Center">
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Overview.TotalCurrentA, StringFormat='Total I: {0:0.###} A'}"/>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Overview.TotalPowerW, StringFormat='Total P: {0:0.###} W'}"/>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Overview.AvgVoltageV, StringFormat='Avg V: {0:0.###} V'}"/>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6"
                                 VerticalAlignment="Center" Margin="16,0,0,0">
@@ -169,7 +170,7 @@
                                   ItemsSource="{Binding Devices}"
                                   SelectedItem="{Binding SelectedDevice}"/>
                     </StackPanel>
-                    <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right"
+                    <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center"
                                Text="{Binding Overview.PowerCableRatingText, StringFormat='Cable rating: {0}'}"/>
                 </DockPanel>
             </Border>

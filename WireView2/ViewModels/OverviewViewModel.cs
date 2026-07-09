@@ -1,11 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
-using LiveChartsCore.Measure;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
 using SkiaSharp;
@@ -31,67 +29,38 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     private double _onboardTempOutC;
     private double _externalTemp1C;
     private double _externalTemp2C;
-    private const double TempMaxC = 100.0;
 
-    // --------------- Bar chart series ---------------
+    // --------------- Per-wire bar chart (rendered by SimpleBarChart) ---------------
 
-    // Explicit fills so the bars stay distinct regardless of the chart theme's
-    // auto-palette (voltage = green, current = blue, power = orange).
-    private readonly ColumnSeries<double> _seriesCurrent = new()
-    {
-        Name = "Current (A)",
-        ScalesYAt = 1,
-        Fill = new SolidColorPaint(new SKColor(33, 150, 243))
-    };
-    private readonly ColumnSeries<double> _seriesVoltage = new()
-    {
-        Name = "Voltage (V)",
-        ScalesYAt = 0,
-        Fill = new SolidColorPaint(new SKColor(76, 175, 80))
-    };
-    private readonly ColumnSeries<double> _seriesPower = new()
-    {
-        Name = "Power (W)",
-        ScalesYAt = 2,
-        Fill = new SolidColorPaint(new SKColor(255, 152, 0))
-    };
+    // In-place element updates raise CollectionChanged(Replace), which is what
+    // SimpleBarChart listens for; reassigning Values every poll would leak
+    // subscriptions instead.
+    private readonly ObservableCollection<double> _voltageValues = new();
+    private readonly ObservableCollection<double> _currentValues = new();
+    private readonly ObservableCollection<double> _powerValues = new();
 
-    private double[] _lastVoltages = Array.Empty<double>();
-    private double[] _lastCurrents = Array.Empty<double>();
-    private double[] _lastPowers   = Array.Empty<double>();
+    private readonly ColumnSeries<double> _seriesVoltage;
+    private readonly ColumnSeries<double> _seriesCurrent;
+    private readonly ColumnSeries<double> _seriesPower;
 
     private bool _showCurrent = true;
     private bool _showVoltage;
     private bool _showPower;
 
-    // --------------- Pie/gauge series ---------------
-
-    private readonly PieSeries<double> _tempInValue  = MakeGaugeSlice("Onboard In",  new SKColor(33, 150, 243), 25);
-    private readonly PieSeries<double> _tempOutValue = MakeGaugeSlice("Onboard Out", new SKColor(76, 175, 80), 25);
-    private readonly PieSeries<double> _tempE1Value  = MakeGaugeSlice("External 1",  new SKColor(255, 152, 0), 25);
-    private readonly PieSeries<double> _tempE2Value  = MakeGaugeSlice("External 2",  new SKColor(244, 67, 54), 25);
-
-    private readonly PieSeries<double> _tempInRest  = MakeRemainderSlice(25);
-    private readonly PieSeries<double> _tempOutRest = MakeRemainderSlice(25);
-    private readonly PieSeries<double> _tempE1Rest  = MakeRemainderSlice(25);
-    private readonly PieSeries<double> _tempE2Rest  = MakeRemainderSlice(25);
-
-    private readonly PieSeries<double> _totalPowerValue   = MakeGaugeSlice("Total Power",   new SKColor(103, 58, 183), 35);
-    private readonly PieSeries<double> _totalCurrentValue  = MakeGaugeSlice("Total Current",  new SKColor(0, 188, 212), 35);
-    private readonly PieSeries<double> _avgVoltageValue    = MakeGaugeSlice("Avg Voltage",    new SKColor(255, 193, 7), 35);
-
-    private readonly PieSeries<double> _totalPowerRest   = MakeRemainderSlice(35);
-    private readonly PieSeries<double> _totalCurrentRest  = MakeRemainderSlice(35);
-    private readonly PieSeries<double> _avgVoltageRest    = MakeRemainderSlice(35);
+    private DeviceData? _pendingDeviceData;
+    private readonly object _pendingGate = new();
+    private bool _isViewVisible = true;
+    private bool _disposed;
 
     // --------------- Constants ---------------
 
-    private const double PowerMaxW        = 600.0;
-    private const double CurrentMaxA      = 50.0;
-    private const double VoltageMaxV      = 13.0;
+    public double PowerMaxW => 600.0;
+    public double CurrentMaxA => 50.0;
+    public double VoltageMaxV => 13.0;
+    public double TempMaxC => 100.0;
     private const double PerWireVoltageMaxV = 15.0;
     private const double PerWireCurrentMaxA = 10.0;
-    private const double PerWirePowerMaxW   = 150.0;
+    private const double PerWirePowerMaxW = 150.0;
 
     private int _wiresCount = 6;
 
@@ -102,19 +71,19 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     public double TotalCurrentA
     {
         get => _totalCurrentA;
-        private set { if (Set(ref _totalCurrentA, value)) UpdateTotalsSeries(); }
+        private set => Set(ref _totalCurrentA, value);
     }
 
     public double TotalPowerW
     {
         get => _totalPowerW;
-        private set { if (Set(ref _totalPowerW, value)) UpdateTotalsSeries(); }
+        private set => Set(ref _totalPowerW, value);
     }
 
     public double AvgVoltageV
     {
         get => _avgVoltageV;
-        private set { if (Set(ref _avgVoltageV, value)) UpdateTotalsSeries(); }
+        private set => Set(ref _avgVoltageV, value);
     }
 
     public string PowerCableRatingText
@@ -126,25 +95,25 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     public double OnboardTempInC
     {
         get => _onboardTempInC;
-        private set { if (Set(ref _onboardTempInC, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempInText)); OnPropertyChanged(nameof(TempInAvailable)); } }
+        private set { if (Set(ref _onboardTempInC, value)) { OnPropertyChanged(nameof(TempInText)); OnPropertyChanged(nameof(TempInAvailable)); } }
     }
 
     public double OnboardTempOutC
     {
         get => _onboardTempOutC;
-        private set { if (Set(ref _onboardTempOutC, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempOutText)); OnPropertyChanged(nameof(TempOutAvailable)); } }
+        private set { if (Set(ref _onboardTempOutC, value)) { OnPropertyChanged(nameof(TempOutText)); OnPropertyChanged(nameof(TempOutAvailable)); } }
     }
 
     public double ExternalTemp1C
     {
         get => _externalTemp1C;
-        private set { if (Set(ref _externalTemp1C, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempExt1Text)); OnPropertyChanged(nameof(TempExt1Available)); } }
+        private set { if (Set(ref _externalTemp1C, value)) { OnPropertyChanged(nameof(TempExt1Text)); OnPropertyChanged(nameof(TempExt1Available)); } }
     }
 
     public double ExternalTemp2C
     {
         get => _externalTemp2C;
-        private set { if (Set(ref _externalTemp2C, value)) { UpdateTempSeries(); OnPropertyChanged(nameof(TempExt2Text)); OnPropertyChanged(nameof(TempExt2Available)); } }
+        private set { if (Set(ref _externalTemp2C, value)) { OnPropertyChanged(nameof(TempExt2Text)); OnPropertyChanged(nameof(TempExt2Available)); } }
     }
 
     // Temperature display helpers — sensors read ~-3276.8°C when disconnected
@@ -160,7 +129,47 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     public string TempExt1Text => IsTempValid(ExternalTemp1C) ? $"{ExternalTemp1C:0.#} °C" : "N/A";
     public string TempExt2Text => IsTempValid(ExternalTemp2C) ? $"{ExternalTemp2C:0.#} °C" : "N/A";
 
-    public ObservableCollection<ISeries> BarSeries { get; } = new();
+    // Gauge-clamped values (SimpleGaugeChart clamps too, but invalid sensor
+    // readings like -3276.8 should render as zero, not full arc)
+    public double TempInGauge => IsTempValid(OnboardTempInC) ? Math.Clamp(OnboardTempInC, 0, TempMaxC) : 0;
+    public double TempOutGauge => IsTempValid(OnboardTempOutC) ? Math.Clamp(OnboardTempOutC, 0, TempMaxC) : 0;
+    public double TempExt1Gauge => IsTempValid(ExternalTemp1C) ? Math.Clamp(ExternalTemp1C, 0, TempMaxC) : 0;
+    public double TempExt2Gauge => IsTempValid(ExternalTemp2C) ? Math.Clamp(ExternalTemp2C, 0, TempMaxC) : 0;
+
+    /// <summary>One row of the fault table: live status + latched log bit for a
+    /// fault, with its Clear command.</summary>
+    public sealed class FaultItem : ViewModelBase
+    {
+        private bool _statusFault;
+        private bool _logFault;
+
+        public string Label { get; }
+        public WireViewPro2Device.FAULT Fault { get; }
+        public IRelayCommand ClearCommand { get; }
+
+        public bool StatusFault
+        {
+            get => _statusFault;
+            set => Set(ref _statusFault, value);
+        }
+
+        public bool LogFault
+        {
+            get => _logFault;
+            set => Set(ref _logFault, value);
+        }
+
+        public FaultItem(string label, WireViewPro2Device.FAULT fault, Action<WireViewPro2Device.FAULT> clear)
+        {
+            Label = label;
+            Fault = fault;
+            ClearCommand = new RelayCommand(() => clear(fault));
+        }
+    }
+
+    public ObservableCollection<FaultItem> Faults { get; } = new();
+
+    public ISeries[] BarSeries { get; }
     public Axis[] XAxes { get; }
     public Axis[] YAxes { get; }
 
@@ -172,8 +181,6 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             if (Set(ref _showCurrent, value))
             {
                 _seriesCurrent.IsVisible = value;
-                UpdateAxisVisibility();
-                RefreshXLabels();
             }
         }
     }
@@ -186,8 +193,6 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             if (Set(ref _showVoltage, value))
             {
                 _seriesVoltage.IsVisible = value;
-                UpdateAxisVisibility();
-                RefreshXLabels();
             }
         }
     }
@@ -200,20 +205,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             if (Set(ref _showPower, value))
             {
                 _seriesPower.IsVisible = value;
-                UpdateAxisVisibility();
-                RefreshXLabels();
             }
         }
     }
-
-    public ObservableCollection<ISeries> TempInSeries   { get; } = new();
-    public ObservableCollection<ISeries> TempOutSeries  { get; } = new();
-    public ObservableCollection<ISeries> TempExt1Series { get; } = new();
-    public ObservableCollection<ISeries> TempExt2Series { get; } = new();
-
-    public ObservableCollection<ISeries> TotalPowerSeries   { get; } = new();
-    public ObservableCollection<ISeries> TotalCurrentSeries  { get; } = new();
-    public ObservableCollection<ISeries> AvgVoltageSeries    { get; } = new();
 
     // --------------- Constructor ---------------
 
@@ -223,85 +217,69 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         _connector = connector ?? DeviceAutoConnector.Shared;
         _ownsConnector = connector != null && connector != DeviceAutoConnector.Shared;
 
+        for (int i = 0; i < _wiresCount; i++)
+        {
+            _voltageValues.Add(0.0);
+            _currentValues.Add(0.0);
+            _powerValues.Add(0.0);
+        }
+
+        // Explicit fills keep the toggled series distinct: SimpleBarChart uses a
+        // series' SolidColorPaint fill as its gradient base and for the per-bar
+        // value labels (voltage = orange, current = blue, power = red).
+        _seriesVoltage = new ColumnSeries<double>
+        {
+            Name = "Voltage (V)",
+            ScalesYAt = 0,
+            Values = _voltageValues,
+            Fill = new SolidColorPaint(new SKColor(255, 152, 0)),
+            IsVisible = _showVoltage,
+        };
+        _seriesCurrent = new ColumnSeries<double>
+        {
+            Name = "Current (A)",
+            ScalesYAt = 1,
+            Values = _currentValues,
+            Fill = new SolidColorPaint(new SKColor(33, 150, 243)),
+            IsVisible = _showCurrent,
+        };
+        _seriesPower = new ColumnSeries<double>
+        {
+            Name = "Power (W)",
+            ScalesYAt = 2,
+            Values = _powerValues,
+            Fill = new SolidColorPaint(new SKColor(244, 67, 54)),
+            IsVisible = _showPower,
+        };
+        BarSeries = new ISeries[] { _seriesVoltage, _seriesCurrent, _seriesPower };
+
         XAxes = new Axis[]
         {
-            new Axis
-            {
-                Labels = Enumerable.Repeat(string.Empty, _wiresCount).ToArray(),
-                TicksPaint = null,
-                SeparatorsPaint = null,
-                LabelsPaint = new SolidColorPaint(SKColors.White) { SKTypeface = SKTypeface.FromFamilyName(null, SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright) },
-                TextSize = 14
-            }
+            new Axis { Labels = Enumerable.Repeat(string.Empty, _wiresCount).ToArray() }
         };
-
         YAxes = new Axis[]
         {
-            new Axis
-            {
-                Name = "V",
-                Labeler = v => $"{v:0.##} V",
-                Position = AxisPosition.Start,
-                MinLimit = 0.0,
-                MaxLimit = PerWireVoltageMaxV,
-                SeparatorsPaint = null,
-                NamePaint = null
-            },
-            new Axis
-            {
-                Name = "A",
-                Labeler = v => $"{v:0.##} A",
-                Position = AxisPosition.End,
-                MinLimit = 0.0,
-                MaxLimit = PerWireCurrentMaxA,
-                SeparatorsPaint = null,
-                NamePaint = null
-            },
-            new Axis
-            {
-                Name = "W",
-                Labeler = v => $"{v:0.##} W",
-                Position = AxisPosition.End,
-                MinLimit = 0.0,
-                MaxLimit = PerWirePowerMaxW,
-                SeparatorsPaint = null,
-                NamePaint = null
-            }
+            new Axis { MinLimit = 0.0, MaxLimit = PerWireVoltageMaxV },
+            new Axis { MinLimit = 0.0, MaxLimit = PerWireCurrentMaxA },
+            new Axis { MinLimit = 0.0, MaxLimit = PerWirePowerMaxW },
         };
 
-        _seriesCurrent.IsVisible = ShowCurrent;
-        _seriesVoltage.IsVisible = ShowVoltage;
-        _seriesPower.IsVisible   = ShowPower;
-
-        BarSeries.Add(_seriesVoltage);
-        BarSeries.Add(_seriesCurrent);
-        BarSeries.Add(_seriesPower);
-        UpdateAxisVisibility();
-
-        TempInSeries.Add(_tempInValue);
-        TempInSeries.Add(_tempInRest);
-        TempOutSeries.Add(_tempOutValue);
-        TempOutSeries.Add(_tempOutRest);
-        TempExt1Series.Add(_tempE1Value);
-        TempExt1Series.Add(_tempE1Rest);
-        TempExt2Series.Add(_tempE2Value);
-        TempExt2Series.Add(_tempE2Rest);
-        UpdateTempSeries();
-
-        TotalPowerSeries.Add(_totalPowerValue);
-        TotalPowerSeries.Add(_totalPowerRest);
-        TotalCurrentSeries.Add(_totalCurrentValue);
-        TotalCurrentSeries.Add(_totalCurrentRest);
-        AvgVoltageSeries.Add(_avgVoltageValue);
-        AvgVoltageSeries.Add(_avgVoltageRest);
-        UpdateTotalsSeries();
+        Faults.Add(new FaultItem("Chip Over-Temp", WireViewPro2Device.FAULT.FAULT_OTP_TCHIP, ClearFault));
+        Faults.Add(new FaultItem("Sensor Over-Temp", WireViewPro2Device.FAULT.FAULT_OTP_TS, ClearFault));
+        Faults.Add(new FaultItem("Over-Current", WireViewPro2Device.FAULT.FAULT_OCP, ClearFault));
+        Faults.Add(new FaultItem("Wire Over-Current", WireViewPro2Device.FAULT.FAULT_WIRE_OCP, ClearFault));
+        Faults.Add(new FaultItem("Over-Power", WireViewPro2Device.FAULT.FAULT_OPP, ClearFault));
+        Faults.Add(new FaultItem("Current Imbalance", WireViewPro2Device.FAULT.FAULT_CURRENT_IMBALANCE, ClearFault));
 
         _connector.DataUpdated += (_, data) => OnDeviceData(data);
         _connector.Start();
+        App.MainWindowVisibilityChanged += OnMainWindowVisibilityChanged;
     }
 
     public void Dispose()
     {
+        _disposed = true;
+        App.MainWindowVisibilityChanged -= OnMainWindowVisibilityChanged;
         if (_ownsConnector)
         {
             _connector.DataUpdated -= delegate { };
@@ -309,139 +287,53 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // --------------- Pie helpers ---------------
-
-    private static PieSeries<double> MakeGaugeSlice(string name, SKColor color, double innerRadius)
+    private void OnMainWindowVisibilityChanged(object? sender, bool isVisible)
     {
-        return new PieSeries<double>
-        {
-            Name = name,
-            Stroke = null,
-            Fill = new SolidColorPaint(color),
-            DataLabelsPaint = null,
-            InnerRadius = innerRadius,
-            IsHoverable = false
-        };
-    }
+        if (_disposed) return;
+        _isViewVisible = isVisible;
+        if (!isVisible) return;
 
-    private static PieSeries<double> MakeRemainderSlice(double innerRadius)
-    {
-        return new PieSeries<double>
+        // Apply the newest sample that arrived while hidden.
+        DeviceData? pending;
+        lock (_pendingGate)
         {
-            Name = "",
-            Stroke = null,
-            Fill = new SolidColorPaint(new SKColor(220, 220, 220)),
-            DataLabelsPaint = null,
-            InnerRadius = innerRadius,
-            IsHoverable = false
-        };
-    }
-
-    // --------------- Axis / label helpers ---------------
-
-    private void UpdateAxisVisibility()
-    {
-        if (YAxes.Length >= 3)
-        {
-            YAxes[0].IsVisible = ShowVoltage;
-            YAxes[1].IsVisible = ShowCurrent;
-            YAxes[2].IsVisible = ShowPower;
+            pending = _pendingDeviceData;
+            _pendingDeviceData = null;
         }
-    }
-
-    private void RefreshXLabels()
-    {
-        if (XAxes.Length == 0) return;
-
-        double[] active = ShowCurrent ? _lastCurrents
-                        : ShowVoltage ? _lastVoltages
-                        : ShowPower   ? _lastPowers
-                        : Array.Empty<double>();
-
-        int count = Math.Max(_wiresCount, active.Length);
-        if (count <= 0)
-        {
-            XAxes[0].Labels = Array.Empty<string>();
-            return;
-        }
-
-        var labels = new string[count];
-        for (int i = 0; i < count; i++)
-        {
-            double val = i < active.Length ? active[i] : double.NaN;
-            labels[i] = double.IsFinite(val) ? $"{val:0.##}" : string.Empty;
-        }
-        XAxes[0].Labels = labels;
-    }
-
-    // --------------- Gauge updates ---------------
-
-    private void UpdateTempSeries()
-    {
-        static double SafeClamp(double v) => IsTempValid(v) ? Math.Clamp(v, 0.0, TempMaxC) : 0.0;
-
-        double tIn  = SafeClamp(OnboardTempInC);
-        double tOut = SafeClamp(OnboardTempOutC);
-        double tE1  = SafeClamp(ExternalTemp1C);
-        double tE2  = SafeClamp(ExternalTemp2C);
-
-        _tempInValue.Values  = new[] { tIn };
-        _tempOutValue.Values = new[] { tOut };
-        _tempE1Value.Values  = new[] { tE1 };
-        _tempE2Value.Values  = new[] { tE2 };
-
-        _tempInRest.Values  = new[] { Math.Max(0.0, TempMaxC - tIn) };
-        _tempOutRest.Values = new[] { Math.Max(0.0, TempMaxC - tOut) };
-        _tempE1Rest.Values  = new[] { Math.Max(0.0, TempMaxC - tE1) };
-        _tempE2Rest.Values  = new[] { Math.Max(0.0, TempMaxC - tE2) };
-    }
-
-    private void UpdateTotalsSeries()
-    {
-        double p = Math.Clamp(TotalPowerW, 0.0, PowerMaxW);
-        double i = Math.Clamp(TotalCurrentA, 0.0, CurrentMaxA);
-        double v = Math.Clamp(AvgVoltageV, 0.0, VoltageMaxV);
-
-        _totalPowerValue.Values   = new[] { p };
-        _totalPowerRest.Values    = new[] { Math.Max(0.0, PowerMaxW - p) };
-        _totalCurrentValue.Values = new[] { i };
-        _totalCurrentRest.Values  = new[] { Math.Max(0.0, CurrentMaxA - i) };
-        _avgVoltageValue.Values   = new[] { v };
-        _avgVoltageRest.Values    = new[] { Math.Max(0.0, VoltageMaxV - v) };
+        if (pending != null)
+            ApplyDeviceData(pending);
     }
 
     // --------------- Device data handler ---------------
 
     private void OnDeviceData(DeviceData d)
     {
+        // Don't burn CPU updating gauges/bars nobody can see; stash the latest
+        // sample and apply it when the window becomes visible again.
+        if (!_isViewVisible)
+        {
+            lock (_pendingGate) { _pendingDeviceData = d; }
+            return;
+        }
+        ApplyDeviceData(d);
+    }
+
+    private void ApplyDeviceData(DeviceData d)
+    {
         double[] pinVoltage = d.PinVoltage;
         double[] pinCurrent = d.PinCurrent;
-        bool[] overflows = new bool[YAxes.Length];
-        double[] powers = new double[pinVoltage.Length];
-
+        var powers = new double[pinVoltage.Length];
         for (int i = 0; i < powers.Length; i++)
-        {
-            double vv = pinVoltage[i];
-            double ii = pinCurrent[i];
-            powers[i] = vv * ii;
+            powers[i] = pinVoltage[i] * pinCurrent[i];
 
-            if (vv > PerWireVoltageMaxV) { YAxes[0].MaxLimit = null; overflows[0] = true; }
-            if (ii > PerWireCurrentMaxA) { YAxes[1].MaxLimit = null; overflows[1] = true; }
-            if (powers[i] > PerWirePowerMaxW) { YAxes[2].MaxLimit = null; overflows[2] = true; }
-        }
+        // Fixed per-wire ceilings unless a value overflows, then autoscale.
+        YAxes[0].MaxLimit = pinVoltage.Any(v => v > PerWireVoltageMaxV) ? null : PerWireVoltageMaxV;
+        YAxes[1].MaxLimit = pinCurrent.Any(v => v > PerWireCurrentMaxA) ? null : PerWireCurrentMaxA;
+        YAxes[2].MaxLimit = powers.Any(v => v > PerWirePowerMaxW) ? null : PerWirePowerMaxW;
 
-        if (!overflows[0] && !YAxes[0].MaxLimit.HasValue) YAxes[0].MaxLimit = PerWireVoltageMaxV;
-        if (!overflows[1] && !YAxes[1].MaxLimit.HasValue) YAxes[1].MaxLimit = PerWireCurrentMaxA;
-        if (!overflows[2] && !YAxes[2].MaxLimit.HasValue) YAxes[2].MaxLimit = PerWirePowerMaxW;
-
-        _lastVoltages = pinVoltage;
-        _lastCurrents = pinCurrent;
-        _lastPowers   = powers;
-
-        _seriesVoltage.Values = pinVoltage;
-        _seriesCurrent.Values = pinCurrent;
-        _seriesPower.Values   = powers;
-        RefreshXLabels();
+        CopyInto(_voltageValues, pinVoltage);
+        CopyInto(_currentValues, pinCurrent);
+        CopyInto(_powerValues, powers);
 
         TotalCurrentA = d.SumCurrentA;
         TotalPowerW   = d.SumPowerW;
@@ -451,8 +343,30 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         OnboardTempOutC = d.OnboardTempOutC;
         ExternalTemp1C  = d.ExternalTemp1C;
         ExternalTemp2C  = d.ExternalTemp2C;
+        OnPropertyChanged(nameof(TempInGauge));
+        OnPropertyChanged(nameof(TempOutGauge));
+        OnPropertyChanged(nameof(TempExt1Gauge));
+        OnPropertyChanged(nameof(TempExt2Gauge));
 
         PowerCableRatingText = TryResolveCableRatingText(d);
+
+        foreach (var fault in Faults)
+        {
+            int bit = 1 << (int)fault.Fault;
+            fault.StatusFault = (d.FaultStatus & bit) != 0;
+            fault.LogFault = (d.FaultLog & bit) != 0;
+        }
+    }
+
+    private static void CopyInto(ObservableCollection<double> target, double[] source)
+    {
+        while (target.Count < source.Length)
+            target.Add(0.0);
+        for (int i = 0; i < source.Length && i < target.Count; i++)
+        {
+            if (Math.Abs(target[i] - source[i]) > 1e-12)
+                target[i] = source[i];
+        }
     }
 
     // --------------- Cable rating resolution ---------------

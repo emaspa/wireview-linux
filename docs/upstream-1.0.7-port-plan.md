@@ -16,8 +16,16 @@ Status (updated 2026-07-09):
   self-extract), dfu-util declared in rpm/AUR, bundled as flatpak modules
   (libusb 1.0.27 + dfu-util 0.11). Untested against real hardware — needs a
   device-attached smoke test before release.
-- REMAINING: §3 custom charts, §4 power-cycle log separation, §5 theme editor suite,
-  §6 dependency migration.
+- DONE §3 custom charts (Simple{Line,Gauge,Bar}Chart + SimpleChartViewModel under
+  WireView2/Controls; Monitoring/Logging/Overview migrated off LiveCharts rendering;
+  Linux extras kept: series toggles, CSV live export, per-bar value labels, restored
+  V/A/W bar toggles, fault table on Overview). Verified under real 293 W GPU load.
+- DONE §4 power-cycle log separation (parser boundaries + voltage gate, cycle picker,
+  Logging chart + progress + file pickers). Log read under the hwmon daemon works via
+  a serial handover: wireviewd gained WCMD_SUSPEND/RESUME_SERIAL (wireview-hwmon repo)
+  and the app a DirectSerialSession helper with heartbeat re-arm — the same mechanism
+  the theme editor's SPI writes will use.
+- REMAINING: §5 theme editor suite, §6 dependency migration.
 - RELEASE CHECKLIST (v1.2.0.0): when assembling the PPA source package, extend
   debian/control to `Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util`
   (rpm Recommends / AUR optdepends / flatpak modules already committed here).

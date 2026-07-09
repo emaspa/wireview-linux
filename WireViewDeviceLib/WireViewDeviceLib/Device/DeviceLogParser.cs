@@ -112,11 +112,32 @@ public static class DeviceLogParser
 
                 switch (type)
                 {
-                    case ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
+                    // POWER_ON entries are power-cycle boundary markers: their sensor
+                    // payload is not a valid sample (so no sanity checks apply), but
+                    // the consumer needs them to split the log into cycles.
                     case ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
                     {
                         var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
+                        results.Add(entry);
+                        firstEntryFound = true;
+                        index++;
+                        break;
+                    }
+                    case ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
+                    {
+                        var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
                         if (entry.HpwrSense > 3)
+                        {
+                            index++;
+                            break;
+                        }
+                        // Upstream 1.0.7 plausibility gate: the six voltage channels
+                        // (100 mV units) must sum to 6..90 V, else the row is noise
+                        // from a partially written / corrupted flash page.
+                        int voltageSum = 0;
+                        for (int v = 0; v < SENSOR_POWER_NUM; v++)
+                            voltageSum += entry.Voltage[v];
+                        if (voltageSum <= 60 || voltageSum >= 900)
                         {
                             index++;
                             break;

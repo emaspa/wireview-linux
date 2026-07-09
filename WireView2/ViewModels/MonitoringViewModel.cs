@@ -8,12 +8,6 @@ using System.Text;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
-using LiveChartsCore;
-using LiveChartsCore.Defaults;
-using LiveChartsCore.Measure;
-using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
-using SkiaSharp;
 using WireView2.Device;
 using WireView2.Services;
 
@@ -54,41 +48,13 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         public AxisConfig(string unit) => Unit = unit;
     }
 
+    /// <summary>One selectable telemetry channel. Rendering moved to
+    /// <see cref="Controls.SimpleLineChart"/> — this only carries selection,
+    /// color, and how to extract the value from a <see cref="DeviceData"/>.</summary>
     public sealed class TelemetryItem : ViewModelBase
     {
-        private readonly struct XY
-        {
-            public double X { get; }
-            public double Y { get; }
-            public XY(double x, double y) { X = x; Y = y; }
-        }
-
-        private sealed class RollingMax
-        {
-            private readonly LinkedList<XY> _dq = new();
-
-            public double Max => _dq.Count > 0 ? _dq.First!.Value.Y : 0.0;
-
-            public void Add(double x, double y)
-            {
-                while (_dq.Count > 0 && _dq.Last!.Value.Y <= y)
-                    _dq.RemoveLast();
-                _dq.AddLast(new XY(x, y));
-            }
-
-            public void Trim(double cutoffX)
-            {
-                while (_dq.Count > 0 && _dq.First!.Value.X < cutoffX)
-                    _dq.RemoveFirst();
-            }
-        }
-
         private bool _isEnabled;
         private Color _color;
-        private readonly ObservableCollection<ObservablePoint> _points = new();
-        private readonly Queue<ObservablePoint> _queue = new();
-        private readonly RollingMax _rollingMax = new();
-        private int _batchCounter;
 
         public string Key { get; }
         public string Label { get; }
@@ -109,15 +75,13 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             {
                 if (Set(ref _color, value))
                 {
-                    ApplyColorToSeries();
+                    OnPropertyChanged(nameof(ColorBrush));
                     ColorChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
         }
 
-        public ISeries Series { get; }
-        public ObservableCollection<ObservablePoint> Points => _points;
-        public double VisibleMaxY => _rollingMax.Max;
+        public IBrush ColorBrush => new SolidColorBrush(Color);
 
         public event EventHandler<bool>? EnabledChanged;
         public event EventHandler? ColorChanged;
@@ -131,49 +95,6 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             Selector = selector;
             YAxisIndex = yAxisIndex;
             _color = color;
-
-            Series = new LineSeries<ObservablePoint>
-            {
-                Name = label,
-                Values = _points,
-                GeometryFill = null,
-                GeometryStroke = null,
-                Fill = null,
-                LineSmoothness = 0.0,
-                ScalesYAt = yAxisIndex
-            };
-            ApplyColorToSeries();
-        }
-
-        public void ApplyColorToSeries()
-        {
-            var skColor = new SKColor(Color.R, Color.G, Color.B, Color.A);
-            if (Series is LineSeries<ObservablePoint> line)
-            {
-                line.Stroke = new SolidColorPaint(skColor) { StrokeThickness = 2f };
-            }
-        }
-
-        public void AddPoint(double xSeconds, double value, double cutoffSeconds)
-        {
-            var pt = new ObservablePoint(xSeconds, value);
-            _queue.Enqueue(pt);
-            _rollingMax.Add(xSeconds, value);
-
-            while (_queue.Count > 0 && _queue.Peek().X < cutoffSeconds)
-                _queue.Dequeue();
-            _rollingMax.Trim(cutoffSeconds);
-
-            _batchCounter++;
-            if (_batchCounter < 5)
-            {
-                _points.Add(pt);
-                return;
-            }
-            _batchCounter = 0;
-            _points.Clear();
-            foreach (var p in _queue)
-                _points.Add(p);
         }
     }
 
@@ -183,6 +104,11 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     private readonly bool _ownsConnector;
     private readonly object _gate = new();
     private bool _isApplyingSettings;
+
+    /// <summary>Per-channel sample buffers (window-trimmed) — the source of truth
+    /// the chart series, Y autoscale, and CSV export are all built from.</summary>
+    private readonly Dictionary<string, List<SimpleChartViewModel.DataPoint>> _buffersByKey =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private StreamWriter? _exportWriter;
     private bool _exportHeaderWritten;
@@ -204,11 +130,14 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         private set { if (Set(ref _isExportingCsv, value)) OnPropertyChanged(nameof(ExportCsvButtonText)); }
     }
 
-    public string ExportCsvButtonText => IsExportingCsv ? "Stop Exporting" : "Export CSV\u2026";
+    public string ExportCsvButtonText => IsExportingCsv ? "Stop Exporting" : "Export CSV…";
 
-    public ObservableCollection<ISeries> Series { get; } = new();
-    public Axis[] XAxes { get; }
-    public Axis[] YAxes { get; }
+    public SimpleChartViewModel Chart { get; } = new();
+
+    /// <summary>Enabled channels → color; doubles as the chart's series filter.</summary>
+    public IReadOnlyDictionary<string, Color> SeriesColorMap =>
+        Items.Where(i => i.IsEnabled)
+            .ToDictionary(i => i.Key, i => i.Color, StringComparer.OrdinalIgnoreCase);
 
     public int XWindowSeconds
     {
@@ -240,7 +169,7 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     public AxisConfig YV { get; } = new("V");
     public AxisConfig YA { get; } = new("A");
     public AxisConfig YW { get; } = new("W");
-    public AxisConfig YC { get; } = new("\u00b0C");
+    public AxisConfig YC { get; } = new("°C");
 
     public ObservableCollection<TelemetryItem> Items { get; } = new();
 
@@ -257,47 +186,19 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         _connector = connector ?? DeviceAutoConnector.Shared;
         _ownsConnector = connector != null && connector != DeviceAutoConnector.Shared;
 
-        XAxes = new Axis[]
-        {
-            new Axis
-            {
-                UnitWidth = 1.0,
-                MinStep = 1.0,
-                Labeler = v => (double.IsNaN(v) || double.IsInfinity(v))
-                    ? string.Empty
-                    : TimeZoneInfo.ConvertTimeFromUtc(_t0Utc.AddSeconds(v), TimeZoneInfo.Local)
-                        .ToString("HH:mm:ss")
-            }
-        };
-
         double now = (DateTime.UtcNow - _t0Utc).TotalSeconds;
-        int win = Math.Max(1, XWindowSeconds);
-        XAxes[0].MinLimit = now - win;
-        XAxes[0].MaxLimit = now;
+        Chart.SetXWindow(now - Math.Max(1, XWindowSeconds), now);
 
-        YAxes = new Axis[]
-        {
-            MakeYAxis("V", 0),
-            MakeYAxis("A", 1),
-            MakeYAxis("W", 2),
-            MakeYAxis("\u00b0C", 3)
-        };
-
-        YV.LimitsChanged += delegate { ApplyAxisLimits(0, YV); PersistMonitoringSettings(); };
-        YA.LimitsChanged += delegate { ApplyAxisLimits(1, YA); PersistMonitoringSettings(); };
-        YW.LimitsChanged += delegate { ApplyAxisLimits(2, YW); PersistMonitoringSettings(); };
-        YC.LimitsChanged += delegate { ApplyAxisLimits(3, YC); PersistMonitoringSettings(); };
-
-        ApplyAxisLimits(0, YV);
-        ApplyAxisLimits(1, YA);
-        ApplyAxisLimits(2, YW);
-        ApplyAxisLimits(3, YC);
+        YV.LimitsChanged += delegate { UpdateChartYScale(); PersistMonitoringSettings(); };
+        YA.LimitsChanged += delegate { UpdateChartYScale(); PersistMonitoringSettings(); };
+        YW.LimitsChanged += delegate { UpdateChartYScale(); PersistMonitoringSettings(); };
+        YC.LimitsChanged += delegate { UpdateChartYScale(); PersistMonitoringSettings(); };
 
         BuildItems();
         ApplyMonitoringSettings();
 
         foreach (var item in Items.Where(i => i.IsEnabled))
-            Series.Add(item.Series);
+            Chart.EnsureSeries(item.Key, item.Label);
 
         foreach (var it in Items)
         {
@@ -305,26 +206,21 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             {
                 if (enabled)
                 {
-                    if (!Series.Contains(it.Series))
-                        Series.Add(it.Series);
+                    Chart.EnsureSeries(it.Key, it.Label);
+                    RebuildChartSeriesFromBuffer(it.Key);
                 }
-                else
-                {
-                    Series.Remove(it.Series);
-                }
-                UpdateYAxisVisibility();
-                UpdateAutoAxisScalesFast();
+                OnPropertyChanged(nameof(SeriesColorMap));
+                UpdateChartYScale();
                 PersistMonitoringSettings();
             };
             it.ColorChanged += delegate
             {
-                it.ApplyColorToSeries();
+                OnPropertyChanged(nameof(SeriesColorMap));
                 PersistMonitoringSettings();
             };
         }
 
-        UpdateYAxisVisibility();
-        UpdateAutoAxisScalesFast();
+        UpdateChartYScale();
 
         _connector.ConnectionChanged += (_, connected) =>
         {
@@ -401,12 +297,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         var enabled = Items.Where(i => i.IsEnabled).ToList();
         if (enabled.Count == 0) return;
 
-        double minX = XAxes is { Length: > 0 }
-            ? XAxes[0].MinLimit ?? double.NegativeInfinity
-            : double.NegativeInfinity;
-        double maxX = XAxes is { Length: > 0 }
-            ? XAxes[0].MaxLimit ?? double.PositiveInfinity
-            : double.PositiveInfinity;
+        double minX = Chart.XMin;
+        double maxX = Chart.XMax;
         if (writeOnlyNewPoints) minX = Math.Max(minX, _lastExportX);
 
         TimeZoneInfo local = TimeZoneInfo.Local;
@@ -414,9 +306,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         lock (_gate)
         {
             var allX = enabled
-                .SelectMany(it => it.Points)
-                .Where(p => p?.X != null)
-                .Select(p => p.X!.Value)
+                .SelectMany(it => BufferFor(it.Key))
+                .Select(p => p.X)
                 .Where(x => x >= minX && x <= maxX)
                 .Distinct()
                 .OrderBy(x => x)
@@ -426,11 +317,10 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
             var lookup = enabled.ToDictionary(
                 it => it,
-                it => it.Points
-                    .Where(p => p?.X != null && p?.Y != null)
-                    .Where(p => p.X!.Value >= minX && p.X!.Value <= maxX)
-                    .GroupBy(p => p.X!.Value)
-                    .ToDictionary(g => g.Key, g => g.Last().Y!.Value));
+                it => BufferFor(it.Key)
+                    .Where(p => p.X >= minX && p.X <= maxX)
+                    .GroupBy(p => p.X)
+                    .ToDictionary(g => g.Key, g => g.Last().Y));
 
             if (!_exportHeaderWritten)
             {
@@ -513,12 +403,7 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
                 }
             }
 
-            ApplyAxisLimits(0, YV);
-            ApplyAxisLimits(1, YA);
-            ApplyAxisLimits(2, YW);
-            ApplyAxisLimits(3, YC);
-            UpdateYAxisVisibility();
-            UpdateAutoAxisScales(null);
+            UpdateChartYScale();
         }
         finally
         {
@@ -623,10 +508,10 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             Add($"I{idx + 1}", $"I{idx + 1} (A)", "A", d => d.PinCurrent[idx]);
         }
 
-        Add("Tin",  "Onboard In (\u00b0C)",  "\u00b0C", d => d.OnboardTempInC);
-        Add("Tout", "Onboard Out (\u00b0C)", "\u00b0C", d => d.OnboardTempOutC);
-        Add("T1",   "External 1 (\u00b0C)",  "\u00b0C", d => d.ExternalTemp1C);
-        Add("T2",   "External 2 (\u00b0C)",  "\u00b0C", d => d.ExternalTemp2C);
+        Add("Tin",  "Onboard In (°C)",  "°C", d => d.OnboardTempInC);
+        Add("Tout", "Onboard Out (°C)", "°C", d => d.OnboardTempOutC);
+        Add("T1",   "External 1 (°C)",  "°C", d => d.ExternalTemp1C);
+        Add("T2",   "External 2 (°C)",  "°C", d => d.ExternalTemp2C);
 
         TelemetryItem Add(string key, string label, string unit,
             Func<DeviceData, double> sel, bool enabled = false)
@@ -645,146 +530,132 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
             "V" => 0,
             "A" => 1,
             "W" => 2,
-            "\u00b0C" => 3,
+            "°C" => 3,
             _ => 0,
         };
     }
 
-    // ======================== Axis helpers ========================
+    // ======================== Chart helpers ========================
 
-    private Axis MakeYAxis(string unit, int index) => new()
+    private List<SimpleChartViewModel.DataPoint> BufferFor(string key)
     {
-        Name = unit,
-        Labeler = v => $"{v:0.###} {unit}",
-        Position = index % 2 != 0 ? AxisPosition.End : AxisPosition.Start
-    };
-
-    private void ApplyAxisLimits(int axisIndex, AxisConfig cfg)
-    {
-        var axis = YAxes[axisIndex];
-        if (cfg.Auto)
+        if (!_buffersByKey.TryGetValue(key, out var list))
         {
-            axis.MinLimit = 0.0;
-            axis.MaxLimit = null;
-            UpdateAutoAxisScales(null);
+            list = new List<SimpleChartViewModel.DataPoint>();
+            _buffersByKey[key] = list;
         }
-        else
+        return list;
+    }
+
+    private void RebuildChartSeriesFromBuffer(string key)
+    {
+        var series = Chart.SeriesItems.FirstOrDefault(
+            s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
+        if (series == null) return;
+
+        List<SimpleChartViewModel.DataPoint> snapshot;
+        lock (_gate) { snapshot = BufferFor(key).ToList(); }
+
+        void Apply()
         {
-            axis.MinLimit = cfg.Min;
-            axis.MaxLimit = cfg.Max > cfg.Min ? cfg.Max : cfg.Min + 1e-9;
+            series.Points.Clear();
+            foreach (var pt in snapshot)
+                series.Points.Add(pt);
+            series.RaiseChanged();
         }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
     }
 
-    private void UpdateYAxisVisibility()
+    /// <summary>The line chart has one global Y scale. Auto (any axis) = min/max over
+    /// all enabled channels' buffered points ±10%; all-manual = union of the per-unit
+    /// configured ranges (matches upstream 1.0.7 behavior).</summary>
+    private void UpdateChartYScale()
     {
-        if (YAxes is not { Length: >= 4 }) return;
-        YAxes[0].IsVisible = AnyEnabledAt(0);
-        YAxes[1].IsVisible = AnyEnabledAt(1);
-        YAxes[2].IsVisible = AnyEnabledAt(2);
-        YAxes[3].IsVisible = AnyEnabledAt(3);
+        var enabled = Items.Where(i => i.IsEnabled).ToList();
+        if (enabled.Count == 0) return;
 
-        bool AnyEnabledAt(int idx) => Items.Any(it => it.IsEnabled && it.YAxisIndex == idx);
-    }
-
-    private static double NiceCeiling(double v)
-    {
-        if (v <= 0.0 || !double.IsFinite(v)) return 0.0;
-        double mag = Math.Pow(10.0, Math.Floor(Math.Log10(v)));
-        double norm = v / mag;
-        double nice = norm <= 1.0 ? 1.0 : norm <= 2.0 ? 2.0 : norm <= 5.0 ? 5.0 : 10.0;
-        return nice * mag;
-    }
-
-    private void UpdateAutoAxisScalesFast()
-    {
-        if (YAxes is not { Length: >= 4 }) return;
-
-        double maxV = 0, maxPerWireA = 0, maxSumA = 0, maxW = 0, maxC = 0;
-
-        foreach (var item in Items)
+        if (YV.Auto || YA.Auto || YW.Auto || YC.Auto)
         {
-            if (!item.IsEnabled) continue;
-            double m = item.VisibleMaxY;
-            if (!double.IsFinite(m)) continue;
-
-            switch (item.YAxisIndex)
+            List<double> ys;
+            lock (_gate)
             {
-                case 0: maxV = Math.Max(maxV, m); break;
-                case 1:
-                    if (string.Equals(item.Key, "Isum", StringComparison.OrdinalIgnoreCase))
-                        maxSumA = Math.Max(maxSumA, m);
-                    else
-                        maxPerWireA = Math.Max(maxPerWireA, m);
-                    break;
-                case 2: maxW = Math.Max(maxW, m); break;
-                case 3: maxC = Math.Max(maxC, m); break;
+                ys = enabled
+                    .Select(it => it.Key)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .SelectMany(k => _buffersByKey.TryGetValue(k, out var buf)
+                        ? (IEnumerable<SimpleChartViewModel.DataPoint>)buf
+                        : Array.Empty<SimpleChartViewModel.DataPoint>())
+                    .Select(p => p.Y)
+                    .Where(double.IsFinite)
+                    .ToList();
             }
+            if (ys.Count == 0) return;
+
+            double min = ys.Min();
+            double max = ys.Max();
+            if (Math.Abs(max - min) < 1e-9)
+                max = min + 1.0;
+            double pad = (max - min) * 0.1;
+            Chart.SetYRange(min - pad, max + pad);
+            return;
         }
 
-        if (YV.Auto && Items.Any(it => it.IsEnabled && it.YAxisIndex == 0))
+        double rangeMin = double.PositiveInfinity;
+        double rangeMax = double.NegativeInfinity;
+        foreach (var item in enabled)
         {
-            YAxes[0].MinLimit = 0.0;
-            YAxes[0].MaxLimit = Math.Max(13.0, NiceCeiling(maxV));
+            var (lo, hi) = item.YAxisIndex switch
+            {
+                0 => (YV.Min, YV.Max),
+                1 => (YA.Min, YA.Max),
+                2 => (YW.Min, YW.Max),
+                3 => (YC.Min, YC.Max),
+                _ => (0.0, 1.0),
+            };
+            rangeMin = Math.Min(rangeMin, lo);
+            rangeMax = Math.Max(rangeMax, hi);
         }
-        if (YA.Auto && Items.Any(it => it.IsEnabled && it.YAxisIndex == 1))
-        {
-            YAxes[1].MinLimit = 0.0;
-            bool hasPerWire = Items.Any(it => it.IsEnabled && it.YAxisIndex == 1 && it.Key != "Isum");
-            bool hasSumI = Items.Any(it => it.IsEnabled && it.YAxisIndex == 1 && it.Key == "Isum");
-            double floor = Math.Max(hasPerWire ? 10.0 : 0.0, hasSumI ? 30.0 : 0.0);
-            YAxes[1].MaxLimit = Math.Max(floor, NiceCeiling(Math.Max(maxPerWireA, maxSumA)));
-        }
-        if (YW.Auto && Items.Any(it => it.IsEnabled && it.YAxisIndex == 2))
-        {
-            YAxes[2].MinLimit = 0.0;
-            YAxes[2].MaxLimit = Math.Max(300.0, NiceCeiling(maxW));
-        }
-        if (YC.Auto && Items.Any(it => it.IsEnabled && it.YAxisIndex == 3))
-        {
-            YAxes[3].MinLimit = 0.0;
-            YAxes[3].MaxLimit = Math.Max(50.0, NiceCeiling(maxC));
-        }
-    }
-
-    private void UpdateAutoAxisScales(DeviceData? d)
-    {
-        // Same logic as UpdateAutoAxisScalesFast; kept as separate method for clarity.
-        UpdateAutoAxisScalesFast();
+        if (double.IsFinite(rangeMin) && double.IsFinite(rangeMax) && rangeMax > rangeMin)
+            Chart.SetYRange(rangeMin, rangeMax);
     }
 
     // ======================== Data handler ========================
 
     private void OnDeviceData(DeviceData d)
     {
-        double x = (((d.Timestamp.Kind == DateTimeKind.Utc) ? d.Timestamp : d.Timestamp.ToUniversalTime()) - _t0Utc).TotalSeconds;
-        int win = Math.Max(1, XWindowSeconds);
-        double cutoff = x - win;
-
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnDeviceData(d), DispatcherPriority.Background);
             return;
         }
 
+        double x = (((d.Timestamp.Kind == DateTimeKind.Utc) ? d.Timestamp : d.Timestamp.ToUniversalTime()) - _t0Utc).TotalSeconds;
+        int win = Math.Max(1, XWindowSeconds);
+        double cutoff = x - win;
+
         if (IsViewVisible)
-        {
-            XAxes[0].MinLimit = cutoff;
-            XAxes[0].MaxLimit = x;
-        }
+            Chart.SetXWindow(cutoff, x);
 
         lock (_gate)
         {
             foreach (var item in Items.Where(i => i.IsEnabled))
             {
                 double val = item.Selector(d);
-                if (double.IsFinite(val))
-                    item.AddPoint(x, val, cutoff);
+                if (!double.IsFinite(val)) continue;
+
+                var buffer = BufferFor(item.Key);
+                buffer.Add(new SimpleChartViewModel.DataPoint(x, val));
+                while (buffer.Count > 0 && buffer[0].X < cutoff)
+                    buffer.RemoveAt(0);
+
+                Chart.AddPoint(item.Key, x, val);
             }
             if (IsExportingCsv)
                 ExportVisibleToCsvInternal(writeOnlyNewPoints: true);
         }
 
-        UpdateAutoAxisScalesFast();
+        UpdateChartYScale();
     }
 
     // ======================== Dispose ========================

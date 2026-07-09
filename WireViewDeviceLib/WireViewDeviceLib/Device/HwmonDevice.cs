@@ -21,6 +21,8 @@ namespace WireView2.Device
         private const byte WCMD_NVM_CMD          = 0x06;
         private const byte WCMD_READ_BUILD       = 0x07;
         private const byte WCMD_ENTER_BOOTLOADER = 0x08;
+        private const byte WCMD_SUSPEND_SERIAL   = 0x09;
+        private const byte WCMD_RESUME_SERIAL    = 0x0A;
 
         private const byte RESP_OK = 0;
 
@@ -337,6 +339,38 @@ namespace WireView2.Device
             try { Disconnect(); } catch { }
         }
 
+        /// <summary>Set while a <see cref="DirectSerialSession"/> owns the port. The
+        /// daemon stops feeding the kernel module during the handover, so sysfs goes
+        /// stale (ENODATA) — that must not be treated as a lost device.</summary>
+        private volatile bool _serialSessionActive;
+
+        public void BeginSerialSession() => _serialSessionActive = true;
+        public void EndSerialSession() => _serialSessionActive = false;
+
+        /// <summary>Asks wireviewd to stop all serial I/O for <paramref name="seconds"/>
+        /// (clamped to 1..300 by the daemon) so the caller can drive the port directly
+        /// — SPI-flash log reads and theme asset transfers need exclusive access.
+        /// Re-arming before the deadline extends it (heartbeat pattern). The daemon
+        /// resumes on its own at the deadline even if the caller dies; call
+        /// <see cref="ResumeSerial"/> when done to hand the port back early.</summary>
+        public bool SuspendSerial(int seconds)
+        {
+            if (!DaemonAvailable) return false;
+            var payload = new byte[] { (byte)(seconds & 0xFF), (byte)((seconds >> 8) & 0xFF) };
+            var (status, _) = SendDaemonRequest(WCMD_SUSPEND_SERIAL, payload);
+            return status == RESP_OK;
+        }
+
+        public void ResumeSerial()
+        {
+            // The socket may have died during the handover (daemon restart, entry
+            // churn) — reconnect rather than leave the daemon waiting out its
+            // suspension deadline.
+            if (!DaemonAvailable) TryConnectDaemon();
+            if (!DaemonAvailable) return;
+            SendDaemonRequest(WCMD_RESUME_SERIAL, Array.Empty<byte>());
+        }
+
         // ---- Sensor reading ----
 
         private void PollLoop(CancellationToken ct)
@@ -371,6 +405,12 @@ namespace WireView2.Device
                     {
                         consecutiveFailures = 0;
                         DataUpdated?.Invoke(this, data);
+                    }
+                    else if (_serialSessionActive)
+                    {
+                        // A direct-serial session owns the port; the daemon isn't
+                        // feeding the module, so stale/ENODATA reads are expected.
+                        consecutiveFailures = 0;
                     }
                     else
                     {
