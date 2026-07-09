@@ -431,6 +431,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         _connector.ConnectionChanged += OnConnectionChanged;
         _connector.Start();
         LoadBundledFirmwareVersion();
+        InitializeThemeEditor();
         OnConnectionChanged(_connector, _connector.Device?.Connected ?? false);
         RefreshProfileList();
     }
@@ -725,14 +726,16 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             if (AppSettings.Current.ScreenAfterConnection != AppSettings.StartupScreen.NoChange
                 && IsDeviceCommandCapable)
             {
-                _ = DeviceScreenCmdAsync(AppSettings.Current.ScreenAfterConnection switch
+                var target = AppSettings.Current.ScreenAfterConnection switch
                 {
                     AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
                     AppSettings.StartupScreen.Current     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_CURRENT,
                     AppSettings.StartupScreen.Temperature => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_TEMP,
                     AppSettings.StartupScreen.Status      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS,
                     _                                     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
-                });
+                };
+                _lastCommandedScreen = target;
+                _ = DeviceScreenCmdAsync(target);
             }
 
             if (IsDeviceCommandCapable)
@@ -753,7 +756,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
             if (SelectedDeviceScreenTarget == AppSettings.StartupScreen.NoChange) { ConfigStatus = "Select a screen."; return; }
 
-            var r = await DeviceScreenCmdAsync(SelectedDeviceScreenTarget switch
+            var screenTarget = SelectedDeviceScreenTarget switch
             {
                 AppSettings.StartupScreen.Main        => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
                 AppSettings.StartupScreen.Simple      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
@@ -761,7 +764,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 AppSettings.StartupScreen.Temperature => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_TEMP,
                 AppSettings.StartupScreen.Status      => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS,
                 _                                     => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
-            });
+            };
+            _lastCommandedScreen = screenTarget;
+            var r = await DeviceScreenCmdAsync(screenTarget);
             ConfigStatus = r.Ok
                 ? $"Switched to {SelectedDeviceScreenTarget}."
                 : $"Screen change failed — {r.Describe()}.";
@@ -881,11 +886,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         {
             if (_device == null || !_device.Connected) { ConfigStatus = "Not connected."; return; }
             if (!IsDeviceCommandCapable) { ConfigStatus = "Unsupported device."; return; }
+            // A staged custom background (and its tinted fan frames) uploads first;
+            // throws with a descriptive message if the device can't take it.
+            await UploadPendingThemeAssetsAsync();
             var config = BuildConfigFromEditor();
             var w = await DeviceWriteConfigAsync(config);
             if (!w.Ok) { ConfigStatus = $"Apply failed — {w.Describe()}."; return; }
             await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
+            RequestThemePreviewRefresh();
         }
         catch (Exception ex)
         {
