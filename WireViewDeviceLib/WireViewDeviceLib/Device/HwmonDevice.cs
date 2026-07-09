@@ -342,6 +342,7 @@ namespace WireView2.Device
         private void PollLoop(CancellationToken ct)
         {
             int consecutiveFailures = 0;
+            var lastDaemonRetry = Environment.TickCount64;
             try
             {
                 while (!ct.IsCancellationRequested)
@@ -350,6 +351,19 @@ namespace WireView2.Device
                     {
                         Disconnect();
                         return;
+                    }
+
+                    // The daemon may come up (or come back) after we connected — e.g.
+                    // wireviewd is still in its device-lost retry loop right after a
+                    // firmware flash. Keep retrying so the entry regains commands,
+                    // config, and the firmware version without an app restart.
+                    if (!DaemonAvailable && Environment.TickCount64 - lastDaemonRetry >= 5000)
+                    {
+                        lastDaemonRetry = Environment.TickCount64;
+                        TryConnectDaemon();
+                        if (DaemonAvailable)
+                            // Re-announce so listeners refresh name/firmware/config.
+                            ConnectionChanged?.Invoke(this, true);
                     }
 
                     var data = ReadSensors();

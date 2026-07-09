@@ -12,10 +12,10 @@
     <ApplicationIcon>Assets\Icons\bear.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>WireView Pro II</AssemblyTitle>
-    <Version>1.1.0.1</Version>
+    <Version>1.2.0.0</Version>
     <!-- Displayed version (AppInfo reads this, stripping the +build suffix). Numeric
-         assembly/file version stays 1.1.0.0; this carries the "beta" label. -->
-    <InformationalVersion>1.1.0.1 beta</InformationalVersion>
+         assembly/file version stays 1.2.0.0; this carries the "beta" label. -->
+    <InformationalVersion>1.2.0.0 beta</InformationalVersion>
     <SourceRevisionId>build$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</SourceRevisionId>
   </PropertyGroup>
 
@@ -35,6 +35,14 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <!-- Bundled device firmware (upstream 1.0.7 release, firmware v05). Copied next
+       to the binary so DeviceViewModel can read/flash it; the app degrades
+       gracefully ("-") when the file is absent. -->
+  <ItemGroup>
+    <None Include="Firmware\TG-WV-PRO2-FW.hex" CopyToOutputDirectory="PreserveNewest"
+          TargetPath="TG-WV-PRO2-FW.hex" />
   </ItemGroup>
 
   <!-- Windows ships the executable as wireview2-plus.exe. The assembly stays

@@ -21,6 +21,7 @@ public class SettingsViewModel : ViewModelBase
     private AppSettings.BackgroundColorMode _backgroundColorPreference;
     private double _backgroundOpacity;
     private AppSettings.StartupScreen _screenAfterConnection;
+    private AppSettings.NavPaneMode _navPaneMode;
     private bool _softwareShutdownOnFault;
     private bool _showTrayPower;
     private bool _showTrayPowerUnit;
@@ -119,6 +120,24 @@ public class SettingsViewModel : ViewModelBase
             }
         }
     }
+
+    public AppSettings.NavPaneMode NavPaneMode
+    {
+        get => _navPaneMode;
+        set
+        {
+            if (Set(ref _navPaneMode, value))
+            {
+                AppSettings.Current.NavPane = value;
+                AppSettings.SaveCurrent();
+                OnPropertyChanged(nameof(IsNavMinimal));
+                OnPropertyChanged(nameof(IsNavExpanded));
+            }
+        }
+    }
+
+    public bool IsNavMinimal => _navPaneMode == AppSettings.NavPaneMode.Minimal;
+    public bool IsNavExpanded => _navPaneMode == AppSettings.NavPaneMode.Expanded;
 
     public bool SoftwareShutdownOnFault
     {
@@ -294,6 +313,7 @@ public class SettingsViewModel : ViewModelBase
     public Array ThemeModes => Enum.GetValues(typeof(AppSettings.ThemeMode));
     public Array BackgroundColorModes => Enum.GetValues(typeof(AppSettings.BackgroundColorMode));
     public Array DeviceScreens => Enum.GetValues(typeof(AppSettings.StartupScreen));
+    public Array NavPaneModes => Enum.GetValues(typeof(AppSettings.NavPaneMode));
 
     // ======================== Constructor ========================
 
@@ -307,6 +327,7 @@ public class SettingsViewModel : ViewModelBase
         _backgroundOpacity = ClampOpacity(AppSettings.Current.BackgroundOpacity);
         ApplyBackgroundOpacity(_backgroundOpacity);
         _screenAfterConnection = AppSettings.Current.ScreenAfterConnection;
+        _navPaneMode = AppSettings.Current.NavPane;
         _softwareShutdownOnFault = AppSettings.Current.SoftwareShutdownOnFault;
         _showTrayPower = AppSettings.Current.ShowTrayPower;
         _showTrayPowerUnit = AppSettings.Current.ShowTrayPowerUnit;
@@ -346,6 +367,13 @@ public class SettingsViewModel : ViewModelBase
         if (Set(ref _screenAfterConnection, AppSettings.Current.ScreenAfterConnection,
                 nameof(ScreenAfterConnection)))
             OnPropertyChanged(nameof(ScreenAfterConnection));
+
+        if (Set(ref _navPaneMode, AppSettings.Current.NavPane, nameof(NavPaneMode)))
+        {
+            OnPropertyChanged(nameof(NavPaneMode));
+            OnPropertyChanged(nameof(IsNavMinimal));
+            OnPropertyChanged(nameof(IsNavExpanded));
+        }
 
         if (Set(ref _softwareShutdownOnFault, AppSettings.Current.SoftwareShutdownOnFault,
                 nameof(SoftwareShutdownOnFault)))

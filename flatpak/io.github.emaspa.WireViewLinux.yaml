@@ -19,6 +19,26 @@ finish-args:
   - --talk-name=org.freedesktop.Notifications
 
 modules:
+  # libusb + dfu-util are bundled so the in-app firmware flashing works inside
+  # the sandbox (the freedesktop runtime does not ship dfu-util). USB access to
+  # the DFU bootloader (0483:df11) is already covered by --device=all plus the
+  # host udev rule.
+  - name: libusb
+    buildsystem: autotools
+    config-opts:
+      - --disable-udev
+    sources:
+      - type: archive
+        url: https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.tar.bz2
+        sha256: ffaa41d741a8a3bee244ac8e54a72ea05bf2879663c098c82fc5757853441575
+
+  - name: dfu-util
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: https://dfu-util.sourceforge.net/releases/dfu-util-0.11.tar.gz
+        sha256: b4b53ba21a82ef7e3d4c47df2952adf5fa494f499b6b0b57c58c5d04ae8ff19e
+
   - name: wireview-linux
     buildsystem: simple
     build-commands:

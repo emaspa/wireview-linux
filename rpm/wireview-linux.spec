@@ -31,6 +31,8 @@ Requires:       libX11
 Requires:       libicu
 # Optional: hwmon kernel module + daemon for system-wide sensor integration.
 Recommends:     wireview-hwmon
+# Optional: in-app firmware flashing (DFU download to the STM32 bootloader).
+Recommends:     dfu-util
 
 %description
 Unofficial Linux GUI for the Thermal Grizzly WireView Pro II GPU power monitor.

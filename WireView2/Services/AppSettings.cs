@@ -37,6 +37,13 @@ public class AppSettings
         Manual
     }
 
+    public enum NavPaneMode
+    {
+        Auto,
+        Minimal,
+        Expanded
+    }
+
     public sealed class MonitoringAxisSettings
     {
         public bool Auto { get; set; } = true;
@@ -78,6 +85,8 @@ public class AppSettings
 
     public int MonitoringUpdateIntervalMs { get; set; } = 1000;
     public bool SoftwareShutdownOnFault { get; set; }
+
+    public NavPaneMode NavPane { get; set; }
 
     // LAN monitoring: open the network listener that publishes this host's
     // WireView(s) (GET /sensors) and, with a secret, accepts authenticated writes

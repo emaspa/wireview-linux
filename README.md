@@ -15,8 +15,9 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Desktop notifications** - Via `notify-send`
 - **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
 - **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
+- **Firmware updates** - Flash the bundled firmware (currently v05) from the Device page over USB DFU. Requires the `dfu-util` package; shows the bundled vs. device firmware version and warns before downgrades
 
-> **DFU firmware updates** are available on the [`dfu-enabled`](https://github.com/emaspa/wireview-linux/tree/dfu-enabled) branch. This feature has not been fully tested and could potentially brick your device, so it is excluded from the main branch and the pre-built binary.
+> **Warning:** firmware flashing restarts the device into its STM32 bootloader and rewrites its flash. It follows the same DFU procedure as the official Windows client (and refuses to start if `dfu-util` or the firmware image is missing), but a power loss or unplug mid-flash can leave the device unbootable until reflashed manually. Use at your own risk. The previous experimental `dfu-enabled` branch has been removed in favor of this built-in implementation.
 
 > **hwmon integration**: If you want sensor data exposed to `sensors`, Grafana, conky, btop, and other monitoring tools via `/sys/class/hwmon/`, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon). The kernel module and daemon work standalone without this app, and this app can also use them as an alternative to direct serial communication (see below). That project also includes `wireviewctl`, a CLI tool for monitoring and scripting device commands from the terminal.
 
@@ -72,6 +73,7 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 
 - Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 42-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II device connected via USB
+- Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency)
 
 ## Installation
 

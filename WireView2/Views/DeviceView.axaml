@@ -11,7 +11,7 @@
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Device Information" FontWeight="SemiBold" FontSize="16"/>
-                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Device:"/>
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DeviceName}"/>
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Firmware:"/>
@@ -19,11 +19,39 @@
                             <TextBlock Text="{Binding FirmwareVersion}"/>
                             <TextBlock Text="{Binding DeviceBuildString}" Opacity="0.6"/>
                         </StackPanel>
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Unique ID:"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding UniqueId}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Status:"/>
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ConfigStatus}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Bundled FW:"/>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding BundledFirmwareVersion}"/>
+                            <TextBlock Text="{Binding BundledBuildString}" Opacity="0.6"/>
+                            <TextBlock Text="{Binding BundledFirmwareUpdateNotice}"
+                                       Foreground="#FFFFA500" FontWeight="SemiBold"
+                                       IsVisible="{Binding IsBundledFirmwareNewerThanDevice}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Unique ID:"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding UniqueId}"/>
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Status:"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ConfigStatus}" TextWrapping="Wrap"/>
                     </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Firmware Update -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16"
+                    IsVisible="{Binding IsConnected}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Firmware Update" FontWeight="SemiBold" FontSize="16"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button Content="Flash bundled firmware"
+                                Command="{Binding UpdateFirmwareCommand}"
+                                IsEnabled="{Binding CanStartFirmwareUpdate}"/>
+                        <TextBlock Text="{Binding BundledFirmwareVersion}" VerticalAlignment="Center"
+                                   Opacity="0.8"/>
+                    </StackPanel>
+                    <ProgressBar Minimum="0" Maximum="1" Value="{Binding FirmwareUpdateProgress}"
+                                 IsVisible="{Binding IsFirmwareUpdating}" Height="14"/>
+                    <TextBlock Text="{Binding FirmwareUpdateStatus}" TextWrapping="Wrap"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules."/>
                 </StackPanel>
             </Border>
 

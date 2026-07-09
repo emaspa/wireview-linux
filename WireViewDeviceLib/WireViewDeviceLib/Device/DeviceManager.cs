@@ -66,19 +66,34 @@ namespace WireView2.Device
             lock (_gate) { _probes.Add(probe); }
         }
 
-        private static IEnumerable<(IWireViewDevice, string)> DefaultProbe(ISet<string> held)
+        private IEnumerable<(IWireViewDevice, string)> DefaultProbe(ISet<string> held)
         {
             if (OperatingSystem.IsLinux())
             {
                 string? hwmonPath = HwmonDevice.FindHwmonPath();
                 if (hwmonPath != null && !held.Contains("hwmon"))
                     yield return (new HwmonDevice(hwmonPath), "hwmon");
+
+                // wireviewd owns the serial port while it is attached to the device;
+                // there is no cross-process port coordination, so a concurrent
+                // direct-serial connection just corrupts both sides' frames. Offer
+                // serial only while no daemon-backed hwmon device is live.
+                if (HasDaemonBackedHwmon())
+                    yield break;
             }
             foreach (var port in Stm32PortFinder.FindMatchingComPorts())
             {
                 string source = "serial:" + port;
                 if (!held.Contains(source))
                     yield return (new WireViewPro2Device(port), source);
+            }
+        }
+
+        private bool HasDaemonBackedHwmon()
+        {
+            lock (_gate)
+            {
+                return _byId.Values.Any(md => md.Device is HwmonDevice { DaemonAvailable: true });
             }
         }
 
@@ -288,7 +303,16 @@ namespace WireView2.Device
         private void Prune()
         {
             List<ManagedDevice> dead;
-            lock (_gate) { dead = _byId.Values.Where(m => !m.Device.Connected).ToList(); }
+            lock (_gate)
+            {
+                dead = _byId.Values.Where(m => !m.Device.Connected).ToList();
+                // Once the daemon reattaches (e.g. after a firmware flash), any
+                // direct-serial entry opened during the outage starts corrupting
+                // the daemon's frames and stops working itself — retire it.
+                if (_byId.Values.Any(md => md.Device is HwmonDevice { DaemonAvailable: true }))
+                    dead.AddRange(_byId.Values.Where(m =>
+                        m.Device is WireViewPro2Device && !dead.Contains(m)));
+            }
             if (dead.Count == 0) return;
             lock (_gate) { foreach (var md in dead) Drop(md); }
             DevicesChanged?.Invoke(this, EventArgs.Empty);

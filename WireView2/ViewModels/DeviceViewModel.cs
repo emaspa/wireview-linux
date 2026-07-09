@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
@@ -42,6 +44,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private bool _isConnected;
     private string _deviceName = "Not Connected";
     private string? _deviceBuildString;
+    private string _bundledFirmwareVersion = "-";
+    private string? _bundledBuildString;
+    private bool _isBundledFirmwareNewerThanDevice;
+    private int? _bundledFirmwareVersionNumber;
+    private int? _lastKnownDeviceFirmwareVersionNumber;
+    private bool _isFirmwareUpdating;
+    private double _firmwareUpdateProgress;
+    private string _firmwareUpdateStatus = string.Empty;
+    private bool _awaitingPostFlashReconnect;
     private bool _isAveragingSupported;
     private bool _isUiV2Supported;
     private bool _isApplyingThemePreset;
@@ -144,6 +155,59 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         get => _deviceBuildString;
         private set => Set(ref _deviceBuildString, value);
     }
+
+    public string BundledFirmwareVersion
+    {
+        get => _bundledFirmwareVersion;
+        private set => Set(ref _bundledFirmwareVersion, value);
+    }
+
+    public string? BundledBuildString
+    {
+        get => _bundledBuildString;
+        private set => Set(ref _bundledBuildString, value);
+    }
+
+    public bool IsBundledFirmwareNewerThanDevice
+    {
+        get => _isBundledFirmwareNewerThanDevice;
+        private set
+        {
+            if (Set(ref _isBundledFirmwareNewerThanDevice, value))
+                OnPropertyChanged(nameof(BundledFirmwareUpdateNotice));
+        }
+    }
+
+    public string BundledFirmwareUpdateNotice =>
+        IsBundledFirmwareNewerThanDevice ? "Newer firmware version available." : string.Empty;
+
+    public bool IsFirmwareUpdating
+    {
+        get => _isFirmwareUpdating;
+        private set
+        {
+            if (Set(ref _isFirmwareUpdating, value))
+                OnPropertyChanged(nameof(CanStartFirmwareUpdate));
+        }
+    }
+
+    /// <summary>0..1 while a DFU download is running.</summary>
+    public double FirmwareUpdateProgress
+    {
+        get => _firmwareUpdateProgress;
+        private set => Set(ref _firmwareUpdateProgress, value);
+    }
+
+    public string FirmwareUpdateStatus
+    {
+        get => _firmwareUpdateStatus;
+        private set => Set(ref _firmwareUpdateStatus, value);
+    }
+
+    /// <summary>Flashing needs the device on this host's USB — remote (LAN) devices
+    /// can't be flashed from here.</summary>
+    public bool CanStartFirmwareUpdate =>
+        !IsFirmwareUpdating && IsConnected && _device is WireViewPro2Device or HwmonDevice;
 
     public bool IsAveragingSupported
     {
@@ -366,8 +430,189 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         _ownsConnector = connector != null && connector != DeviceAutoConnector.Shared;
         _connector.ConnectionChanged += OnConnectionChanged;
         _connector.Start();
+        LoadBundledFirmwareVersion();
         OnConnectionChanged(_connector, _connector.Device?.Connected ?? false);
         RefreshProfileList();
+    }
+
+    // ======================== Bundled firmware ========================
+
+    /// <summary>Path of the firmware image shipped alongside the app, if any.</summary>
+    public static string GetBundledFirmwarePath() =>
+        Path.Combine(AppContext.BaseDirectory, "TG-WV-PRO2-FW.hex");
+
+    private static string FormatFirmwareVersion(int? version) =>
+        version.HasValue ? "v" + version.Value.ToString().PadLeft(2, '0') : "-";
+
+    private void UpdateBundledFirmwareComparison()
+    {
+        IsBundledFirmwareNewerThanDevice =
+            _bundledFirmwareVersionNumber.HasValue
+            && _lastKnownDeviceFirmwareVersionNumber.HasValue
+            && _bundledFirmwareVersionNumber.Value > _lastKnownDeviceFirmwareVersionNumber.Value;
+    }
+
+    private void LoadBundledFirmwareVersion()
+    {
+        string path = GetBundledFirmwarePath();
+        if (File.Exists(path)
+            && FirmwareHexInfo.TryRead(path, out int version, out string? build, out _))
+        {
+            _bundledFirmwareVersionNumber = version;
+            BundledFirmwareVersion = FormatFirmwareVersion(version);
+            BundledBuildString = string.IsNullOrWhiteSpace(build) ? null : "(" + build.Trim() + ")";
+        }
+        else
+        {
+            _bundledFirmwareVersionNumber = null;
+            BundledFirmwareVersion = "-";
+            BundledBuildString = null;
+        }
+        UpdateBundledFirmwareComparison();
+    }
+
+    // ======================== Firmware update (DFU via dfu-util) ========================
+
+    [RelayCommand]
+    private async Task UpdateFirmware()
+    {
+        if (IsFirmwareUpdating) return;
+        if (_device == null || !_device.Connected)
+        {
+            FirmwareUpdateStatus = "Not connected.";
+            return;
+        }
+        if (_device is not (WireViewPro2Device or HwmonDevice))
+        {
+            FirmwareUpdateStatus = "Remote devices can only be flashed from the host they are plugged into.";
+            return;
+        }
+
+        string hexPath = GetBundledFirmwarePath();
+        if (!File.Exists(hexPath))
+        {
+            FirmwareUpdateStatus = "No bundled firmware image (TG-WV-PRO2-FW.hex) next to the application.";
+            return;
+        }
+
+        // Re-read the bundled image: it may have been swapped on disk since startup.
+        LoadBundledFirmwareVersion();
+        if (!_bundledFirmwareVersionNumber.HasValue)
+        {
+            FirmwareUpdateStatus = "Could not parse the bundled firmware image.";
+            return;
+        }
+
+        if (await DfuUtilFlasher.GetDfuUtilVersionAsync() == null)
+        {
+            FirmwareUpdateStatus = "dfu-util not found — install the 'dfu-util' package and try again.";
+            return;
+        }
+
+        if (_lastKnownDeviceFirmwareVersionNumber.HasValue
+            && _bundledFirmwareVersionNumber.Value < _lastKnownDeviceFirmwareVersionNumber.Value)
+        {
+            var downgrade = await MessageBox.Show(null,
+                $"The bundled firmware ({FormatFirmwareVersion(_bundledFirmwareVersionNumber)}) is older than " +
+                $"the device firmware ({FormatFirmwareVersion(_lastKnownDeviceFirmwareVersionNumber)}).\n\n" +
+                "Flashing older firmware can remove features or fixes. Do you want to continue?",
+                "Older firmware warning", MessageBox.MessageBoxButtons.YesNo);
+            if (downgrade != MessageBox.MessageBoxResult.Yes)
+            {
+                FirmwareUpdateStatus = "Firmware update cancelled.";
+                return;
+            }
+        }
+
+        var confirm = await MessageBox.Show(null,
+            $"Flash firmware {BundledFirmwareVersion} to {DeviceName}?\n\n" +
+            "The device restarts into its bootloader and is flashed over USB. " +
+            "Do not unplug it until the update finishes.",
+            "Firmware update", MessageBox.MessageBoxButtons.YesNo);
+        if (confirm != MessageBox.MessageBoxResult.Yes)
+        {
+            FirmwareUpdateStatus = "Firmware update cancelled.";
+            return;
+        }
+
+        IsFirmwareUpdating = true;
+        FirmwareUpdateProgress = 0;
+        // The flash makes the device drop off and re-enumerate, which knocks the
+        // picker over to whatever source survives — remember what was selected so
+        // it can be restored once the device is back.
+        string? selectionToRestore = DeviceManager.Shared.SelectedId;
+        string binPath = Path.Combine(Path.GetTempPath(), $"wireview2-fw-{Guid.NewGuid():N}.bin");
+        try
+        {
+            if (!FirmwareHexInfo.TryReadImage(hexPath, out uint baseAddress, out byte[] image, out string? error))
+            {
+                FirmwareUpdateStatus = "Firmware image error: " + error;
+                return;
+            }
+            await File.WriteAllBytesAsync(binPath, image);
+
+            FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
+            switch (_device)
+            {
+                case WireViewPro2Device pro2: pro2.EnterBootloader(); break;
+                case HwmonDevice hwmon: hwmon.EnterBootloader(); break;
+            }
+
+            if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None))
+            {
+                FirmwareUpdateStatus =
+                    "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
+                    "installed, then power-cycle the device and try again.";
+                return;
+            }
+
+            FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
+            var progress = new Progress<double>(p => FirmwareUpdateProgress = p);
+            await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
+
+            FirmwareUpdateProgress = 1.0;
+            FirmwareUpdateStatus = "Firmware update complete — the device is restarting.";
+            _awaitingPostFlashReconnect = true;
+        }
+        catch (Exception ex)
+        {
+            FirmwareUpdateStatus = "Firmware update failed: " + ex.Message;
+        }
+        finally
+        {
+            try { File.Delete(binPath); } catch { }
+            IsFirmwareUpdating = false;
+            if (selectionToRestore != null)
+                _ = RestoreDeviceSelectionAsync(selectionToRestore);
+        }
+    }
+
+    /// <summary>Re-selects the device source that was active before a firmware flash,
+    /// once discovery re-adds it (the device may take a while to re-enumerate; give
+    /// up after ~30 s). Backs off if the user picks a different device meanwhile.</summary>
+    private static async Task RestoreDeviceSelectionAsync(string sourceId)
+    {
+        var mgr = DeviceManager.Shared;
+        string? fallback = mgr.SelectedId;
+        for (int i = 0; i < 60; i++)
+        {
+            string? current = mgr.SelectedId;
+            if (current == sourceId) return;
+            if (current != fallback)
+            {
+                // A null→id flip is the manager auto-picking the first survivor as
+                // entries churn back in; keep going. An id→id flip is the user
+                // choosing a different device — don't override them.
+                if (fallback != null) return;
+                fallback = current;
+            }
+            if (mgr.Devices.Any(d => d.Id == sourceId))
+            {
+                mgr.SelectedId = sourceId;
+                return;
+            }
+            await Task.Delay(500);
+        }
     }
 
     // ======================== Device dispatch helpers ========================
@@ -437,6 +682,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         IsConnected = connected;
         OnPropertyChanged(nameof(IsConnected));
         _device = (sender as DeviceAutoConnector)?.Device;
+        OnPropertyChanged(nameof(CanStartFirmwareUpdate));
 
         if (!connected)
         {
@@ -444,6 +690,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             FirmwareVersion = string.Empty;
             UniqueId = string.Empty;
             DeviceBuildString = null;
+            _lastKnownDeviceFirmwareVersionNumber = null;
+            UpdateBundledFirmwareComparison();
             ConfigLoaded = false;
             IsAveragingSupported = false;
             IsUiV2Supported = false;
@@ -460,6 +708,19 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 ? "N/A" : "v" + _device.FirmwareVersion.ToString().PadLeft(2, '0');
             UniqueId = string.IsNullOrEmpty(_device.UniqueId) ? "N/A" : _device.UniqueId;
             DeviceBuildString = null;
+
+            _lastKnownDeviceFirmwareVersionNumber =
+                int.TryParse(_device.FirmwareVersion, NumberStyles.Integer,
+                    CultureInfo.InvariantCulture, out int deviceFw) ? deviceFw : null;
+            UpdateBundledFirmwareComparison();
+
+            if (_awaitingPostFlashReconnect)
+            {
+                _awaitingPostFlashReconnect = false;
+                FirmwareUpdateStatus = FirmwareVersion != "N/A"
+                    ? $"Firmware update complete — device reconnected ({FirmwareVersion})."
+                    : "Firmware update complete — device reconnected.";
+            }
 
             if (AppSettings.Current.ScreenAfterConnection != AppSettings.StartupScreen.NoChange
                 && IsDeviceCommandCapable)

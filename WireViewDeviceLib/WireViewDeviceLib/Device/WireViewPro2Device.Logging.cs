@@ -103,6 +103,9 @@ public partial class WireViewPro2Device
                     _port!.DiscardInBuffer();
                     _port!.Write(new byte[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)SCREEN_CMD.SCREEN_PAUSE_UPDATES }, 0, 2);
 
+                    // Tolerate transient short reads (device busy repainting, USB latency):
+                    // retry the same page a few times before giving up, like upstream 1.0.7.
+                    int retriesLeft = 10;
                     while (read < len)
                     {
                         uint remaining = len - read;
@@ -115,7 +118,16 @@ public partial class WireViewPro2Device
                         var chunk = ReadExact((int)toRead);
 
                         if (chunk is null || chunk.Length != toRead)
-                            throw new TimeoutException("SPI flash read error.");
+                        {
+                            if (--retriesLeft <= 0)
+                                throw new TimeoutException("SPI flash read error.");
+                            // Let any straggler bytes from the failed request arrive,
+                            // then flush them so they can't prepend to the retry's data.
+                            Thread.Sleep(10);
+                            _port!.DiscardInBuffer();
+                            continue;
+                        }
+                        retriesLeft = 10;
 
                         Buffer.BlockCopy(chunk, 0, result, (int)read, (int)toRead);
 

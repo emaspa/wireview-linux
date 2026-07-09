@@ -24,6 +24,11 @@
                         <Slider Value="{Binding BackgroundOpacity}" Minimum="0" Maximum="1"
                                 Width="200" TickFrequency="0.1"/>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Navigation Pane:" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding NavPaneModes}"
+                                  SelectedItem="{Binding NavPaneMode}" Width="150"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">

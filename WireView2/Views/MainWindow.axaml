@@ -32,6 +32,20 @@
         <Style Selector="Button.side-nav:pressed">
             <Setter Property="Background" Value="{DynamicResource SideNavPressedBrush}"/>
         </Style>
+        <!-- Nav label visibility per NavPaneMode: Auto shows on hover, Minimal never,
+             Expanded always. Later selectors override earlier ones when both match. -->
+        <Style Selector="Border#NavPane TextBlock.nav-label">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Border#NavPane:pointerover TextBlock.nav-label">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
+        <Style Selector="Border#NavPane.nav-minimal:pointerover TextBlock.nav-label">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Border#NavPane.nav-expanded TextBlock.nav-label">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
         <Style Selector="Border#FaultBar">
             <Setter Property="Background" Value="#B3C62828"/>
             <Setter Property="BorderBrush" Value="#FFFFA347"/>
@@ -67,6 +81,8 @@
         <!-- Navigation Pane -->
         <Border Name="NavPane" Grid.Column="0"
                 Width="48" ClipToBounds="True"
+                Classes.nav-minimal="{Binding Settings.IsNavMinimal}"
+                Classes.nav-expanded="{Binding Settings.IsNavExpanded}"
                 Background="{DynamicResource NavPaneBackgroundBrush}"
                 BorderBrush="{DynamicResource NavPaneBorderBrush}"
                 BorderThickness="0,0,1,0">
@@ -80,40 +96,35 @@
                         Command="{Binding ShowOverviewCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/overview.png"/>
-                        <TextBlock Text="Overview" VerticalAlignment="Center"
-                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                        <TextBlock Text="Overview" VerticalAlignment="Center" Classes="nav-label"/>
                     </StackPanel>
                 </Button>
                 <Button Classes="side-nav" Grid.Row="1" ToolTip.Tip="Monitoring" ToolTip.Placement="Right"
                         Command="{Binding ShowMonitoringCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/monitoring.png"/>
-                        <TextBlock Text="Monitoring" VerticalAlignment="Center"
-                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                        <TextBlock Text="Monitoring" VerticalAlignment="Center" Classes="nav-label"/>
                     </StackPanel>
                 </Button>
                 <Button Classes="side-nav" Grid.Row="2" ToolTip.Tip="Logging" ToolTip.Placement="Right"
                         Command="{Binding ShowLoggingCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/logging.png"/>
-                        <TextBlock Text="Logging" VerticalAlignment="Center"
-                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                        <TextBlock Text="Logging" VerticalAlignment="Center" Classes="nav-label"/>
                     </StackPanel>
                 </Button>
                 <Button Classes="side-nav" Grid.Row="3" ToolTip.Tip="Device" ToolTip.Placement="Right"
                         Command="{Binding ShowDeviceCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/device.png"/>
-                        <TextBlock Text="Device" VerticalAlignment="Center"
-                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                        <TextBlock Text="Device" VerticalAlignment="Center" Classes="nav-label"/>
                     </StackPanel>
                 </Button>
                 <Button Classes="side-nav" Grid.Row="4" ToolTip.Tip="Settings" ToolTip.Placement="Right"
                         Command="{Binding ShowSettingsCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Image Width="24" Height="24" Margin="12,8" Source="/Assets/Icons/settings.png"/>
-                        <TextBlock Text="Settings" VerticalAlignment="Center"
-                                   IsVisible="{Binding #NavPane.IsPointerOver}"/>
+                        <TextBlock Text="Settings" VerticalAlignment="Center" Classes="nav-label"/>
                     </StackPanel>
                 </Button>
             </Grid>
