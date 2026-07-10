@@ -48,9 +48,9 @@ In **Settings → Remote hosts**, add a comma-separated list of hosts
 device appears in the device picker as `lan @ host` alongside local ones, with
 full live monitoring. A remote host is typically the
 [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or
-another copy of this app with publishing enabled (Windows/macOS).
+another copy of this app with publishing enabled (Windows).
 
-### Publishing this host (Windows / macOS)
+### Publishing this host (Windows)
 
 **Settings → Publish this host on the LAN** opens a listener (default port
 `9876`, configurable) so other instances can read this machine's device. **Off
