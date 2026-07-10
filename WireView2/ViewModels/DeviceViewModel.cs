@@ -442,6 +442,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     public static string GetBundledFirmwarePath() =>
         Path.Combine(AppContext.BaseDirectory, "TG-WV-PRO2-FW.hex");
 
+    public string FirmwareUpdateHint => OperatingSystem.IsWindows()
+        ? "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using " +
+          "dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. " +
+          "Do not unplug it during the update. Requires dfu-util on PATH and a WinUSB driver for " +
+          "the DFU device (0483:df11)."
+        : "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using " +
+          "dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. " +
+          "Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules.";
+
     private static string FormatFirmwareVersion(int? version) =>
         version.HasValue ? "v" + version.Value.ToString().PadLeft(2, '0') : "-";
 
@@ -561,9 +570,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
             if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None))
             {
-                FirmwareUpdateStatus =
-                    "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
-                    "installed, then power-cycle the device and try again.";
+                FirmwareUpdateStatus = OperatingSystem.IsWindows()
+                    ? "The DFU bootloader did not appear. Install a WinUSB driver for 0483:df11 " +
+                      "(e.g. with Zadig), then power-cycle the device and try again."
+                    : "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
+                      "installed, then power-cycle the device and try again.";
                 return;
             }
 
