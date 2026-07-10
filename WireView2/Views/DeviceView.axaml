@@ -276,7 +276,7 @@
                         <ProgressBar Minimum="0" Maximum="1" Value="{Binding ThemeUploadProgress}"
                                      IsVisible="{Binding IsThemeUploadBusy}" Height="14"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
-                                   Text="Colors and preset changes upload with Apply Config. A custom background image is staged locally (with matching highlight-tinted fan frames) and written to the device's flash when you press Apply Config — the transfer takes a minute or two."/>
+                                   Text="Colors and preset changes upload when you press Apply theme (or the Apply button at the top — they do the same thing). A custom background image is staged locally (with matching highlight-tinted fan frames) and written to the device's flash on apply — the transfer takes a minute or two."/>
                     </StackPanel>
 
                     <Separator/>

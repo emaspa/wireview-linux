@@ -682,7 +682,7 @@ public sealed partial class DeviceViewModel
                 _pendingBackgroundPreviewImageInverted = CreateInvertedImage(previewImage);
                 UpdateFanPreviewFramesForCurrentState();
                 OnPropertyChanged(nameof(HasPendingBackgroundUpload));
-                ConfigStatus = "Background staged (press Apply to upload).";
+                ConfigStatus = "Background staged (press Apply theme to upload).";
             });
         }
         catch (OperationCanceledException)
@@ -912,11 +912,11 @@ public sealed partial class DeviceViewModel
                     _pendingBackgroundPreviewImageInverted = CreateInvertedImage(_pendingBackgroundPreviewImage);
                     UpdateFanPreviewFramesForCurrentState();
                     OnPropertyChanged(nameof(HasPendingBackgroundUpload));
-                    ConfigStatus = "Theme loaded and background staged (press Apply to upload).";
+                    ConfigStatus = "Theme loaded and background staged (press Apply theme to upload).";
                 }
                 else
                 {
-                    ConfigStatus = "Theme loaded (press Apply to upload colors).";
+                    ConfigStatus = "Theme loaded (press Apply theme to upload colors).";
                 }
                 SetThemePresetToCustomIfEdited();
                 RequestThemePreviewRefresh(force: true);
