@@ -122,8 +122,15 @@ public class App : Application
 
         // Non-clickable status header (live power / connection), inserted at the
         // top of the menu by UpdateTrayVisuals when the power icon is enabled.
-        _statusMenuItem = new NativeMenuItem { IsEnabled = false };
+        // Its text is refreshed only when the menu is about to show; see
+        // UpdateTrayVisuals for why per-tick updates are avoided.
+        _statusMenuItem = new NativeMenuItem { IsEnabled = false, Header = "..." };
         _statusSeparator = new NativeMenuItemSeparator();
+        // Hosts that deliver about-to-show get a fresh header; the GNOME
+        // appindicator stack does not (verified 2026-07-10), so the throttled
+        // refresh in OnTrayDataUpdated keeps it near-live as the fallback.
+        menu.NeedsUpdate += (_, _) => UpdateStatusHeader();
+        menu.Opening += (_, _) => UpdateStatusHeader();
 
         var showItem = new NativeMenuItem("Show");
         showItem.Click += (_, _) => ShowMainWindow(desktop);
@@ -221,6 +228,7 @@ public class App : Application
         // Populate the values only just before the menu is shown. Refreshing the
         // items on every poll instead makes an open menu flicker, so we don't.
         _valuesMenu.NeedsUpdate += (_, _) => UpdateValuesMenu();
+        _valuesMenu.Opening += (_, _) => UpdateValuesMenu();
 
         // Drive the tray icon/tooltip from live device data, independent of
         // whether the main window has been created yet.
@@ -232,6 +240,7 @@ public class App : Application
         // main window has never been opened (Start is idempotent).
         connector.Start();
         UpdateTrayVisuals();
+        UpdateStatusHeader();
         UpdateValuesMenu();
     }
 
@@ -240,20 +249,61 @@ public class App : Application
         if (_trayConnected == connected) return;
         _trayConnected = connected;
         if (!connected) _lastData = null;
-        Dispatcher.UIThread.Post(UpdateTrayVisuals, DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateTrayVisuals();
+            UpdateStatusHeader();
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>Writes the live power/connection text into the tray menu's status
+    /// header. Called sparingly (menu about to show, connection changes, startup):
+    /// mutating the item on every watt tick makes Avalonia 12's DBus menu exporter
+    /// re-publish the layout, visibly flashing an open menu.</summary>
+    private void UpdateStatusHeader()
+    {
+        if (_statusMenuItem != null)
+            SetHeaderIfChanged(_statusMenuItem, _trayConnected ? $"{_trayWatts} W" : "Disconnected");
     }
 
     private void OnTrayDataUpdated(object? sender, DeviceData data)
     {
-        // Keep the latest reading; the values dropdown reads it on NeedsUpdate.
         _lastData = data;
         int watts = (int)Math.Round(data.SumPowerW);
         bool connected = data.Connected;
+
+        // Menus refresh from data ticks, but throttled and change-only: our
+        // GNOME appindicator host never signals menu-open (no NeedsUpdate or
+        // Opening arrives), so this is the only way to keep an open menu's
+        // values from going stale, while updating rarely enough that the
+        // exporter's layout re-publish (a visible flash on an open menu)
+        // stays occasional.
+        if ((DateTime.UtcNow - _lastMenuRefreshUtc).TotalSeconds >= MenuRefreshSeconds)
+        {
+            _lastMenuRefreshUtc = DateTime.UtcNow;
+            Dispatcher.UIThread.Post(() =>
+            {
+                UpdateStatusHeader();
+                UpdateValuesMenu();
+            }, DispatcherPriority.Background);
+        }
+
         // Only re-render the icon when the integer watts or connection changes.
         if (watts == _trayWatts && connected == _trayConnected) return;
         _trayWatts = watts;
         _trayConnected = connected;
         Dispatcher.UIThread.Post(UpdateTrayVisuals, DispatcherPriority.Background);
+    }
+
+    private const int MenuRefreshSeconds = 3;
+    private DateTime _lastMenuRefreshUtc;
+
+    /// <summary>Sets a menu item's text only when it changed: every write makes the
+    /// DBus menu exporter re-publish the layout, which flashes an open menu.</summary>
+    private static void SetHeaderIfChanged(NativeMenuItem item, string text)
+    {
+        if (!string.Equals(item.Header as string, text, StringComparison.Ordinal))
+            item.Header = text;
     }
 
     private void UpdateTrayVisuals()
@@ -294,9 +344,11 @@ public class App : Application
         }
 
         // Menu header (on the bear icon) mirrors the power/connection status.
+        // The text itself is written in the menu's NeedsUpdate (just before it
+        // shows): mutating an item on every watt tick makes Avalonia 12's DBus
+        // menu exporter re-publish the layout, visibly flashing an open menu.
         if (_trayMenu != null && _statusMenuItem != null && _statusSeparator != null)
         {
-            _statusMenuItem.Header = statusText;
             bool present = _trayMenu.Items.Contains(_statusMenuItem);
             if (showPower && !present)
             {
@@ -336,36 +388,36 @@ public class App : Application
         var d = _lastData;
         if (!_trayConnected || d == null)
         {
-            _vTotalPower.Header = "Disconnected";
-            _vTotalCurrent.Header = "Total current: N/A";
-            _vAvgVoltage.Header = "Average voltage: N/A";
+            SetHeaderIfChanged(_vTotalPower, "Disconnected");
+            SetHeaderIfChanged(_vTotalCurrent, "Total current: N/A");
+            SetHeaderIfChanged(_vAvgVoltage, "Average voltage: N/A");
             for (int i = 0; i < _vPins.Length; i++)
-                _vPins[i].Header = $"Pin {i + 1}: N/A";
-            _vTempIn.Header = "Temp onboard in: N/A";
-            _vTempOut.Header = "Temp onboard out: N/A";
-            _vTempExt1.Header = "Temp external 1: N/A";
-            _vTempExt2.Header = "Temp external 2: N/A";
-            _vCableRating.Header = "Cable rating: N/A";
+                SetHeaderIfChanged(_vPins[i], $"Pin {i + 1}: N/A");
+            SetHeaderIfChanged(_vTempIn, "Temp onboard in: N/A");
+            SetHeaderIfChanged(_vTempOut, "Temp onboard out: N/A");
+            SetHeaderIfChanged(_vTempExt1, "Temp external 1: N/A");
+            SetHeaderIfChanged(_vTempExt2, "Temp external 2: N/A");
+            SetHeaderIfChanged(_vCableRating, "Cable rating: N/A");
             return;
         }
 
         var ci = CultureInfo.InvariantCulture;
-        _vTotalPower.Header = $"Total power: {d.SumPowerW.ToString("0.0", ci)} W";
-        _vTotalCurrent.Header = $"Total current: {d.SumCurrentA.ToString("0.00", ci)} A";
-        _vAvgVoltage.Header = $"Average voltage: {d.PinVoltage.Average().ToString("0.00", ci)} V";
+        SetHeaderIfChanged(_vTotalPower, $"Total power: {d.SumPowerW.ToString("0.0", ci)} W");
+        SetHeaderIfChanged(_vTotalCurrent, $"Total current: {d.SumCurrentA.ToString("0.00", ci)} A");
+        SetHeaderIfChanged(_vAvgVoltage, $"Average voltage: {d.PinVoltage.Average().ToString("0.00", ci)} V");
         for (int i = 0; i < _vPins.Length; i++)
         {
             double v = d.PinVoltage[i], a = d.PinCurrent[i];
-            _vPins[i].Header =
-                $"Pin {i + 1}: {v.ToString("0.00", ci)} V  {a.ToString("0.00", ci)} A  {(v * a).ToString("0.0", ci)} W";
+            SetHeaderIfChanged(_vPins[i],
+                $"Pin {i + 1}: {v.ToString("0.00", ci)} V  {a.ToString("0.00", ci)} A  {(v * a).ToString("0.0", ci)} W");
         }
-        _vTempIn.Header = $"Temp onboard in: {FormatTemp(d.OnboardTempInC)}";
-        _vTempOut.Header = $"Temp onboard out: {FormatTemp(d.OnboardTempOutC)}";
-        _vTempExt1.Header = $"Temp external 1: {FormatTemp(d.ExternalTemp1C)}";
-        _vTempExt2.Header = $"Temp external 2: {FormatTemp(d.ExternalTemp2C)}";
-        _vCableRating.Header = d.PsuCapabilityW > 0
+        SetHeaderIfChanged(_vTempIn, $"Temp onboard in: {FormatTemp(d.OnboardTempInC)}");
+        SetHeaderIfChanged(_vTempOut, $"Temp onboard out: {FormatTemp(d.OnboardTempOutC)}");
+        SetHeaderIfChanged(_vTempExt1, $"Temp external 1: {FormatTemp(d.ExternalTemp1C)}");
+        SetHeaderIfChanged(_vTempExt2, $"Temp external 2: {FormatTemp(d.ExternalTemp2C)}");
+        SetHeaderIfChanged(_vCableRating, d.PsuCapabilityW > 0
             ? $"Cable rating: {d.PsuCapabilityW} W"
-            : "Cable rating: N/A";
+            : "Cable rating: N/A");
     }
 
     private static string FormatTemp(double t) =>
