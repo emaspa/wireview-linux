@@ -7,7 +7,6 @@ arch=('x86_64')
 url="https://github.com/emaspa/wireview-linux"
 license=('custom')
 depends=('glibc' 'gcc-libs' 'zlib' 'fontconfig' 'freetype2' 'libx11' 'icu')
-optdepends=('dfu-util: in-app firmware flashing')
 provides=('wireview-linux')
 conflicts=('wireview-linux')
 # Self-contained .NET single-file binary — must not be stripped.
@@ -15,7 +14,7 @@ options=('!strip')
 source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/wireview-linux-$pkgver-linux-x64.tar.gz"
         "wireview-linux.desktop"
         "wireview-linux.png")
-sha256sums=('4cca244fca9b0cf829d8de15d1d5623fb21aa701d36234209ce66714b164da4a'
+sha256sums=('2a9c6c67cad5989747ed80c566c62d743c5fbc75289e0ad6c144656c007aac11'
             'a08180f8c00f0d8b4b8a6dc5cbf1644c5e25afb985e5bf3b7972ab33831e15e3'
             '5bdcde4399af5bd57824af8dcacdd05c6421eddbb18993210ddab805ef1aaff3')
 
