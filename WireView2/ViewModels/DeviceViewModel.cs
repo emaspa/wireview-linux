@@ -443,10 +443,10 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         Path.Combine(AppContext.BaseDirectory, "TG-WV-PRO2-FW.hex");
 
     public string FirmwareUpdateHint => OperatingSystem.IsWindows()
-        ? "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using " +
-          "dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. " +
-          "Do not unplug it during the update. Requires dfu-util on PATH and a WinUSB driver for " +
-          "the DFU device (0483:df11)."
+        ? "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB, using " +
+          "the same native DFU method as the official client. The device restarts into its " +
+          "bootloader, is flashed, and reboots on its own. Do not unplug it during the update. " +
+          "Requires a WinUSB driver for the DFU device (0483:df11)."
         : "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using " +
           "dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. " +
           "Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules.";
@@ -513,7 +513,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (await DfuUtilFlasher.GetDfuUtilVersionAsync() == null)
+        // Windows flashes natively over WinUSB like the official client;
+        // dfu-util is only the Linux path.
+        if (!OperatingSystem.IsWindows() && await DfuUtilFlasher.GetDfuUtilVersionAsync() == null)
         {
             FirmwareUpdateStatus = "dfu-util not found. Install the 'dfu-util' package and try again.";
             return;
@@ -559,7 +561,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 FirmwareUpdateStatus = "Firmware image error: " + error;
                 return;
             }
-            await File.WriteAllBytesAsync(binPath, image);
 
             FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
             switch (_device)
@@ -568,19 +569,35 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 case HwmonDevice hwmon: hwmon.EnterBootloader(); break;
             }
 
-            if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None))
-            {
-                FirmwareUpdateStatus = OperatingSystem.IsWindows()
-                    ? "The DFU bootloader did not appear. Install a WinUSB driver for 0483:df11 " +
-                      "(e.g. with Zadig), then power-cycle the device and try again."
-                    : "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
-                      "installed, then power-cycle the device and try again.";
-                return;
-            }
-
-            FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
             var progress = new Progress<double>(p => FirmwareUpdateProgress = p);
-            await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
+            if (OperatingSystem.IsWindows())
+            {
+                // Native WinUSB DFU, same method as the official Windows client
+                // (it waits for the DFU interface and handles the Guillemot
+                // driver conflict internally). The flat image is flashed at
+                // 0x08000000, which is where the bundled hex is based.
+                if (baseAddress != 0x08000000u)
+                {
+                    FirmwareUpdateStatus = $"Unexpected firmware base address 0x{baseAddress:X8}.";
+                    return;
+                }
+                FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
+                using var imageStream = new MemoryStream(image);
+                await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None);
+            }
+            else
+            {
+                await File.WriteAllBytesAsync(binPath, image);
+                if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None))
+                {
+                    FirmwareUpdateStatus =
+                        "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
+                        "installed, then power-cycle the device and try again.";
+                    return;
+                }
+                FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
+                await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
+            }
 
             FirmwareUpdateProgress = 1.0;
             FirmwareUpdateStatus = "Firmware update complete. The device is restarting.";
