@@ -48,6 +48,11 @@ THE 1.0.7 PORT IS COMPLETE — all sections done and hardware-verified.
 - RELEASE CHECKLIST (v1.2.0.0): when assembling the PPA source package, extend
   debian/control to `Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util`
   (rpm Recommends / AUR optdepends / flatpak modules already committed here).
+  Ship/update wireview-hwmon first or together (the app's log read + theme SPI
+  access under the daemon need wireviewd with WCMD_SUSPEND/RESUME_SERIAL).
+  Smoke-test wireview2-plus.exe on a real Windows box: the win-x64 publish
+  compiles clean on Avalonia 12 and the stack matches the official client, but
+  only Linux was runtime-tested during the port.
 
 Upstream 1.0.7 changelog items map to five feature areas plus dependency bumps. The serial wire
 protocol is **unchanged** (UsbCmd/NVM_CMD/SCREEN_CMD byte-identical), so we are already
