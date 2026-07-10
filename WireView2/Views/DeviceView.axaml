@@ -193,86 +193,93 @@
 
                     <Separator/>
 
-                    <!-- Theme editor (config v2+ firmware) -->
-                    <StackPanel Spacing="8" IsVisible="{Binding IsThemePresetSelectionVisible}">
-                        <TextBlock Text="Theme" FontWeight="SemiBold" Opacity="0.7"/>
-
-                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center"/>
+                    <!-- Theme editor (config v2+ firmware), laid out like the original client -->
+                    <StackPanel Spacing="10" IsVisible="{Binding IsThemePresetSelectionVisible}">
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto" RowSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Theme" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding UiThemePresets}"
-                                      SelectedItem="{Binding SelectedUiThemePreset}" Width="160"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Primary Color:" VerticalAlignment="Center"/>
-                            <ColorPicker Grid.Row="1" Grid.Column="1" Color="{Binding UiPrimaryColor}"
-                                         Width="160" HorizontalAlignment="Left" IsAlphaEnabled="False"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Secondary Color:" VerticalAlignment="Center"/>
-                            <ColorPicker Grid.Row="2" Grid.Column="1" Color="{Binding UiSecondaryColor}"
-                                         Width="160" HorizontalAlignment="Left" IsAlphaEnabled="False"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Highlight Color:" VerticalAlignment="Center"/>
-                            <ColorPicker Grid.Row="3" Grid.Column="1" Color="{Binding UiHighlightColor}"
-                                         Width="160" HorizontalAlignment="Left" IsAlphaEnabled="False"/>
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Background Color:" VerticalAlignment="Center"/>
-                            <ColorPicker Grid.Row="4" Grid.Column="1" Color="{Binding UiBackgroundColor}"
-                                         Width="160" HorizontalAlignment="Left" IsAlphaEnabled="False"/>
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Background Image:" VerticalAlignment="Center"/>
-                            <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding ThemeBackgrounds}"
-                                      SelectedItem="{Binding UiBackgroundBitmap}" Width="160"/>
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Invert Display:" VerticalAlignment="Center"/>
-                            <CheckBox Grid.Row="6" Grid.Column="1" IsChecked="{Binding UiDisplayInversionEnabled}"/>
+                                      SelectedItem="{Binding SelectedUiThemePreset}" MinWidth="120"
+                                      HorizontalAlignment="Left"/>
+                            <CheckBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                      Content="Display inversion" IsChecked="{Binding UiDisplayInversionEnabled}"/>
                         </Grid>
 
-                        <!-- Live device screen preview -->
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Border BorderBrush="{DynamicResource NavPaneBorderBrush}" BorderThickness="1"
-                                    Width="322" Height="172" HorizontalAlignment="Left">
-                                <Panel>
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Primary Text Color" VerticalAlignment="Center"/>
+                            <ColorPicker Grid.Row="0" Grid.Column="1" Color="{Binding UiPrimaryColor}"
+                                         HorizontalAlignment="Left" IsAlphaEnabled="False"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Secondary Text Color" VerticalAlignment="Center"/>
+                            <ColorPicker Grid.Row="1" Grid.Column="1" Color="{Binding UiSecondaryColor}"
+                                         HorizontalAlignment="Left" IsAlphaEnabled="False"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Highlight Color" VerticalAlignment="Center"/>
+                            <ColorPicker Grid.Row="2" Grid.Column="1" Color="{Binding UiHighlightColor}"
+                                         HorizontalAlignment="Left" IsAlphaEnabled="False"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Background Color" VerticalAlignment="Center"/>
+                            <ColorPicker Grid.Row="3" Grid.Column="1" Color="{Binding UiBackgroundColor}"
+                                         HorizontalAlignment="Left" IsAlphaEnabled="False"/>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Background" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding ThemeBackgrounds}"
+                                      SelectedItem="{Binding UiBackgroundBitmap}" MinWidth="120"
+                                      HorizontalAlignment="Left"/>
+                        </Grid>
+
+                        <!-- Theme preview -->
+                        <Border BorderBrush="{DynamicResource NavPaneBorderBrush}" BorderThickness="1"
+                                CornerRadius="4" Padding="12" HorizontalAlignment="Left">
+                            <StackPanel Spacing="8">
+                                <DockPanel Width="320">
+                                    <Button DockPanel.Dock="Right" Content="Refresh" Padding="10,2"
+                                            Command="{Binding RefreshThemePreviewCommand}"/>
+                                    <TextBlock Text="Theme preview" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <Panel Width="320" Height="170" HorizontalAlignment="Left">
                                     <Image Width="320" Height="170" Source="{Binding ThemeBackgroundPreview}"
                                            Stretch="None"/>
                                     <TextBlock Text="Reading theme from device…" HorizontalAlignment="Center"
                                                VerticalAlignment="Center" Opacity="0.7"
                                                IsVisible="{Binding IsThemePreviewBusy}"/>
                                 </Panel>
-                            </Border>
-                            <StackPanel Spacing="8" VerticalAlignment="Center">
-                                <Button Content="Refresh preview" Command="{Binding RefreshThemePreviewCommand}"/>
-                                <Button Content="Select background…" Click="OnSelectBackgroundClicked"/>
-                                <Button Content="Clear staged background" Click="OnClearBackgroundClicked"
-                                        IsVisible="{Binding HasPendingBackgroundUpload}"/>
                             </StackPanel>
-                        </StackPanel>
+                        </Border>
 
-                        <!-- Import fit controls (only meaningful with a staged background) -->
-                        <Grid ColumnDefinitions="180,*,70" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4"
-                              IsVisible="{Binding HasPendingBackgroundUpload}">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Import Fit:" VerticalAlignment="Center"/>
+                        <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Import fit" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding BackgroundImportFitModes}"
-                                      SelectedItem="{Binding BackgroundImportFit}" Width="160" HorizontalAlignment="Left"/>
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Import Scale:" VerticalAlignment="Center"/>
-                            <Slider Grid.Row="1" Grid.Column="1" Value="{Binding BackgroundImportScale}"
-                                    Minimum="0.2" Maximum="3" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding BackgroundImportScale, StringFormat='{}{0:F2}x'}"
-                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Offset X:" VerticalAlignment="Center"/>
-                            <Slider Grid.Row="2" Grid.Column="1" Value="{Binding BackgroundImportOffsetX}"
-                                    Minimum="-320" Maximum="320" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding BackgroundImportOffsetX}"
-                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Offset Y:" VerticalAlignment="Center"/>
-                            <Slider Grid.Row="3" Grid.Column="1" Value="{Binding BackgroundImportOffsetY}"
-                                    Minimum="-170" Maximum="170" TickFrequency="1" IsSnapToTickEnabled="True"/>
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding BackgroundImportOffsetY}"
-                                       VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                      SelectedItem="{Binding BackgroundImportFit}" MinWidth="120"
+                                      HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Import scale" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding BackgroundImportScale}"
+                                           Minimum="0.2" Maximum="3" Increment="0.1" FormatString="0.0"
+                                           Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Offset X" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding BackgroundImportOffsetX}"
+                                           Minimum="-320" Maximum="320" Increment="1" FormatString="0"
+                                           Width="120" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Offset Y" VerticalAlignment="Center"/>
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding BackgroundImportOffsetY}"
+                                           Minimum="-170" Maximum="170" Increment="1" FormatString="0"
+                                           Width="120" HorizontalAlignment="Left"/>
                         </Grid>
 
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Content="Apply theme" FontWeight="SemiBold"
+                        <WrapPanel>
+                            <Button Content="Select background from file…" Margin="0,0,8,8"
+                                    Click="OnSelectBackgroundClicked"
+                                    IsEnabled="{Binding CanSelectBackgroundFromFile}"/>
+                            <Button Content="Load theme file (.wv2t)…" Margin="0,0,8,8"
+                                    Click="OnLoadThemeFileClicked"
+                                    IsEnabled="{Binding CanLoadSaveThemeFile}"/>
+                            <Button Content="Save theme file (.wv2t)…" Margin="0,0,8,8"
+                                    Click="OnSaveThemeFileClicked"
+                                    IsEnabled="{Binding CanLoadSaveThemeFile}"/>
+                            <Button Content="Restore default background + fan" Margin="0,0,8,8"
+                                    Command="{Binding RestoreThemeAssetsToDefaultCommand}"
+                                    IsEnabled="{Binding CanRestoreThemeAssets}"/>
+                            <Button Content="Apply theme" FontWeight="SemiBold" Margin="0,0,8,8"
                                     Command="{Binding ApplyConfigCommand}"/>
-                            <Button Content="Load theme file…" Click="OnLoadThemeFileClicked"
-                                    IsEnabled="{Binding CanLoadSaveThemeFile}"/>
-                            <Button Content="Save theme file…" Click="OnSaveThemeFileClicked"
-                                    IsEnabled="{Binding CanLoadSaveThemeFile}"/>
-                            <Button Content="Restore default background + fan"
-                                    Command="{Binding RestoreThemeAssetsToDefaultCommand}"/>
-                        </StackPanel>
+                            <Button Content="Clear staged background" Margin="0,0,8,8"
+                                    Click="OnClearBackgroundClicked"
+                                    IsVisible="{Binding HasPendingBackgroundUpload}"/>
+                        </WrapPanel>
                         <ProgressBar Minimum="0" Maximum="1" Value="{Binding ThemeUploadProgress}"
                                      IsVisible="{Binding IsThemeUploadBusy}" Height="14"/>
                         <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"

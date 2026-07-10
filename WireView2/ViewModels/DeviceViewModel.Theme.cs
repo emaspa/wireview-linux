@@ -55,6 +55,7 @@ public sealed partial class DeviceViewModel
     private bool _fanPreviewUseFrame1 = true;
     private DispatcherTimer? _fanPreviewTimer;
     private CancellationTokenSource? _themePreviewCts;
+    private int _previewRetriesLeft;
 
     // ---- Pending background import state ----
     private string? _pendingBackgroundFilePath;
@@ -140,6 +141,13 @@ public sealed partial class DeviceViewModel
 
     public bool CanLoadSaveThemeFile => IsUiV2Supported;
 
+    /// <summary>Background import and factory restore both target a real background
+    /// slot; neither is meaningful while the slot is Disabled.</summary>
+    public bool CanSelectBackgroundFromFile =>
+        IsUiV2Supported && UiBackgroundBitmap != WireViewPro2Device.THEME_BACKGROUND.Disabled;
+
+    public bool CanRestoreThemeAssets => CanSelectBackgroundFromFile;
+
     // ======================== Wiring (called from the constructor) ========================
 
     private void InitializeThemeEditor()
@@ -159,6 +167,9 @@ public sealed partial class DeviceViewModel
         switch (e.PropertyName)
         {
             case nameof(IsUiV2Supported):
+                OnPropertyChanged(nameof(CanLoadSaveThemeFile));
+                OnPropertyChanged(nameof(CanSelectBackgroundFromFile));
+                OnPropertyChanged(nameof(CanRestoreThemeAssets));
                 if (IsUiV2Supported) RequestThemePreviewRefresh(force: true);
                 else ClearThemePreview();
                 break;
@@ -187,6 +198,10 @@ public sealed partial class DeviceViewModel
 
             // Different slot selected — the on-device asset must be re-read.
             case nameof(UiBackgroundBitmap):
+                OnPropertyChanged(nameof(CanSelectBackgroundFromFile));
+                OnPropertyChanged(nameof(CanRestoreThemeAssets));
+                RequestThemePreviewRefresh(force: true);
+                break;
             case nameof(UiFanBitmap):
                 RequestThemePreviewRefresh(force: true);
                 break;
@@ -208,6 +223,20 @@ public sealed partial class DeviceViewModel
         }
         if (Dispatcher.UIThread.CheckAccess()) Clear();
         else Dispatcher.UIThread.Post(Clear);
+    }
+
+    // Theme upload progress is reported from threadpool continuations; bindings
+    // only observe property changes raised on the UI thread.
+    private void ReportThemeUpload(double progress)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) ThemeUploadProgress = progress;
+        else Dispatcher.UIThread.Post(() => ThemeUploadProgress = progress);
+    }
+
+    private void SetThemeUploadBusy(bool busy)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) IsThemeUploadBusy = busy;
+        else Dispatcher.UIThread.Post(() => IsThemeUploadBusy = busy);
     }
 
     // ======================== Device access routing ========================
@@ -247,6 +276,7 @@ public sealed partial class DeviceViewModel
             _themePreviewCts?.Cancel();
             _themePreviewCts = new CancellationTokenSource();
             CancellationToken ct = _themePreviewCts.Token;
+            _previewRetriesLeft = 3;
             _ = Task.Run(() => LoadThemePreviewAsync(ct), ct);
         }
     }
@@ -316,6 +346,16 @@ public sealed partial class DeviceViewModel
                 ThemeBackgroundPreview = null;
                 ConfigStatus = "Theme preview failed: " + ex.Message;
             });
+
+            // The first automatic load often races the daemon handshake right
+            // after startup; retry a few times instead of waiting for the user.
+            if (_previewRetriesLeft > 0 && !ct.IsCancellationRequested)
+            {
+                _previewRetriesLeft--;
+                await Task.Delay(4000, ct).ConfigureAwait(false);
+                if (!ct.IsCancellationRequested && IsConnected && IsUiV2Supported)
+                    _ = LoadThemePreviewAsync(ct);
+            }
         }
         finally
         {
@@ -795,8 +835,8 @@ public sealed partial class DeviceViewModel
             throw new InvalidOperationException("Staged background is not ready yet.");
 
         ConfigStatus = "Uploading background to device…";
-        IsThemeUploadBusy = true;
-        ThemeUploadProgress = 0;
+        SetThemeUploadBusy(true);
+        ReportThemeUpload(0);
         try
         {
             var highlight = UiHighlightColor;
@@ -810,8 +850,8 @@ public sealed partial class DeviceViewModel
                 return (RenderFanPreviewToRgb565(f1), RenderFanPreviewToRgb565(f2));
             }).ConfigureAwait(false);
 
-            var bgProgress = new Progress<double>(p => ThemeUploadProgress = p * 0.75);
-            var fanProgress = new Progress<double>(p => ThemeUploadProgress = 0.75 + p * 0.25);
+            var bgProgress = new Progress<double>(p => ReportThemeUpload(p * 0.75));
+            var fanProgress = new Progress<double>(p => ReportThemeUpload(0.75 + p * 0.25));
             await RunOnSerialDeviceAsync<object?>(async dev =>
             {
                 await dev.WriteThemeBackgroundRgb565Async(backgroundSlot, bgBytes, bgProgress).ConfigureAwait(false);
@@ -833,8 +873,8 @@ public sealed partial class DeviceViewModel
         }
         finally
         {
-            IsThemeUploadBusy = false;
-            ThemeUploadProgress = 1.0;
+            SetThemeUploadBusy(false);
+            ReportThemeUpload(1.0);
         }
     }
 
@@ -997,8 +1037,8 @@ public sealed partial class DeviceViewModel
             if (confirm != MessageBox.MessageBoxResult.Yes)
                 return;
 
-            IsThemeUploadBusy = true;
-            ThemeUploadProgress = 0;
+            SetThemeUploadBusy(true);
+            ReportThemeUpload(0);
             ConfigStatus = "Restoring factory theme assets…";
 
             // A running preview read would hold the daemon suspended and starve
@@ -1013,8 +1053,8 @@ public sealed partial class DeviceViewModel
             var fan1Bytes = SliceFactoryAsset(factoryImage, fan1Offset, (uint)ThemeFanBytes);
             var fan2Bytes = SliceFactoryAsset(factoryImage, fan2Offset, (uint)ThemeFanBytes);
 
-            var bgProgress = new Progress<double>(p => ThemeUploadProgress = 0.1 + p * 0.7);
-            var fanProgress = new Progress<double>(p => ThemeUploadProgress = 0.8 + p * 0.2);
+            var bgProgress = new Progress<double>(p => ReportThemeUpload(0.1 + p * 0.7));
+            var fanProgress = new Progress<double>(p => ReportThemeUpload(0.8 + p * 0.2));
             await RunOnSerialDeviceAsync<object?>(async dev =>
             {
                 await dev.WriteThemeBackgroundRgb565Async(background, bgBytes, bgProgress).ConfigureAwait(false);
@@ -1046,6 +1086,11 @@ public sealed partial class DeviceViewModel
                 await DeviceScreenCmdAsync(detour);
                 await Task.Delay(3000);
                 await DeviceScreenCmdAsync(_lastCommandedScreen);
+                // Let the device actually paint the returned screen. The preview
+                // refresh below starts an SPI read that pauses display updates,
+                // and freezing the device mid-transition leaves the detour screen
+                // on the panel.
+                await Task.Delay(1500);
             }
             catch (Exception redrawEx)
             {
@@ -1069,8 +1114,8 @@ public sealed partial class DeviceViewModel
         }
         finally
         {
-            IsThemeUploadBusy = false;
-            ThemeUploadProgress = 1.0;
+            SetThemeUploadBusy(false);
+            ReportThemeUpload(1.0);
         }
     }
 }
