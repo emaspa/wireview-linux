@@ -1,25 +1,87 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
-using LiveChartsCore;
-using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
 
 namespace WireView2.Controls;
 
-/// <summary>Grouped vertical bar chart drawn directly with DrawingContext —
-/// replaces the LiveCharts CartesianChart for the Overview per-wire bars (ported
-/// from the upstream 1.0.7 Windows client). Still consumes LiveCharts data types
-/// (ColumnSeries&lt;double&gt; / Axis) as its input contract. Bars get a
-/// DeepSkyBlue→Red gradient scaled by each value's position in the Y range.</summary>
+/// <summary>One bar series for <see cref="SimpleBarChart"/>: a name (a "(X)"
+/// suffix doubles as the unit for per-bar value labels), an optional fill color
+/// used as the gradient base, the Y-axis index it scales against, and an
+/// observable value list (update elements in place to refresh the chart).</summary>
+public sealed class SimpleBarSeries : INotifyPropertyChanged
+{
+    private bool _isVisible = true;
+
+    public string? Name { get; init; }
+    public Color? Fill { get; init; }
+    public int ScalesYAt { get; init; }
+    public ObservableCollection<double> Values { get; } = new();
+
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set
+        {
+            if (_isVisible == value) return;
+            _isVisible = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsVisible)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
+/// <summary>Axis for <see cref="SimpleBarChart"/>: fixed Y limits (null = auto
+/// from data) and optional per-group X labels.</summary>
+public sealed class SimpleAxis : INotifyPropertyChanged
+{
+    private double? _minLimit;
+    private double? _maxLimit;
+    private IList<string>? _labels;
+
+    public double? MinLimit
+    {
+        get => _minLimit;
+        set => Set(ref _minLimit, value);
+    }
+
+    public double? MaxLimit
+    {
+        get => _maxLimit;
+        set => Set(ref _maxLimit, value);
+    }
+
+    public IList<string>? Labels
+    {
+        get => _labels;
+        set => Set(ref _labels, value);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+}
+
+/// <summary>Grouped vertical bar chart drawn directly with DrawingContext,
+/// ported from the upstream 1.0.7 Windows client (which fed it LiveCharts data
+/// types; this port uses its own <see cref="SimpleBarSeries"/>/<see cref="SimpleAxis"/>
+/// so the LiveCharts dependency could be dropped). Bars get a fill→red gradient
+/// scaled by each value's position in its Y range.</summary>
 public sealed class SimpleBarChart : Control
 {
     private const double MinBarHeightPx = 3.0;
@@ -31,19 +93,19 @@ public sealed class SimpleBarChart : Control
     public static readonly StyledProperty<string?> LabelProperty =
         AvaloniaProperty.Register<SimpleBarChart, string?>(nameof(Label));
 
-    public static readonly StyledProperty<IReadOnlyList<ISeries>?> SeriesProperty =
-        AvaloniaProperty.Register<SimpleBarChart, IReadOnlyList<ISeries>?>(nameof(Series));
+    public static readonly StyledProperty<IReadOnlyList<SimpleBarSeries>?> SeriesProperty =
+        AvaloniaProperty.Register<SimpleBarChart, IReadOnlyList<SimpleBarSeries>?>(nameof(Series));
 
-    public static readonly StyledProperty<Axis[]?> XAxesProperty =
-        AvaloniaProperty.Register<SimpleBarChart, Axis[]?>(nameof(XAxes));
+    public static readonly StyledProperty<SimpleAxis[]?> XAxesProperty =
+        AvaloniaProperty.Register<SimpleBarChart, SimpleAxis[]?>(nameof(XAxes));
 
-    public static readonly StyledProperty<Axis[]?> YAxesProperty =
-        AvaloniaProperty.Register<SimpleBarChart, Axis[]?>(nameof(YAxes));
+    public static readonly StyledProperty<SimpleAxis[]?> YAxesProperty =
+        AvaloniaProperty.Register<SimpleBarChart, SimpleAxis[]?>(nameof(YAxes));
 
     public static readonly StyledProperty<bool> ShowBarValuesProperty =
         AvaloniaProperty.Register<SimpleBarChart, bool>(nameof(ShowBarValues));
 
-    private IReadOnlyList<ISeries>? _subscribedSeries;
+    private IReadOnlyList<SimpleBarSeries>? _subscribedSeries;
     private readonly Dictionary<INotifyCollectionChanged, NotifyCollectionChangedEventHandler> _collectionHandlers = new();
     private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _propertyHandlers = new();
 
@@ -58,7 +120,7 @@ public sealed class SimpleBarChart : Control
 
     private IBrush TextBrush => Foreground ?? Brushes.LightGray;
 
-    public IReadOnlyList<ISeries>? Series
+    public IReadOnlyList<SimpleBarSeries>? Series
     {
         get => GetValue(SeriesProperty);
         set => SetValue(SeriesProperty, value);
@@ -70,13 +132,13 @@ public sealed class SimpleBarChart : Control
         set => SetValue(LabelProperty, value);
     }
 
-    public Axis[]? XAxes
+    public SimpleAxis[]? XAxes
     {
         get => GetValue(XAxesProperty);
         set => SetValue(XAxesProperty, value);
     }
 
-    public Axis[]? YAxes
+    public SimpleAxis[]? YAxes
     {
         get => GetValue(YAxesProperty);
         set => SetValue(YAxesProperty, value);
@@ -100,7 +162,7 @@ public sealed class SimpleBarChart : Control
     {
         base.OnPropertyChanged(change);
         if (change.Property == SeriesProperty)
-            SubscribeToSeries(change.NewValue as IReadOnlyList<ISeries>);
+            SubscribeToSeries(change.NewValue as IReadOnlyList<SimpleBarSeries>);
         if (change.Property == XAxesProperty || change.Property == YAxesProperty)
         {
             SubscribeToAxes(XAxes, YAxes);
@@ -108,7 +170,7 @@ public sealed class SimpleBarChart : Control
         }
     }
 
-    private void SubscribeToSeries(IReadOnlyList<ISeries>? series)
+    private void SubscribeToSeries(IReadOnlyList<SimpleBarSeries>? series)
     {
         if (_subscribedSeries == series) return;
         UnsubscribeAll();
@@ -117,33 +179,27 @@ public sealed class SimpleBarChart : Control
 
         foreach (var s in series)
         {
-            if (s is not ColumnSeries<double> column) continue;
+            NotifyCollectionChangedEventHandler handler = delegate { InvalidateOnUiThread(); };
+            _collectionHandlers[s.Values] = handler;
+            s.Values.CollectionChanged += handler;
 
-            if (column.Values is INotifyCollectionChanged incc)
-            {
-                NotifyCollectionChangedEventHandler handler = delegate { InvalidateOnUiThread(); };
-                _collectionHandlers[incc] = handler;
-                incc.CollectionChanged += handler;
-            }
-            INotifyPropertyChanged inpc = column;
             PropertyChangedEventHandler pHandler = delegate { InvalidateOnUiThread(); };
-            _propertyHandlers[inpc] = pHandler;
-            inpc.PropertyChanged += pHandler;
+            _propertyHandlers[s] = pHandler;
+            s.PropertyChanged += pHandler;
         }
         SubscribeToAxes(XAxes, YAxes);
         InvalidateOnUiThread();
     }
 
-    private void SubscribeToAxes(Axis[]? xAxes, Axis[]? yAxes)
+    private void SubscribeToAxes(SimpleAxis[]? xAxes, SimpleAxis[]? yAxes)
     {
-        foreach (var axis in (xAxes ?? Array.Empty<Axis>()).Concat(yAxes ?? Array.Empty<Axis>()))
+        foreach (var axis in (xAxes ?? Array.Empty<SimpleAxis>()).Concat(yAxes ?? Array.Empty<SimpleAxis>()))
         {
-            INotifyPropertyChanged? inpc = axis;
-            if (inpc != null && !_propertyHandlers.ContainsKey(inpc))
+            if (!_propertyHandlers.ContainsKey(axis))
             {
                 PropertyChangedEventHandler handler = delegate { InvalidateOnUiThread(); };
-                _propertyHandlers[inpc] = handler;
-                inpc.PropertyChanged += handler;
+                _propertyHandlers[axis] = handler;
+                axis.PropertyChanged += handler;
             }
         }
     }
@@ -198,24 +254,19 @@ public sealed class SimpleBarChart : Control
         var series = Series;
         if (series == null || series.Count == 0) return null;
 
-        var visible = series.OfType<ColumnSeries<double>>().Where(s => s.IsVisible).ToList();
+        var visible = series.Where(s => s.IsVisible).ToList();
         if (visible.Count == 0) return null;
 
-        IEnumerable<double>? first = visible.Select(c => c.Values?.Cast<double>())
-            .FirstOrDefault(v => v != null);
-        if (first == null) return null;
-
-        int count = first.Count();
+        int count = visible.Max(s => s.Values.Count);
         if (count <= 0) return null;
 
         var sb = new StringBuilder(visible.Count * count * 6);
-        foreach (var column in visible)
+        foreach (var s in visible)
         {
-            IEnumerable<double>? values = column.Values?.Cast<double>();
-            if (values == null) continue;
             for (int i = 0; i < count; i++)
             {
-                sb.Append(values.ElementAtOrDefault(i).ToString("R", CultureInfo.InvariantCulture));
+                double v = i < s.Values.Count ? s.Values[i] : 0.0;
+                sb.Append(v.ToString("R", CultureInfo.InvariantCulture));
                 sb.Append('|');
             }
             sb.Append('#');
@@ -243,16 +294,14 @@ public sealed class SimpleBarChart : Control
         var series = Series;
         if (series == null || series.Count == 0) return;
 
-        var visible = series.OfType<ColumnSeries<double>>().Where(s => s.IsVisible).ToList();
+        var visible = series.Where(s => s.IsVisible).ToList();
         if (visible.Count == 0) return;
 
-        IEnumerable<double>? firstValues = visible.Select(c => c.Values?.Cast<double>())
-            .FirstOrDefault(v => v != null);
-        int valueCount = firstValues?.Count() ?? 0;
+        int valueCount = visible.Max(s => s.Values.Count);
         if (valueCount <= 0) return;
 
         IList<string>? xLabels = XAxes?.FirstOrDefault()?.Labels;
-        Axis[] yAxes = YAxes ?? Array.Empty<Axis>();
+        SimpleAxis[] yAxes = YAxes ?? Array.Empty<SimpleAxis>();
 
         // Labels may be multi-line (one measure per visible series) — size the
         // bottom band to the tallest one so lines never overlap the bars.
@@ -287,12 +336,10 @@ public sealed class SimpleBarChart : Control
             axisDataMin[i] = double.PositiveInfinity;
             axisDataMax[i] = double.NegativeInfinity;
         }
-        foreach (var column in visible)
+        foreach (var s in visible)
         {
-            int axisIndex = Math.Clamp(column.ScalesYAt, 0, Math.Max(0, axisDataMin.Length - 1));
-            IEnumerable<double>? values = column.Values?.Cast<double>();
-            if (values == null) continue;
-            foreach (double v in values.Take(valueCount))
+            int axisIndex = Math.Clamp(s.ScalesYAt, 0, Math.Max(0, axisDataMin.Length - 1));
+            foreach (double v in s.Values.Take(valueCount))
             {
                 if (!double.IsFinite(v)) continue;
                 if (v < axisDataMin[axisIndex]) axisDataMin[axisIndex] = v;
@@ -308,16 +355,13 @@ public sealed class SimpleBarChart : Control
         {
             for (int si = 0; si < visible.Count; si++)
             {
-                var column = visible[si];
-                int axisIndex = Math.Clamp(column.ScalesYAt, 0, Math.Max(0, yAxes.Length - 1));
+                var s = visible[si];
+                int axisIndex = Math.Clamp(s.ScalesYAt, 0, Math.Max(0, yAxes.Length - 1));
                 double yMin = GetYMin(axisIndex);
                 double yMax = GetYMax(axisIndex);
                 if (yMax <= yMin) yMax = yMin + 1.0;
 
-                IEnumerable<double>? values = column.Values?.Cast<double>();
-                if (values == null) continue;
-
-                double value = values.ElementAtOrDefault(gi);
+                double value = gi < s.Values.Count ? s.Values[gi] : 0.0;
                 double left = plot.Left + gi * groupWidth + groupGap / 2.0 + si * barWidth;
                 double right = left + Math.Max(1.0, barWidth - 1.0);
 
@@ -328,11 +372,7 @@ public sealed class SimpleBarChart : Control
                 if (top > minTop) top = minTop;
 
                 var barRect = new Rect(new Point(left, top), new Point(right, plot.Bottom));
-                // A SolidColorPaint fill on the series overrides the default base
-                // color so multi-series charts stay distinguishable.
-                Color baseColor = column.Fill is SolidColorPaint paint
-                    ? Color.FromArgb(paint.Color.Alpha, paint.Color.Red, paint.Color.Green, paint.Color.Blue)
-                    : Colors.DeepSkyBlue;
+                Color baseColor = s.Fill ?? Colors.DeepSkyBlue;
                 var tipColor = Lerp(baseColor, Colors.Red, ratio);
                 var brush = new LinearGradientBrush
                 {
@@ -350,7 +390,7 @@ public sealed class SimpleBarChart : Control
 
                 if (ShowBarValues && double.IsFinite(value))
                 {
-                    string unit = ExtractUnit(column.Name);
+                    string unit = ExtractUnit(s.Name);
                     string text = unit.Length > 0 ? $"{value:0.0} {unit}" : $"{value:0.0}";
                     var valueLabel = new FormattedText(text, CultureInfo.InvariantCulture,
                         FlowDirection.LeftToRight, Typeface.Default, 11.0,

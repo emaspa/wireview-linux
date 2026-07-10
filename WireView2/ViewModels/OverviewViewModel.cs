@@ -3,10 +3,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using CommunityToolkit.Mvvm.Input;
-using LiveChartsCore;
-using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
-using SkiaSharp;
+using Avalonia.Media;
+using WireView2.Controls;
 using WireView2.Device;
 
 namespace WireView2.ViewModels;
@@ -35,13 +33,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     // In-place element updates raise CollectionChanged(Replace), which is what
     // SimpleBarChart listens for; reassigning Values every poll would leak
     // subscriptions instead.
-    private readonly ObservableCollection<double> _voltageValues = new();
-    private readonly ObservableCollection<double> _currentValues = new();
-    private readonly ObservableCollection<double> _powerValues = new();
-
-    private readonly ColumnSeries<double> _seriesVoltage;
-    private readonly ColumnSeries<double> _seriesCurrent;
-    private readonly ColumnSeries<double> _seriesPower;
+    private readonly SimpleBarSeries _seriesVoltage;
+    private readonly SimpleBarSeries _seriesCurrent;
+    private readonly SimpleBarSeries _seriesPower;
 
     private bool _showCurrent = true;
     private bool _showVoltage;
@@ -169,9 +163,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<FaultItem> Faults { get; } = new();
 
-    public ISeries[] BarSeries { get; }
-    public Axis[] XAxes { get; }
-    public Axis[] YAxes { get; }
+    public SimpleBarSeries[] BarSeries { get; }
+    public SimpleAxis[] XAxes { get; }
+    public SimpleAxis[] YAxes { get; }
 
     public bool ShowCurrent
     {
@@ -217,51 +211,44 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         _connector = connector ?? DeviceAutoConnector.Shared;
         _ownsConnector = connector != null && connector != DeviceAutoConnector.Shared;
 
-        for (int i = 0; i < _wiresCount; i++)
-        {
-            _voltageValues.Add(0.0);
-            _currentValues.Add(0.0);
-            _powerValues.Add(0.0);
-        }
-
-        // Explicit fills keep the toggled series distinct: SimpleBarChart uses a
-        // series' SolidColorPaint fill as its gradient base and for the per-bar
-        // value labels (voltage = orange, current = blue, power = red).
-        _seriesVoltage = new ColumnSeries<double>
+        // Explicit fills keep the toggled series distinct: SimpleBarChart uses
+        // the fill as its gradient base and for the per-bar value labels
+        // (voltage = orange, current = blue, power = red).
+        _seriesVoltage = new SimpleBarSeries
         {
             Name = "Voltage (V)",
             ScalesYAt = 0,
-            Values = _voltageValues,
-            Fill = new SolidColorPaint(new SKColor(255, 152, 0)),
+            Fill = Color.FromRgb(255, 152, 0),
             IsVisible = _showVoltage,
         };
-        _seriesCurrent = new ColumnSeries<double>
+        _seriesCurrent = new SimpleBarSeries
         {
             Name = "Current (A)",
             ScalesYAt = 1,
-            Values = _currentValues,
-            Fill = new SolidColorPaint(new SKColor(33, 150, 243)),
+            Fill = Color.FromRgb(33, 150, 243),
             IsVisible = _showCurrent,
         };
-        _seriesPower = new ColumnSeries<double>
+        _seriesPower = new SimpleBarSeries
         {
             Name = "Power (W)",
             ScalesYAt = 2,
-            Values = _powerValues,
-            Fill = new SolidColorPaint(new SKColor(244, 67, 54)),
+            Fill = Color.FromRgb(244, 67, 54),
             IsVisible = _showPower,
         };
-        BarSeries = new ISeries[] { _seriesVoltage, _seriesCurrent, _seriesPower };
+        BarSeries = new[] { _seriesVoltage, _seriesCurrent, _seriesPower };
+        for (int i = 0; i < _wiresCount; i++)
+        {
+            _seriesVoltage.Values.Add(0.0);
+            _seriesCurrent.Values.Add(0.0);
+            _seriesPower.Values.Add(0.0);
+        }
 
-        XAxes = new Axis[]
+        XAxes = new[] { new SimpleAxis() };
+        YAxes = new[]
         {
-            new Axis { Labels = Enumerable.Repeat(string.Empty, _wiresCount).ToArray() }
-        };
-        YAxes = new Axis[]
-        {
-            new Axis { MinLimit = 0.0, MaxLimit = PerWireVoltageMaxV },
-            new Axis { MinLimit = 0.0, MaxLimit = PerWireCurrentMaxA },
-            new Axis { MinLimit = 0.0, MaxLimit = PerWirePowerMaxW },
+            new SimpleAxis { MinLimit = 0.0, MaxLimit = PerWireVoltageMaxV },
+            new SimpleAxis { MinLimit = 0.0, MaxLimit = PerWireCurrentMaxA },
+            new SimpleAxis { MinLimit = 0.0, MaxLimit = PerWirePowerMaxW },
         };
 
         Faults.Add(new FaultItem("Chip Over-Temp", WireViewPro2Device.FAULT.FAULT_OTP_TCHIP, ClearFault));
@@ -331,9 +318,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         YAxes[1].MaxLimit = pinCurrent.Any(v => v > PerWireCurrentMaxA) ? null : PerWireCurrentMaxA;
         YAxes[2].MaxLimit = powers.Any(v => v > PerWirePowerMaxW) ? null : PerWirePowerMaxW;
 
-        CopyInto(_voltageValues, pinVoltage);
-        CopyInto(_currentValues, pinCurrent);
-        CopyInto(_powerValues, powers);
+        CopyInto(_seriesVoltage.Values, pinVoltage);
+        CopyInto(_seriesCurrent.Values, pinCurrent);
+        CopyInto(_seriesPower.Values, powers);
 
         TotalCurrentA = d.SumCurrentA;
         TotalPowerW   = d.SumPowerW;
