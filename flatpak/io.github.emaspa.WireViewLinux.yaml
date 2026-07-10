@@ -53,8 +53,8 @@ modules:
       - for s in 16 32 48 64 96 128; do install -Dm644 "icons/hicolor/${s}x${s}/apps/wireview-linux.png" "/app/share/icons/hicolor/${s}x${s}/apps/io.github.emaspa.WireViewLinux.png"; done
     sources:
       - type: archive
-        url: https://github.com/emaspa/wireview-linux/releases/download/v1.1.0.1/wireview-linux-1.1.0.1-linux-x64.tar.gz
-        sha256: 39401bb3c6415fec0da4bbfc77b0f782bab3302816fb0d7d8dc64e6ecdc99b47
+        url: https://github.com/emaspa/wireview-linux/releases/download/v1.2.0.0/wireview-linux-1.2.0.0-linux-x64.tar.gz
+        sha256: 2a9c6c67cad5989747ed80c566c62d743c5fbc75289e0ad6c144656c007aac11
         # strips the top-level wireview-linux-<ver>-linux-x64/ directory
         strip-components: 1
       - type: file
