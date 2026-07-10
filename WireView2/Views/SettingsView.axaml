@@ -77,17 +77,17 @@
                     </StackPanel>
                     <TextBlock Text="Remote hosts (LAN)" FontWeight="SemiBold" FontSize="16"/>
                     <TextBox Text="{Binding RemoteHostsText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             Watermark="192.168.1.50:9876, 192.168.1.51"/>
+                             PlaceholderText="192.168.1.50:9876, 192.168.1.51"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
                                Text="Comma-separated list of WireView hosts to read over the network (host or host:port; port defaults to 9876). Each host's devices appear in the device picker as 'lan @ host'. Changes apply within a few seconds. Leave empty to disable remote reading."/>
                     <TextBlock Text="Network secret (writes)" FontWeight="SemiBold" FontSize="16" Margin="0,12,0,0"/>
                     <TextBox Text="{Binding NetworkSecretText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             PasswordChar="●" Watermark="shared passphrase"/>
+                             PasswordChar="●" PlaceholderText="shared passphrase"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
                                Text="Shared passphrase that authenticates writing settings to (and from) remote hosts via signed requests. Set the SAME value on every host. Leave empty to disable remote writes. Stored in plaintext in settings.json."/>
                     <TextBlock Text="Audit log retention (days)" FontWeight="SemiBold" FontSize="16" Margin="0,12,0,0"/>
                     <TextBox Text="{Binding LogRetentionDaysText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                             Watermark="14" Width="140" HorizontalAlignment="Left"/>
+                             PlaceholderText="14" Width="140" HorizontalAlignment="Left"/>
                     <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
                                Text="How many days of daily-rotating logs to keep. Remote command activity (sent / received / executed) is recorded here. 0 keeps logs forever. Files live under the settings folder's logs/ subdirectory."/>
                 </StackPanel>

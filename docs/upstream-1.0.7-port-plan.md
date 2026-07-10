@@ -34,8 +34,17 @@ Status (updated 2026-07-09):
   BEFORE property updates that trigger a preview refresh); the firmware re-blits
   backgrounds only on screen ENTRY with device-paced timing (~1 s settle, ~3 s on
   the detour screen); the protocol cannot query the current screen.
-- REMAINING: §6 dependency migration (Avalonia 12 / LiveCharts 2.0.2 / SkiaSharp 3)
-  — deliberately deferred, nothing above requires it.
+- DONE §6 dependency migration (2026-07-10): Avalonia 11.3.0 → 12.0.2 (matching
+  upstream exactly; SkiaSharp 3.119.4-preview + HarfBuzz 8.3.1.3 come transitively,
+  same stack as the Windows client). LiveCharts was REMOVED rather than upgraded
+  (SimpleBarChart got its own SimpleBarSeries/SimpleAxis types). Breaks were small:
+  NativeMenuItemToggleType → MenuItemToggleType, BindingPlugins workaround deleted,
+  Watermark → PlaceholderText, two pragma'd obsolete Bitmap.Save calls (replacement
+  API is later-12.x only). NOTE: Avalonia 12.1+ generators need a newer Roslyn than
+  SDK 8.0.421 ships (CS9057 → InitializeComponent missing); stay on 12.0.x until the
+  SDK is upgraded. Still X11/XWayland on Linux (no native Wayland).
+
+THE 1.0.7 PORT IS COMPLETE — all sections done and hardware-verified.
 - RELEASE CHECKLIST (v1.2.0.0): when assembling the PPA source package, extend
   debian/control to `Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util`
   (rpm Recommends / AUR optdepends / flatpak modules already committed here).

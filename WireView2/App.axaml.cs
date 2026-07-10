@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -64,7 +63,6 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            DisableAvaloniaDataAnnotationValidation();
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             AppSettings.Reload();
             WireView2.Net.FileLog.Init(
@@ -131,7 +129,7 @@ public class App : Application
         showItem.Click += (_, _) => ShowMainWindow(desktop);
         _autoStartMenuItem = new NativeMenuItem("Auto-start")
         {
-            ToggleType = NativeMenuItemToggleType.CheckBox,
+            ToggleType = MenuItemToggleType.CheckBox,
             IsChecked = AppSettings.Current.AutoStart
         };
         _autoStartMenuItem.Click += (_, _) =>
@@ -151,7 +149,7 @@ public class App : Application
         };
         _showPowerMenuItem = new NativeMenuItem("Show power tray icon")
         {
-            ToggleType = NativeMenuItemToggleType.CheckBox,
+            ToggleType = MenuItemToggleType.CheckBox,
             IsChecked = AppSettings.Current.ShowTrayPower
         };
         _showPowerMenuItem.Click += (_, _) =>
@@ -164,7 +162,7 @@ public class App : Application
         };
         _showUnitMenuItem = new NativeMenuItem("Show unit name")
         {
-            ToggleType = NativeMenuItemToggleType.CheckBox,
+            ToggleType = MenuItemToggleType.CheckBox,
             IsChecked = AppSettings.Current.ShowTrayPowerUnit,
             IsEnabled = AppSettings.Current.ShowTrayPower
         };
@@ -415,7 +413,12 @@ public class App : Application
                 }
             }
             using var ms = new MemoryStream();
+            // Save(Stream, int?) is obsolete in Avalonia 12, but its replacement
+            // (BitmapEncoderOptions) only exists in later 12.x releases; we track
+            // 12.0.2 to stay aligned with the upstream Windows client.
+#pragma warning disable CS0618
             rtb.Save(ms);
+#pragma warning restore CS0618
             ms.Position = 0;
             return new WindowIcon(ms);
         }
@@ -465,7 +468,12 @@ public class App : Application
                     new Point(size / 2.0, size / 2.0), size / 2.0 - 6, size / 2.0 - 6);
             }
             using var ms = new MemoryStream();
+            // Save(Stream, int?) is obsolete in Avalonia 12, but its replacement
+            // (BitmapEncoderOptions) only exists in later 12.x releases; we track
+            // 12.0.2 to stay aligned with the upstream Windows client.
+#pragma warning disable CS0618
             rtb.Save(ms);
+#pragma warning restore CS0618
             ms.Position = 0;
             return new WindowIcon(ms);
         }
@@ -548,13 +556,6 @@ public class App : Application
             AppSettings.ThemeMode.Dark => ThemeVariant.Dark,
             _ => ThemeVariant.Default,
         };
-    }
-
-    private void DisableAvaloniaDataAnnotationValidation()
-    {
-        var plugins = BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray();
-        foreach (var p in plugins)
-            BindingPlugins.DataValidators.Remove(p);
     }
 
     private static void StartActivationListener(IClassicDesktopStyleApplicationLifetime desktop)

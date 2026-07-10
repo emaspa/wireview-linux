@@ -99,7 +99,7 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBox Text="{Binding NewProfileName}" Width="200"
-                                         Watermark="New profile name..."/>
+                                         PlaceholderText="New profile name..."/>
                                 <Button Content="Save Current as Profile"
                                         Command="{Binding SaveProfileCommand}"/>
                             </StackPanel>
