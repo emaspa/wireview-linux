@@ -53,6 +53,13 @@ THE 1.0.7 PORT IS COMPLETE — all sections done and hardware-verified.
   Smoke-test wireview2-plus.exe on a real Windows box: the win-x64 publish
   compiles clean on Avalonia 12 and the stack matches the official client, but
   only Linux was runtime-tested during the port.
+  FIRMWARE SYNC: the device firmware hex is bundled in TWO repos — here at
+  WireView2/Firmware/TG-WV-PRO2-FW.hex (embedded in the app) and in
+  wireview-hwmon at firmware/TG-WV-PRO2-FW.hex (packaged to
+  /usr/share/wireview/, used by `wireviewctl flash` with no argument). When TG
+  ships new firmware, update BOTH copies in the same release cycle; the version
+  string printed at the wireviewctl confirm prompt (and the app's bundled-FW
+  row) is the drift safety net.
 
 Upstream 1.0.7 changelog items map to five feature areas plus dependency bumps. The serial wire
 protocol is **unchanged** (UsbCmd/NVM_CMD/SCREEN_CMD byte-identical), so we are already
