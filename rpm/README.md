@@ -23,7 +23,7 @@ Requires `dotnet` (8.0 SDK) and `rpmbuild` (`sudo dnf install rpm-build`, or
 
 ```bash
 rpm/build-srpm.sh            # version is read from WireView2.csproj
-# or: rpm/build-srpm.sh 1.0.6.0
+# or: rpm/build-srpm.sh 1.2.0.0
 ```
 
 The resulting `.src.rpm` lands in `rpm/build/SRPMS/` (this directory is a build
@@ -55,7 +55,7 @@ docker run --rm -v "$PWD/rpm/build:/work" fedora:42 \
 One-time setup:
 
 1. Create the project at <https://copr.fedorainfracloud.org/> (e.g.
-   `sparvoli/wireview-linux`), enabling the `fedora-*-x86_64` chroots you want.
+   `emaspa/wireview-linux`), enabling the `fedora-*-x86_64` chroots you want.
 2. `sudo dnf install copr-cli` and drop your API token in `~/.config/copr`
    (from the COPR web UI, *API* page).
 
@@ -63,7 +63,7 @@ Each release:
 
 ```bash
 rpm/build-srpm.sh
-copr-cli build sparvoli/wireview-linux rpm/build/SRPMS/wireview-linux-*.src.rpm
+copr-cli build emaspa/wireview-linux rpm/build/SRPMS/wireview-linux-*.src.rpm
 ```
 
 COPR rebuilds the binary RPM for every enabled Fedora release.
@@ -71,7 +71,7 @@ COPR rebuilds the binary RPM for every enabled Fedora release.
 ## What users run
 
 ```bash
-sudo dnf copr enable sparvoli/wireview-linux
+sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 

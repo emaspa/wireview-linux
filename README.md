@@ -8,13 +8,14 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 ## Features
 
-- **Real-time monitoring** - Voltage, current, and power readings across all 6 pins with live charts
+- **Real-time monitoring** - Voltage, current, and power readings across all 6 pins with live charts, plus custom charts: pick any telemetry series, per-series colors, manual or auto Y scaling
 - **Device configuration** - Fan speed, display settings, fault alarms, thresholds
 - **Configuration profiles** - Save, load, and manage named device configurations
-- **Data logging** - On-device log readback and CSV export
+- **Data logging** - On-device log readback and CSV export, browsable per power cycle
 - **Desktop notifications** - Via `notify-send`
 - **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
 - **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
+- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview. Theme files (.wv2t) are compatible with the official Windows app
 - **Firmware updates** - Flash the bundled firmware (currently v05) from the Device page over USB DFU. Requires the `dfu-util` package; shows the bundled vs. device firmware version and warns before downgrades
 
 > **Warning:** firmware flashing restarts the device into its STM32 bootloader and rewrites its flash. It follows the same DFU procedure as the official Windows client (and refuses to start if `dfu-util` or the firmware image is missing), but a power loss or unplug mid-flash can leave the device unbootable until reflashed manually. This is unofficial software, not affiliated with or endorsed by Thermal Grizzly: flash at your own risk. The previous experimental `dfu-enabled` branch has been removed in favor of this built-in implementation.
@@ -247,10 +248,10 @@ The app has five pages accessible from the left sidebar:
 
 | Page | Description |
 |------|-------------|
-| **Overview** | Summary of total current, power, voltage, and cable rating |
-| **Monitoring** | Real-time charts for voltage, current, power, and temperature |
-| **Logging** | Read device logs and export to CSV |
-| **Device** | Device info and full device configuration (fan, display, alarms, thresholds) |
+| **Overview** | Summary of total current, power, voltage, cable rating, and a fault status/log table with per-fault clear |
+| **Monitoring** | Real-time charts for voltage, current, power, and temperature; custom series selection, colors, and Y scaling |
+| **Logging** | Read device logs per power cycle and export to CSV |
+| **Device** | Device info, full device configuration (fan, display, alarms, thresholds), display theme editor, and firmware updates |
 | **Settings** | App theme, startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
 
 ### Configuration profiles
@@ -262,6 +263,7 @@ On the **Device** page, you can save the current device configuration as a named
 | Mode | VID | PID | Description |
 |------|-----|-----|-------------|
 | Normal | `0483` | `5740` | STM32 CDC/ACM virtual serial port |
+| DFU bootloader | `0483` | `df11` | STM32 bootloader (during firmware updates) |
 
 ## Project structure
 
@@ -282,9 +284,9 @@ wireview-linux/
 ## Tech stack
 
 - **.NET 8.0** - Runtime and build system
-- **Avalonia UI 11.3** - Cross-platform MVVM UI framework
+- **Avalonia UI 12.0** - Cross-platform MVVM UI framework
 - **CommunityToolkit.Mvvm 8.4** - MVVM source generators
-- **LiveChartsCore + SkiaSharp** - Real-time chart rendering
+- **Custom chart controls** - Lightweight line/gauge/bar charts drawn directly with Avalonia (no charting dependency)
 - **System.IO.Ports** - Serial communication with the device
 
 ## Troubleshooting

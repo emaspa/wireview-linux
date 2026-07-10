@@ -61,4 +61,4 @@ echo ">> SRPM ready:"
 ls -1 "$TOP"/SRPMS/*.src.rpm
 echo
 echo "Upload to COPR with:"
-echo "  copr-cli build sparvoli/wireview-linux $TOP/SRPMS/$NAME-$VERSION-1.*.src.rpm"
+echo "  copr-cli build emaspa/wireview-linux $TOP/SRPMS/$NAME-$VERSION-1.*.src.rpm"
