@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.0.6.0
+Version:        1.2.0.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -90,6 +90,15 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Fri Jul 10 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.2.0.0-1
+- Port of the upstream WireView2 1.0.7 feature set: bundled firmware info and
+  in-app DFU firmware updates (dfu-util), display theme editor with custom
+  backgrounds and live preview, custom telemetry charts, per-power-cycle
+  device log browsing, collapsible navigation pane
+- Overview: fault status/log table with per-fault clear, per-bar value labels
+- Avalonia 12 migration; LiveCharts dependency removed
+- Recommends dfu-util for firmware flashing
+
 * Sat Jun 06 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.0.6.0-1
 - Initial RPM / COPR package
 - Self-contained .NET 8 GUI for the Thermal Grizzly WireView Pro II
