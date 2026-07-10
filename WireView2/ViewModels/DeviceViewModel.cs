@@ -506,7 +506,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
         if (await DfuUtilFlasher.GetDfuUtilVersionAsync() == null)
         {
-            FirmwareUpdateStatus = "dfu-util not found — install the 'dfu-util' package and try again.";
+            FirmwareUpdateStatus = "dfu-util not found. Install the 'dfu-util' package and try again.";
             return;
         }
 
@@ -572,7 +572,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
 
             FirmwareUpdateProgress = 1.0;
-            FirmwareUpdateStatus = "Firmware update complete — the device is restarting.";
+            FirmwareUpdateStatus = "Firmware update complete. The device is restarting.";
             _awaitingPostFlashReconnect = true;
         }
         catch (Exception ex)
@@ -719,8 +719,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             {
                 _awaitingPostFlashReconnect = false;
                 FirmwareUpdateStatus = FirmwareVersion != "N/A"
-                    ? $"Firmware update complete — device reconnected ({FirmwareVersion})."
-                    : "Firmware update complete — device reconnected.";
+                    ? $"Firmware update complete. Device reconnected ({FirmwareVersion})."
+                    : "Firmware update complete. Device reconnected.";
             }
 
             if (AppSettings.Current.ScreenAfterConnection != AppSettings.StartupScreen.NoChange
@@ -769,7 +769,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceScreenCmdAsync(screenTarget);
             ConfigStatus = r.Ok
                 ? $"Switched to {SelectedDeviceScreenTarget}."
-                : $"Screen change failed — {r.Describe()}.";
+                : $"Screen change failed: {r.Describe()}.";
         }
         catch (Exception ex)
         {
@@ -891,7 +891,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             await UploadPendingThemeAssetsAsync();
             var config = BuildConfigFromEditor();
             var w = await DeviceWriteConfigAsync(config);
-            if (!w.Ok) { ConfigStatus = $"Apply failed — {w.Describe()}."; return; }
+            if (!w.Ok) { ConfigStatus = $"Apply failed: {w.Describe()}."; return; }
             await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
             RequestThemePreviewRefresh();
@@ -913,7 +913,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
             ConfigStatus = r.Ok
                 ? "Config stored (NVM)."
-                : $"Store failed — {r.Describe()}.";
+                : $"Store failed: {r.Describe()}.";
         }
         catch (Exception ex)
         {
@@ -932,7 +932,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
             if (!r.Ok)
             {
-                ConfigStatus = $"Reset failed — {r.Describe()}.";
+                ConfigStatus = $"Reset failed: {r.Describe()}.";
                 return;
             }
             if (_device is not NetworkDevice)

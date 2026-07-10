@@ -286,7 +286,7 @@ public class App : Application
                 {
                     Console.Error.WriteLine($"Tray power icon render failed: {ex.Message}");
                 }
-                _powerTrayIcon.ToolTipText = $"WireView Pro II — {statusText}";
+                _powerTrayIcon.ToolTipText = $"WireView Pro II - {statusText}";
             }
         }
         else if (_powerTrayIcon != null)

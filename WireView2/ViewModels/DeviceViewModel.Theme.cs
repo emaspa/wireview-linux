@@ -1059,7 +1059,7 @@ public sealed partial class DeviceViewModel
                 ConfigStatus = redrawError == null
                     ? "Factory theme assets restored."
                     : "Factory assets restored; screen refresh failed (" + redrawError +
-                      ") — switch screens once to see them.";
+                      "). Switch screens once to see them.";
                 RequestThemePreviewRefresh(force: true);
             });
         }
