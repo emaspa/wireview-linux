@@ -446,10 +446,12 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         ? "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB, using " +
           "the same native DFU method as the official client. The device restarts into its " +
           "bootloader, is flashed, and reboots on its own. Do not unplug it during the update. " +
-          "Requires a WinUSB driver for the DFU device (0483:df11)."
+          "Requires a WinUSB driver for the DFU device (0483:df11). " +
+          "Unofficial software: flash at your own risk."
         : "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB using " +
           "dfu-util. The device restarts into its bootloader, is flashed, and reboots on its own. " +
-          "Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules.";
+          "Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules. " +
+          "Unofficial software: flash at your own risk.";
 
     private static string FormatFirmwareVersion(int? version) =>
         version.HasValue ? "v" + version.Value.ToString().PadLeft(2, '0') : "-";
@@ -539,7 +541,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         var confirm = await MessageBox.Show(null,
             $"Flash firmware {BundledFirmwareVersion} to {DeviceName}?\n\n" +
             "The device restarts into its bootloader and is flashed over USB. " +
-            "Do not unplug it until the update finishes.",
+            "Do not unplug it until the update finishes.\n\n" +
+            "This is unofficial software, not affiliated with Thermal Grizzly. " +
+            "Flashing is at your own risk.",
             "Firmware update", MessageBox.MessageBoxButtons.YesNo);
         if (confirm != MessageBox.MessageBoxResult.Yes)
         {
