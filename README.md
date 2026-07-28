@@ -72,7 +72,7 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 
 ## Requirements
 
-- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 42-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
+- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II device connected via USB
 - Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency)
 
