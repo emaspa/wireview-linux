@@ -156,11 +156,15 @@ A community source package, [`wireview-linux`](https://aur.archlinux.org/package
 paru -S wireview-linux
 ```
 
-To also install the hwmon kernel module and daemon for system-wide sensor integration:
+To also install the hwmon kernel module and daemon for system-wide sensor integration, load the module and enable the daemon after installing:
 
 ```bash
 paru -S wireview-hwmon wireview-hwmon-dkms
+sudo modprobe wireview_hwmon
+sudo systemctl enable --now wireviewd
 ```
+
+From the next boot onward both come up automatically (the dkms package registers the module in `modules-load.d` and the service modprobes it on start).
 
 ### Serial access (package installs)
 
