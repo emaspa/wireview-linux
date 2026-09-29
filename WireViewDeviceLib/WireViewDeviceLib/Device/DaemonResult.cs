@@ -17,7 +17,7 @@ namespace WireView2.Device
         /// <summary>Shown to the user when wireviewd refuses a privileged command.</summary>
         public const string DeniedMessage =
             "This action needs membership of the 'wireview' group: run " +
-            "`sudo usermod -aG wireview $USER`, then reconnect the device in the app.";
+            "`sudo usermod -aG wireview $USER`, then try the action again.";
 
         /// <summary>Short reason for a failed command, for appending to a status line.</summary>
         public static string Describe(this DaemonResult result) => result switch
