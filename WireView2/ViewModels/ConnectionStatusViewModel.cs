@@ -139,7 +139,13 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         }
         else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
         {
-            hwmon.ClearFaults(0);
+            var r = hwmon.ClearFaults(0);
+            if (r != DaemonResult.Ok)
+            {
+                // Keep the banner: the fault is still latched on the device.
+                ReportDaemonFailure("Clearing the fault", r);
+                return;
+            }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
 
@@ -207,6 +213,17 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     }
 
     // --------------- Helpers ---------------
+
+    /// <summary>Tells the user a wireviewd command failed, via the same desktop
+    /// notification used for faults. A permission denial gets the how-to-fix
+    /// message.</summary>
+    public void ReportDaemonFailure(string action, DaemonResult result)
+    {
+        string message = result == DaemonResult.Denied
+            ? DaemonResults.DeniedMessage
+            : $"{action} failed: {result.Describe()}.";
+        _toast.Show("WireView", message);
+    }
 
     private void SetConnected(bool connected)
     {

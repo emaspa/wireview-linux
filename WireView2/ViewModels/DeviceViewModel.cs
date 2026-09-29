@@ -570,7 +570,23 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             switch (_device)
             {
                 case WireViewPro2Device pro2: pro2.EnterBootloader(); break;
-                case HwmonDevice hwmon: hwmon.EnterBootloader(); break;
+                case HwmonDevice hwmon:
+                    // Denied/Error/NotConnected mean the daemon never sent the
+                    // command, so the device is still running: stop here. With no
+                    // answer at all (Unavailable) the command may have gone through;
+                    // fall through to waiting for the DFU device as before.
+                    var boot = hwmon.EnterBootloader();
+                    if (boot == DaemonResult.Denied)
+                    {
+                        FirmwareUpdateStatus = DaemonResults.DeniedMessage;
+                        return;
+                    }
+                    if (boot is DaemonResult.Error or DaemonResult.NotConnected)
+                    {
+                        FirmwareUpdateStatus = $"Could not restart the device into its bootloader: {boot.Describe()}.";
+                        return;
+                    }
+                    break;
             }
 
             var progress = new Progress<double>(p => FirmwareUpdateProgress = p);
@@ -655,13 +671,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         _device is HwmonDevice { DaemonAvailable: true } ||
         _device is NetworkDevice;
 
-    // Reports the command outcome. Local devices act synchronously (Success unless
-    // they throw); a remote NetworkDevice returns the signed-POST result, which
-    // distinguishes no-local-secret, a remote rejection (401/403), and unreachable.
+    // Reports the command outcome. A direct-serial device acts synchronously
+    // (Success unless it throws); the hwmon device relays wireviewd's answer
+    // (which may be a group-permission denial); a remote NetworkDevice returns the
+    // signed-POST result, which distinguishes no-local-secret, a remote rejection
+    // (401/403), and unreachable.
     private async Task<CommandResult> DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD cmd)
     {
         if (_device is WireViewPro2Device pro2) { pro2.ScreenCmd(cmd); return CommandResult.Success; }
-        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.ScreenCmd(cmd); return CommandResult.Success; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return CommandResult.FromDaemon(hwmon.ScreenCmd(cmd));
         if (_device is NetworkDevice nd) return await nd.SendCommandAsync(WireViewCommand.Screen(nd.UniqueId, (int)cmd));
         return new CommandResult(CommandOutcome.HttpError);
     }
@@ -669,7 +687,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private async Task<CommandResult> DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD cmd)
     {
         if (_device is WireViewPro2Device pro2) { pro2.NvmCmd(cmd); return CommandResult.Success; }
-        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.NvmCmd(cmd); return CommandResult.Success; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return CommandResult.FromDaemon(hwmon.NvmCmd(cmd));
         if (_device is NetworkDevice nd) return await nd.SendCommandAsync(WireViewCommand.Nvm(nd.UniqueId, (int)cmd));
         return new CommandResult(CommandOutcome.HttpError);
     }
@@ -689,7 +707,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private async Task<CommandResult> DeviceWriteConfigAsync(WireViewPro2Device.DeviceConfigStructV3 config)
     {
         if (_device is WireViewPro2Device pro2) { pro2.WriteConfig(config); return CommandResult.Success; }
-        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) { hwmon.WriteConfig(config); return CommandResult.Success; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return CommandResult.FromDaemon(hwmon.WriteConfig(config));
         if (_device is NetworkDevice nd)
         {
             int ver = nd.ConfigVersion >= 0 ? nd.ConfigVersion : 2;
@@ -698,6 +716,13 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
         return new CommandResult(CommandOutcome.HttpError);
     }
+
+    /// <summary>Status line for a failed command. A wireviewd permission denial
+    /// gets the full how-to-fix message instead of a terse reason.</summary>
+    private static string CommandFailureText(string action, CommandResult r) =>
+        r.Outcome == CommandOutcome.DaemonDenied
+            ? DaemonResults.DeniedMessage
+            : $"{action} failed: {r.Describe()}.";
 
     private string? DeviceReadBuildString()
     {
@@ -801,7 +826,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceScreenCmdAsync(screenTarget);
             ConfigStatus = r.Ok
                 ? $"Switched to {SelectedDeviceScreenTarget}."
-                : $"Screen change failed: {r.Describe()}.";
+                : CommandFailureText("Screen change", r);
         }
         catch (Exception ex)
         {
@@ -923,7 +948,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             await UploadPendingThemeAssetsAsync();
             var config = BuildConfigFromEditor();
             var w = await DeviceWriteConfigAsync(config);
-            if (!w.Ok) { ConfigStatus = $"Apply failed: {w.Describe()}."; return; }
+            if (!w.Ok) { ConfigStatus = CommandFailureText("Apply", w); return; }
             await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
             RequestThemePreviewRefresh();
@@ -945,7 +970,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_STORE);
             ConfigStatus = r.Ok
                 ? "Config stored (NVM)."
-                : $"Store failed: {r.Describe()}.";
+                : CommandFailureText("Store", r);
         }
         catch (Exception ex)
         {
@@ -964,7 +989,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             var r = await DeviceNvmCmdAsync(WireViewPro2Device.NVM_CMD.NVM_CMD_RESET);
             if (!r.Ok)
             {
-                ConfigStatus = $"Reset failed: {r.Describe()}.";
+                ConfigStatus = CommandFailureText("Reset", r);
                 return;
             }
             if (_device is not NetworkDevice)

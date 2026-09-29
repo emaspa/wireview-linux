@@ -103,23 +103,23 @@ namespace WireView2.Services
                 {
                     case "screen":
                         if (dev is WireViewPro2Device s1) s1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h1) h1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h1) return h1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd) == DaemonResult.Ok;
                         else return false;
                         return true;
                     case "nvm":
                         if (dev is WireViewPro2Device s2) s2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h2) h2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h2) return h2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd) == DaemonResult.Ok;
                         else return false;
                         return true;
                     case "clearFaults":
                         if (dev is WireViewPro2Device s3) s3.ClearFaults(cmd.StatusMask, cmd.LogMask);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) h3.ClearFaults(cmd.StatusMask, cmd.LogMask);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) return h3.ClearFaults(cmd.StatusMask, cmd.LogMask) == DaemonResult.Ok;
                         else return false;
                         return true;
                     case "writeConfig":
                         if (cmd.ConfigData == null) return false;
                         if (dev is WireViewPro2Device s4) s4.WriteConfigRaw(cmd.ConfigData);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h4) h4.WriteConfigRaw(cmd.ConfigVersion, cmd.ConfigData);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h4) return h4.WriteConfigRaw(cmd.ConfigVersion, cmd.ConfigData) == DaemonResult.Ok;
                         else return false;
                         return true;
                     default:

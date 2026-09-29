@@ -24,7 +24,10 @@ namespace WireView2.Device
         public static async Task<T> RunAsync<T>(HwmonDevice daemonDevice,
             Func<WireViewPro2Device, Task<T>> operation)
         {
-            if (!daemonDevice.SuspendSerial(SuspendWindowSeconds))
+            var suspend = daemonDevice.RequestSuspendSerial(SuspendWindowSeconds);
+            if (suspend == DaemonResult.Denied)
+                throw new UnauthorizedAccessException(DaemonResults.DeniedMessage);
+            if (suspend != DaemonResult.Ok)
                 throw new InvalidOperationException(
                     "The hwmon daemon did not hand over the serial port (wireviewd too old? " +
                     "Suspend needs wireviewd with WCMD_SUSPEND_SERIAL support).");

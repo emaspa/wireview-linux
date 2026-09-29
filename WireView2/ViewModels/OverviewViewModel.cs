@@ -437,7 +437,12 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         }
         else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
         {
-            hwmon.ClearFaults(mask, mask);
+            var r = hwmon.ClearFaults(mask, mask);
+            if (r != DaemonResult.Ok)
+            {
+                ConnectionStatus.ReportDaemonFailure("Clearing the fault", r);
+                return;
+            }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
     }
