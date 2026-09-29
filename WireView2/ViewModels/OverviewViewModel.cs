@@ -259,6 +259,7 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         Faults.Add(new FaultItem("Current Imbalance", WireViewPro2Device.FAULT.FAULT_CURRENT_IMBALANCE, ClearFault));
 
         _connector.DataUpdated += (_, data) => OnDeviceData(data);
+        _connector.ConnectionChanged += OnConnectionChanged;
         _connector.Start();
         App.MainWindowVisibilityChanged += OnMainWindowVisibilityChanged;
     }
@@ -267,6 +268,7 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     {
         _disposed = true;
         App.MainWindowVisibilityChanged -= OnMainWindowVisibilityChanged;
+        _connector.ConnectionChanged -= OnConnectionChanged;
         if (_ownsConnector)
         {
             _connector.DataUpdated -= delegate { };
@@ -289,6 +291,14 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         }
         if (pending != null)
             ApplyDeviceData(pending);
+    }
+
+    // A connect, disconnect or device switch invalidates the sample stashed while
+    // the window was hidden: applying it on restore would show the previous
+    // device's values (upstream 1.0.8 does the same reset).
+    private void OnConnectionChanged(object? sender, bool connected)
+    {
+        lock (_pendingGate) { _pendingDeviceData = null; }
     }
 
     // --------------- Device data handler ---------------

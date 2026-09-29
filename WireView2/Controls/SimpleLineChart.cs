@@ -366,21 +366,30 @@ public sealed class SimpleLineChart : Control
 
         double contentWidth = legendRows.Max(e => 16.0 + e.Text.Width);
         double contentHeight = legendRows.Sum(e => e.Text.Height) + 3.0 * (legendRows.Count - 1);
-        double boxWidth = contentWidth + 12.0;
-        double boxHeight = contentHeight + 12.0;
+        // Cap the box to the plot (upstream 1.0.8): with many enabled series or a
+        // small window the legend can be larger than the plot, and Math.Clamp
+        // throws when min > max, which used to crash inside Render.
+        double boxWidth = Math.Min(contentWidth + 12.0, plot.Width);
+        double boxHeight = Math.Min(contentHeight + 12.0, plot.Height);
         double boxX = Math.Clamp(hoverCanvasX + 10.0, plot.Left, plot.Right - boxWidth);
         double boxY = Math.Clamp(plot.Top + 6.0, plot.Top, plot.Bottom - boxHeight);
+        var box = new Rect(boxX, boxY, boxWidth, boxHeight);
         context.DrawRectangle(new SolidColorBrush(Color.FromArgb(235, 18, 18, 18)),
-            new Pen(Brushes.Gray), new Rect(boxX, boxY, boxWidth, boxHeight));
+            new Pen(Brushes.Gray), box);
 
-        double rowY = boxY + 6.0;
-        foreach (var (text, color) in legendRows)
+        // Rows that do not fit are clipped to the box instead of spilling over the plot.
+        using (context.PushClip(box))
         {
-            double swatchY = rowY + Math.Max(0.0, (text.Height - 10.0) / 2.0);
-            context.DrawRectangle(new SolidColorBrush(color), new Pen(Brushes.Black),
-                new Rect(boxX + 6.0, swatchY, 10.0, 10.0));
-            context.DrawText(text, new Point(boxX + 6.0 + 10.0 + 6.0, rowY));
-            rowY += text.Height + 3.0;
+            double rowY = boxY + 6.0;
+            foreach (var (text, color) in legendRows)
+            {
+                if (rowY > box.Bottom) break;
+                double swatchY = rowY + Math.Max(0.0, (text.Height - 10.0) / 2.0);
+                context.DrawRectangle(new SolidColorBrush(color), new Pen(Brushes.Black),
+                    new Rect(boxX + 6.0, swatchY, 10.0, 10.0));
+                context.DrawText(text, new Point(boxX + 6.0 + 10.0 + 6.0, rowY));
+                rowY += text.Height + 3.0;
+            }
         }
     }
 }
