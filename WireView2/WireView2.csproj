@@ -36,9 +36,10 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
-  <!-- Bundled device firmware + factory theme assets (upstream 1.0.7 release,
-       firmware v05). Copied next to the binary so DeviceViewModel can read/flash
-       them; the app degrades gracefully when the files are absent. -->
+  <!-- Bundled device firmware (upstream 1.0.8 release, v05 build 20260902_0741)
+       + factory theme assets (ext_flash.bin, unchanged since 1.0.7). Copied next
+       to the binary so DeviceViewModel can read/flash them; the app degrades
+       gracefully when the files are absent. -->
   <ItemGroup>
     <None Include="Firmware\TG-WV-PRO2-FW.hex" CopyToOutputDirectory="PreserveNewest"
           TargetPath="TG-WV-PRO2-FW.hex" />

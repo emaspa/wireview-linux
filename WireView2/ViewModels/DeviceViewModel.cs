@@ -48,8 +48,13 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private string _bundledFirmwareVersion = "-";
     private string? _bundledBuildString;
     private bool _isBundledFirmwareNewerThanDevice;
-    private int? _bundledFirmwareVersionNumber;
+    private bool _isFirmwareUpdateSupported = true;
+    private FirmwareImageInfo? _bundledFirmware;
     private int? _lastKnownDeviceFirmwareVersionNumber;
+    private DateTime? _lastKnownDeviceFirmwareBuildTime;
+    // Identity of the connected device, captured on connect (0 when unknown).
+    private byte _deviceVendorId;
+    private byte _deviceProductId;
     private bool _isFirmwareUpdating;
     private double _firmwareUpdateProgress;
     private string _firmwareUpdateStatus = string.Empty;
@@ -195,6 +200,19 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     public string BundledFirmwareUpdateNotice =>
         IsBundledFirmwareNewerThanDevice ? "Newer firmware version available." : string.Empty;
 
+    /// <summary>False while connected to a device the bundled image is not for
+    /// (vendor or aliased product differ, or the device is unidentified).
+    /// Upstream 1.0.8 hides the update panels on it; here it disables the button.</summary>
+    public bool IsFirmwareUpdateSupported
+    {
+        get => _isFirmwareUpdateSupported;
+        private set
+        {
+            if (Set(ref _isFirmwareUpdateSupported, value))
+                OnPropertyChanged(nameof(CanStartFirmwareUpdate));
+        }
+    }
+
     public bool IsFirmwareUpdating
     {
         get => _isFirmwareUpdating;
@@ -221,7 +239,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     /// <summary>Flashing needs the device on this host's USB — remote (LAN) devices
     /// can't be flashed from here.</summary>
     public bool CanStartFirmwareUpdate =>
-        !IsFirmwareUpdating && IsConnected && _device is WireViewPro2Device or HwmonDevice;
+        !IsFirmwareUpdating && IsConnected && IsFirmwareUpdateSupported
+        && _device is WireViewPro2Device or HwmonDevice;
 
     public bool IsAveragingSupported
     {
@@ -470,27 +489,42 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private static string FormatFirmwareVersion(int? version) =>
         version.HasValue ? "v" + version.Value.ToString().PadLeft(2, '0') : "-";
 
+    private const string BundledFirmwareMismatchText = "The bundled firmware does not match this device.";
+
+    private static string FormatBuild(string? build) =>
+        string.IsNullOrWhiteSpace(build) ? string.Empty : "(" + build.Trim() + ")";
+
+    /// <summary>Upstream 1.0.8's UpdateBundledFirmwareComparison: the image must be
+    /// for this device (vendor, aliased product); the notice needs it newer by
+    /// version, then by build date. Here it also stays off when the image predates
+    /// Noctua Edition support on a Noctua device, since the flash would be refused.</summary>
     private void UpdateBundledFirmwareComparison()
     {
-        IsBundledFirmwareNewerThanDevice =
-            _bundledFirmwareVersionNumber.HasValue
-            && _lastKnownDeviceFirmwareVersionNumber.HasValue
-            && _bundledFirmwareVersionNumber.Value > _lastKnownDeviceFirmwareVersionNumber.Value;
+        bool match = IsConnected && _bundledFirmware != null
+            && FirmwareCompatibility.ProductMatches(_bundledFirmware, _deviceVendorId, _deviceProductId);
+        IsFirmwareUpdateSupported = !IsConnected || match;
+        if (IsConnected && !match && _bundledFirmware != null && !IsFirmwareUpdating)
+            FirmwareUpdateStatus = BundledFirmwareMismatchText;
+        else if (FirmwareUpdateStatus == BundledFirmwareMismatchText)
+            FirmwareUpdateStatus = string.Empty;
+        IsBundledFirmwareNewerThanDevice = match
+            && !FirmwareCompatibility.IsBelowNoctuaFloor(_bundledFirmware!, _deviceVendorId, _deviceProductId)
+            && FirmwareCompatibility.Compare(_bundledFirmware!, _lastKnownDeviceFirmwareVersionNumber,
+                _lastKnownDeviceFirmwareBuildTime) > 0;
     }
 
     private void LoadBundledFirmwareVersion()
     {
         string path = GetBundledFirmwarePath();
-        if (File.Exists(path)
-            && FirmwareHexInfo.TryRead(path, out int version, out string? build, out _))
+        if (File.Exists(path) && FirmwareHexInfo.TryReadInfo(path, out var info, out _) && info != null)
         {
-            _bundledFirmwareVersionNumber = version;
-            BundledFirmwareVersion = FormatFirmwareVersion(version);
-            BundledBuildString = string.IsNullOrWhiteSpace(build) ? null : "(" + build.Trim() + ")";
+            _bundledFirmware = info;
+            BundledFirmwareVersion = FormatFirmwareVersion(info.Version);
+            BundledBuildString = string.IsNullOrWhiteSpace(info.BuildString) ? null : FormatBuild(info.BuildString);
         }
         else
         {
-            _bundledFirmwareVersionNumber = null;
+            _bundledFirmware = null;
             BundledFirmwareVersion = "-";
             BundledBuildString = null;
         }
@@ -522,10 +556,35 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
 
         // Re-read the bundled image: it may have been swapped on disk since startup.
+        // The gates below judge exactly the bytes that get flashed, so a custom
+        // image dropped in its place goes through the same checks.
         LoadBundledFirmwareVersion();
-        if (!_bundledFirmwareVersionNumber.HasValue)
+        if (!FirmwareHexInfo.TryReadImage(hexPath, out uint baseAddress, out byte[] image,
+                out FirmwareImageInfo? imageInfo, out string? imageError) || imageInfo == null)
         {
-            FirmwareUpdateStatus = "Could not parse the bundled firmware image.";
+            FirmwareUpdateStatus = "Could not parse the bundled firmware image: " + imageError;
+            return;
+        }
+        string imageLabel = $"{FormatFirmwareVersion(imageInfo.Version)} {FormatBuild(imageInfo.BuildString)}".Trim();
+        string deviceLabel = _lastKnownDeviceFirmwareVersionNumber.HasValue
+            ? $"{FormatFirmwareVersion(_lastKnownDeviceFirmwareVersionNumber)} {FormatBuild(_device.BuildString)}".Trim()
+            : "an unknown firmware version";
+
+        var verdict = FirmwareCompatibility.Evaluate(imageInfo, _deviceVendorId, _deviceProductId,
+            _lastKnownDeviceFirmwareVersionNumber, _lastKnownDeviceFirmwareBuildTime);
+        if (verdict == FlashVerdict.ProductMismatch)
+        {
+            FirmwareUpdateStatus =
+                $"The firmware image is for product {WireViewEditions.FormatHardwareRevision(imageInfo.VendorId, imageInfo.ProductId)}, " +
+                $"not for this device ({WireViewEditions.FormatHardwareRevision(_deviceVendorId, _deviceProductId)}). Nothing was flashed.";
+            return;
+        }
+        if (verdict == FlashVerdict.TooOldForNoctua)
+        {
+            FirmwareUpdateStatus =
+                $"The firmware image {imageLabel} predates Noctua Edition support (builds from " +
+                $"{FirmwareCompatibility.NoctuaMinimumBuildDate:yyyy-MM-dd} on) and cannot be flashed to a " +
+                $"{WireViewEditions.Pro2NoctuaName}. Nothing was flashed.";
             return;
         }
 
@@ -537,15 +596,20 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (_lastKnownDeviceFirmwareVersionNumber.HasValue
-            && _bundledFirmwareVersionNumber.Value < _lastKnownDeviceFirmwareVersionNumber.Value)
+        // Same rules as `wireviewctl flash`: an older or identical build is refused
+        // unless the user explicitly overrides it here.
+        if (verdict is FlashVerdict.Downgrade or FlashVerdict.Same)
         {
-            var downgrade = await MessageBox.Show(null,
-                $"The bundled firmware ({FormatFirmwareVersion(_bundledFirmwareVersionNumber)}) is older than " +
-                $"the device firmware ({FormatFirmwareVersion(_lastKnownDeviceFirmwareVersionNumber)}).\n\n" +
-                "Flashing older firmware can remove features or fixes. Do you want to continue?",
-                "Older firmware warning", MessageBox.MessageBoxButtons.YesNo);
-            if (downgrade != MessageBox.MessageBoxResult.Yes)
+            var overrideGate = await MessageBox.Show(null,
+                verdict == FlashVerdict.Downgrade
+                    ? $"The bundled firmware ({imageLabel}) is older than " +
+                      $"the device firmware ({deviceLabel}).\n\n" +
+                      "Flashing older firmware can remove features or fixes. Do you want to continue?"
+                    : $"The device already runs this firmware build ({deviceLabel}).\n\n" +
+                      "Flash it again anyway?",
+                verdict == FlashVerdict.Downgrade ? "Older firmware warning" : "Same firmware",
+                MessageBox.MessageBoxButtons.YesNo);
+            if (overrideGate != MessageBox.MessageBoxResult.Yes)
             {
                 FirmwareUpdateStatus = "Firmware update cancelled.";
                 return;
@@ -553,7 +617,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
 
         var confirm = await MessageBox.Show(null,
-            $"Flash firmware {BundledFirmwareVersion} to {DeviceName}?\n\n" +
+            $"Flash firmware {imageLabel} to {DeviceName}?\n\n" +
+            $"The device runs {deviceLabel}.\n\n" +
             "The device restarts into its bootloader and is flashed over USB. " +
             "Do not unplug it until the update finishes.\n\n" +
             "This is unofficial software, not affiliated with Thermal Grizzly. " +
@@ -574,12 +639,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         string binPath = Path.Combine(Path.GetTempPath(), $"wireview2-fw-{Guid.NewGuid():N}.bin");
         try
         {
-            if (!FirmwareHexInfo.TryReadImage(hexPath, out uint baseAddress, out byte[] image, out string? error))
-            {
-                FirmwareUpdateStatus = "Firmware image error: " + error;
-                return;
-            }
-
             FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
             switch (_device)
             {
@@ -615,7 +674,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                     FirmwareUpdateStatus = $"Unexpected firmware base address 0x{baseAddress:X8}.";
                     return;
                 }
-                FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
+                FirmwareUpdateStatus = $"Flashing {imageLabel}…";
                 using var imageStream = new MemoryStream(image);
                 await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None);
             }
@@ -629,7 +688,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                         "installed, then power-cycle the device and try again.";
                     return;
                 }
-                FirmwareUpdateStatus = $"Flashing {BundledFirmwareVersion}…";
+                FirmwareUpdateStatus = $"Flashing {imageLabel}…";
                 await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
             }
 
@@ -762,6 +821,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             UniqueId = string.Empty;
             DeviceBuildString = null;
             _lastKnownDeviceFirmwareVersionNumber = null;
+            _lastKnownDeviceFirmwareBuildTime = null;
+            _deviceVendorId = 0;
+            _deviceProductId = 0;
             UpdateBundledFirmwareComparison();
             ConfigLoaded = false;
             IsAveragingSupported = false;
@@ -784,6 +846,12 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             _lastKnownDeviceFirmwareVersionNumber =
                 int.TryParse(_device.FirmwareVersion, NumberStyles.Integer,
                     CultureInfo.InvariantCulture, out int deviceFw) ? deviceFw : null;
+            // Every device type has its build string at connect (serial caches it,
+            // wireviewd reports it, LAN publishes it), so the date comparison can run
+            // now; ReadBuildStringAsync refreshes it.
+            _lastKnownDeviceFirmwareBuildTime = FirmwareHexInfo.TryParseBuildTimestamp(_device.BuildString);
+            _deviceVendorId = _device.VendorId;
+            _deviceProductId = _device.ProductId;
             UpdateBundledFirmwareComparison();
 
             if (_awaitingPostFlashReconnect)
@@ -850,8 +918,19 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     private async Task ReadBuildStringAsync()
     {
+        var device = _device;
         string? text = await Task.Run(() => DeviceReadBuildString()).ConfigureAwait(false);
-        DeviceBuildString = string.IsNullOrWhiteSpace(text) ? null : "(" + text.Trim() + ")";
+        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (!ReferenceEquals(device, _device)) return; // device switched meanwhile
+            DeviceBuildString = string.IsNullOrWhiteSpace(text) ? null : "(" + text.Trim() + ")";
+            var built = FirmwareHexInfo.TryParseBuildTimestamp(text);
+            if (built.HasValue)
+            {
+                _lastKnownDeviceFirmwareBuildTime = built;
+                UpdateBundledFirmwareComparison();
+            }
+        });
     }
 
     // ======================== Fault mask helpers ========================
