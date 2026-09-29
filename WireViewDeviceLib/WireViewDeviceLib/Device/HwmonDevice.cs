@@ -96,19 +96,29 @@ namespace WireView2.Device
 
             TryConnectDaemon();
 
+            Interlocked.Exchange(ref _disconnecting, 0);
             _cts = new CancellationTokenSource();
-            _worker = Task.Run(() => PollLoop(_cts.Token));
+            var token = _cts.Token;
+            _worker = Task.Run(() => PollLoop(token));
         }
 
-        public void Disconnect()
+        public void Disconnect() => DisconnectCore(fromWorker: false);
+
+        /// <param name="fromWorker">True when the poll loop gives up on the device:
+        /// waiting for its own task only delayed the notification by the 1 s timeout.</param>
+        private void DisconnectCore(bool fromWorker)
         {
             if (!Connected) return;
+            if (Interlocked.CompareExchange(ref _disconnecting, 1, 0) != 0) return;
             _cts?.Cancel();
-            try { _worker?.Wait(1000); } catch { }
+            if (!fromWorker)
+                try { _worker?.Wait(1000); } catch { }
             DisconnectDaemon();
             Connected = false;
             ConnectionChanged?.Invoke(this, false);
         }
+
+        private int _disconnecting; // 1 once a Disconnect has begun; reset on connect
 
         // ---- Daemon socket connection ----
 
@@ -535,7 +545,7 @@ namespace WireView2.Device
 
         // ---- Sensor reading ----
 
-        private void PollLoop(CancellationToken ct)
+        private async Task PollLoop(CancellationToken ct)
         {
             int consecutiveFailures = 0;
             var lastDaemonRetry = Environment.TickCount64;
@@ -545,7 +555,7 @@ namespace WireView2.Device
                 {
                     if (!Directory.Exists(_hwmonPath))
                     {
-                        Disconnect();
+                        DisconnectCore(fromWorker: true);
                         return;
                     }
 
@@ -579,17 +589,21 @@ namespace WireView2.Device
                         consecutiveFailures++;
                         if (consecutiveFailures > 5)
                         {
-                            Disconnect();
+                            DisconnectCore(fromWorker: true);
                             return;
                         }
                     }
 
-                    Thread.Sleep(_pollIntervalMs);
+                    // Cancellable, so Disconnect() does not wait out a long interval.
+                    await Task.Delay(_pollIntervalMs, ct).ConfigureAwait(false);
                 }
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception)
             {
-                Disconnect();
+                DisconnectCore(fromWorker: true);
             }
         }
 

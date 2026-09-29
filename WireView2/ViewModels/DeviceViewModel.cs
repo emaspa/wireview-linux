@@ -562,6 +562,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             FirmwareUpdateStatus = "Remote devices can only be flashed from the host they are plugged into.";
             return;
         }
+        // The gates and the dialogs are about this device; the picker may switch
+        // the selection while a dialog is open.
+        var device = _device;
 
         string hexPath = GetBundledFirmwarePath();
         if (!File.Exists(hexPath))
@@ -585,13 +588,13 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             ? $"{FormatFirmwareVersion(_lastKnownDeviceFirmwareVersionNumber)} {FormatBuild(_device.BuildString)}".Trim()
             : "an unknown firmware version";
 
-        var verdict = FirmwareCompatibility.Evaluate(imageInfo, _deviceVendorId, _deviceProductId,
+        var verdict = FirmwareCompatibility.Evaluate(imageInfo, device.VendorId, device.ProductId,
             _lastKnownDeviceFirmwareVersionNumber, _lastKnownDeviceFirmwareBuildTime);
         if (verdict == FlashVerdict.ProductMismatch)
         {
             FirmwareUpdateStatus =
                 $"The firmware image is for product {WireViewEditions.FormatHardwareRevision(imageInfo.VendorId, imageInfo.ProductId)}, " +
-                $"not for this device ({WireViewEditions.FormatHardwareRevision(_deviceVendorId, _deviceProductId)}). Nothing was flashed.";
+                $"not for this device ({WireViewEditions.FormatHardwareRevision(device.VendorId, device.ProductId)}). Nothing was flashed.";
             return;
         }
         if (verdict == FlashVerdict.TooOldForNoctua)
@@ -645,6 +648,12 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (!ReferenceEquals(device, _device) || !device.Connected)
+        {
+            FirmwareUpdateStatus = "The selected device changed or disconnected. Nothing was flashed.";
+            return;
+        }
+
         IsFirmwareUpdating = true;
         FirmwareUpdateProgress = 0;
         // The flash makes the device drop off and re-enumerate, which knocks the
@@ -655,7 +664,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         try
         {
             FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
-            switch (_device)
+            switch (device)
             {
                 case WireViewPro2Device pro2: pro2.EnterBootloader(); break;
                 case HwmonDevice hwmon:

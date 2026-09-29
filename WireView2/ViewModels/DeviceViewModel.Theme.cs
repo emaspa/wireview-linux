@@ -1104,6 +1104,9 @@ public sealed partial class DeviceViewModel
 
             var background = UiBackgroundBitmap;
             var fanSlot = DefaultFanForBackground(background);
+            // The confirmation (and the backup) are about this device; the picker
+            // may switch the selection while a dialog is open.
+            var device = _device;
 
             if (IsNoctuaEdition)
             {
@@ -1152,6 +1155,12 @@ public sealed partial class DeviceViewModel
                     "Restore theme assets", MessageBox.MessageBoxButtons.YesNo);
                 if (confirm != MessageBox.MessageBoxResult.Yes)
                     return;
+            }
+
+            if (!ReferenceEquals(device, _device) || !device.Connected)
+            {
+                ConfigStatus = "The selected device changed or disconnected. Nothing was restored.";
+                return;
             }
 
             SetThemeUploadBusy(true);
