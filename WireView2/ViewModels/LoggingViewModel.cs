@@ -262,11 +262,13 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         {
             var progress = new Progress<double>(p => ReadProgress = p);
             // Via the daemon-backed device, borrow the port for the bulk SPI read
-            // (the daemon pauses its polling and resumes afterwards).
+            // (the daemon pauses its polling and resumes afterwards). The session
+            // token also fires if the daemon's suspension cannot be re-armed, which
+            // stops the read and surfaces the reason.
             _deviceLogBuffer = serialDevice != null
                 ? await serialDevice.ReadDeviceLogAsync(progress, token).ConfigureAwait(false)
                 : await DirectSerialSession.RunAsync(hwmonDevice!,
-                    d => d.ReadDeviceLogAsync(progress, token)).ConfigureAwait(false);
+                    (d, sessionToken) => d.ReadDeviceLogAsync(progress, sessionToken), token).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
