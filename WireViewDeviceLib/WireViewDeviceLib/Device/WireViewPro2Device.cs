@@ -20,6 +20,7 @@ namespace WireView2.Device
         private CancellationTokenSource? _cts;
         private Task? _worker;
         private int _disconnecting; // 1 once a Disconnect has begun; reset on connect
+        private static readonly int SensorStructSize = Marshal.SizeOf<SensorStruct>();
 
         /// <summary>Consecutive failed sensor reads after which a device whose port
         /// node still exists is given up. Same rule as HwmonDevice ("more than 5"),
@@ -129,7 +130,8 @@ namespace WireView2.Device
             {
                 Interlocked.Exchange(ref _disconnecting, 0);
                 _cts = new CancellationTokenSource();
-                _worker = Task.Run(() => PollLoop(_cts.Token));
+                var token = _cts.Token;
+                _worker = Task.Run(() => PollLoop(token));
             }
         }
 
@@ -338,14 +340,17 @@ namespace WireView2.Device
         /// the bus mutex stays busy for 2 s, so: disconnect at once when the port node
         /// is gone (unplug), otherwise after <see cref="MaxConsecutiveFailedReads"/>
         /// failed reads in a row. Long SPI transfers (log read, theme upload) hold the
-        /// port lock, so the poll waits for them instead of failing.</summary>
-        private void PollLoop(CancellationToken ct)
+        /// port lock, so the poll waits for them instead of failing. The period
+        /// includes the read (upstream 1.0.8's elapsed-time compensation), and a
+        /// cancellation ends the wait at once instead of after a full interval.</summary>
+        private async Task PollLoop(CancellationToken ct)
         {
             int failures = 0;
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
+                    long started = Environment.TickCount64;
                     SensorStruct? sensors;
                     bool corrupt;
                     try
@@ -377,8 +382,12 @@ namespace WireView2.Device
                             return;
                         }
                     }
-                    Thread.Sleep(_pollIntervalMs);
+                    long elapsed = Environment.TickCount64 - started;
+                    await Task.Delay((int)Math.Max(0, _pollIntervalMs - elapsed), ct).ConfigureAwait(false);
                 }
+            }
+            catch (OperationCanceledException)
+            {
             }
             catch (Exception)
             {
@@ -446,15 +455,26 @@ namespace WireView2.Device
             var buf = new byte[maxLength];
             int offset = 0;
             long deadline = Environment.TickCount64 + 1000;
-            while (offset < maxLength && Environment.TickCount64 < deadline)
+            int savedTimeout = _port!.ReadTimeout;
+            try
             {
-                int n;
-                try { n = _port!.Read(buf, offset, maxLength - offset); }
-                catch (TimeoutException) { break; }
-                if (n <= 0) break;
-                int nul = Array.IndexOf(buf, (byte)0, offset, n);
-                if (nul >= 0) return buf[..nul];
-                offset += n;
+                while (offset < maxLength)
+                {
+                    long left = deadline - Environment.TickCount64;
+                    if (left <= 0) break;
+                    _port.ReadTimeout = (int)left;
+                    int n;
+                    try { n = _port.Read(buf, offset, maxLength - offset); }
+                    catch (TimeoutException) { break; }
+                    if (n <= 0) break;
+                    int nul = Array.IndexOf(buf, (byte)0, offset, n);
+                    if (nul >= 0) return buf[..nul];
+                    offset += n;
+                }
+            }
+            finally
+            {
+                _port.ReadTimeout = savedTimeout;
             }
             return null;
         }
@@ -489,9 +509,7 @@ namespace WireView2.Device
             corrupt = false;
             if (_port == null) return null;
 
-            var size = Marshal.SizeOf<SensorStruct>();
-
-            byte[]? buf = SendCmd(UsbCmd.CMD_READ_SENSOR_VALUES, size);
+            byte[]? buf = SendCmd(UsbCmd.CMD_READ_SENSOR_VALUES, SensorStructSize);
 
             if (buf == null) return null;
 
@@ -582,19 +600,36 @@ namespace WireView2.Device
             return buf;
         }
 
+        /// <summary>Reads exactly <paramref name="size"/> bytes within one second, or
+        /// returns null. Upstream 1.0.8's rewrite: block in Read() (poll() on Linux)
+        /// instead of spinning on BytesToRead, which on Linux is an ioctl(FIONREAD)
+        /// per iteration and kept a core busy for the whole of every wait. Read()
+        /// returns as soon as any byte arrives, so replies are picked up as early as
+        /// before and the command pacing of log reads and theme uploads is unchanged.
+        /// Each Read waits at most for what is left of the second, as the spin did.</summary>
         private byte[]? ReadExact(int size)
         {
             var buf = new byte[size];
             int offset = 0;
-            int timeout = 1000;
-            var start = Environment.TickCount64;
-
-            while (offset < size && Environment.TickCount64 - start < timeout)
+            long deadline = Environment.TickCount64 + 1000;
+            int savedTimeout = _port!.ReadTimeout;
+            try
             {
-                if (_port!.BytesToRead > 0)
+                while (offset < size)
                 {
-                    offset += _port!.Read(buf, offset, size - offset);
+                    long left = deadline - Environment.TickCount64;
+                    if (left <= 0) break;
+                    _port.ReadTimeout = (int)left;
+                    int n;
+                    try { n = _port.Read(buf, offset, size - offset); }
+                    catch (TimeoutException) { break; }
+                    if (n <= 0) break; // port not held (SharedSerialPort) or closed
+                    offset += n;
                 }
+            }
+            finally
+            {
+                _port.ReadTimeout = savedTimeout;
             }
             return offset == size ? buf : null;
         }

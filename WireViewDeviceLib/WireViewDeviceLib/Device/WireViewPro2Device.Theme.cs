@@ -47,24 +47,34 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>Waits up to <paramref name="timeoutMs"/> for the status byte of a
+        /// page write or sector erase: zero bytes are skipped, the first non-zero byte
+        /// decides (1 = success). Upstream 1.0.8's rewrite: blocking 1-byte reads with
+        /// ReadTimeout set to the time left (restored afterwards) instead of polling
+        /// BytesToRead with 1 ms sleeps, so the answer is taken the moment it arrives.</summary>
         private bool SpiFlashReadResult(uint timeoutMs)
         {
-            int status = 0;
-            DateTime start = DateTime.UtcNow;
-            while (status == 0 && DateTime.UtcNow < start.AddMilliseconds(timeoutMs))
+            long deadline = Environment.TickCount64 + timeoutMs;
+            int savedTimeout = _port!.ReadTimeout;
+            var buf = new byte[1];
+            try
             {
-                if (_port!.BytesToRead > 0)
+                while (true)
                 {
-                    var buf = new byte[1];
-                    _port.Read(buf, 0, 1);
-                    status = buf[0];
-                }
-                else
-                {
-                    Thread.Sleep(1);
+                    long left = deadline - Environment.TickCount64;
+                    if (left <= 0) return false;
+                    _port.ReadTimeout = (int)Math.Max(1, left);
+                    int n;
+                    try { n = _port.Read(buf, 0, 1); }
+                    catch (TimeoutException) { return false; }
+                    if (n <= 0) return false;
+                    if (buf[0] != 0) return buf[0] == 1;
                 }
             }
-            return status == 1;
+            finally
+            {
+                _port.ReadTimeout = savedTimeout;
+            }
         }
 
         private bool SpiFlashEraseRangeNoLock(uint addr, uint len)
