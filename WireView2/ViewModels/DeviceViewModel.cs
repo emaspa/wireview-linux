@@ -780,29 +780,44 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         return new CommandResult(CommandOutcome.HttpError);
     }
 
-    private WireViewPro2Device.DeviceConfigStructV3? DeviceReadConfig()
+    /// <summary>The device config as stored, with its layout version (0 = V1,
+    /// 1 = V2, 2 = V3), or null when it cannot be read.</summary>
+    private (int Version, byte[] Data)? DeviceReadConfigRaw()
     {
-        if (_device is WireViewPro2Device pro2) return pro2.ReadConfig();
-        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadConfig();
+        if (_device is WireViewPro2Device pro2)
+            return pro2.ReadConfigRaw() is { } b ? (pro2.ConfigVersion, b) : null;
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return hwmon.ReadConfigRaw();
         if (_device is NetworkDevice nd)
-        {
-            var raw = nd.ReadConfigRaw();
-            return raw is { } r ? WireViewPro2Device.DeserializeConfig(r.version, r.data) : null;
-        }
+            return nd.ReadConfigRaw() is { } r ? (r.version, r.data) : null;
         return null;
     }
 
-    private async Task<CommandResult> DeviceWriteConfigAsync(WireViewPro2Device.DeviceConfigStructV3 config)
+    private async Task<CommandResult> DeviceWriteConfigRawAsync(int version, byte[] bytes)
     {
-        if (_device is WireViewPro2Device pro2) { pro2.WriteConfig(config); return CommandResult.Success; }
-        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return CommandResult.FromDaemon(hwmon.WriteConfig(config));
+        if (_device is WireViewPro2Device pro2) { pro2.WriteConfigRaw(bytes); return CommandResult.Success; }
+        if (_device is HwmonDevice { DaemonAvailable: true } hwmon) return CommandResult.FromDaemon(hwmon.WriteConfigRaw(version, bytes));
         if (_device is NetworkDevice nd)
-        {
-            int ver = nd.ConfigVersion >= 0 ? nd.ConfigVersion : 2;
-            var bytes = WireViewPro2Device.SerializeConfig(config, ver);
-            return await nd.SendCommandAsync(WireViewCommand.WriteConfig(nd.UniqueId, ver, bytes));
-        }
+            return await nd.SendCommandAsync(WireViewCommand.WriteConfig(nd.UniqueId, version, bytes));
         return new CommandResult(CommandOutcome.HttpError);
+    }
+
+    /// <summary>Writes the fields edited since the last load (or apply) onto the
+    /// device's current raw config and records the result as the new baseline.
+    /// Refuses when the config cannot be read: writing editor values over an
+    /// unread config would replace everything the app does not model.</summary>
+    private async Task<CommandResult> WriteEditedConfigAsync()
+    {
+        if (_configBaseline is not { } baseline)
+            throw new InvalidOperationException("The device config has not been loaded. Press Reload first.");
+        var raw = DeviceReadConfigRaw()
+            ?? throw new InvalidOperationException("Could not read the device config to apply the changes to.");
+        var current = CaptureEditorValues();
+        var edited = ApplyEditorChanges(WireViewPro2Device.DeserializeConfig(raw.Version, raw.Data),
+            baseline, current, IsAveragingSupported, IsUiV2Supported);
+        byte[] bytes = WireViewPro2Device.MergeConfigChanges(raw.Version, raw.Data, edited);
+        var result = await DeviceWriteConfigRawAsync(raw.Version, bytes);
+        if (result.Ok) _configBaseline = current;
+        return result;
     }
 
     /// <summary>Status line for a failed command. A wireviewd permission denial,
@@ -1016,24 +1031,24 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            var cfg = DeviceReadConfig();
-            if (!cfg.HasValue)
+            var raw = DeviceReadConfigRaw();
+            if (raw is not { } r)
             {
                 ConfigLoaded = false;
+                _configBaseline = null;
                 ConfigStatus = "Failed to read config.";
                 return;
             }
+            var cfg = WireViewPro2Device.DeserializeConfig(r.Version, r.Data);
 
-            int configVersion = 0;
-            if (_device is WireViewPro2Device pro2Dev) configVersion = pro2Dev.ConfigVersion;
-            else if (_device is HwmonDevice hwmonDev) configVersion = hwmonDev.ConfigVersion;
-            else if (_device is NetworkDevice netDev) configVersion = netDev.ConfigVersion;
+            int configVersion = r.Version;
             IsAveragingSupported = configVersion >= 1;
             IsUiV2Supported = configVersion >= 2;
-            UpdateAveragingOptions(cfg.Value.Average);
+            UpdateAveragingOptions(cfg.Average);
             OnPropertyChanged(nameof(IsLegacyThemeSelectionVisible));
             OnPropertyChanged(nameof(IsThemePresetSelectionVisible));
-            ApplyToEditor(cfg.Value);
+            ApplyToEditor(cfg);
+            _configBaseline = CaptureEditorValues();
             ConfigLoaded = true;
             ConfigStatus = "Config loaded.";
         }
@@ -1055,8 +1070,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             // A staged custom background (and its tinted fan frames) uploads first;
             // throws with a descriptive message if the device can't take it.
             await UploadPendingThemeAssetsAsync();
-            var config = BuildConfigFromEditor();
-            var w = await DeviceWriteConfigAsync(config);
+            var w = await WriteEditedConfigAsync();
             if (!w.Ok) { ConfigStatus = CommandFailureText("Apply", w); return; }
             await DeviceScreenCmdAsync(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
             ConfigStatus = "Config applied.";
@@ -1200,46 +1214,100 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private WireViewPro2Device.DeviceConfigStructV3 BuildConfigFromEditor()
+    /// <summary>The editor's values, compared field by field against the baseline
+    /// taken when the config was loaded so that only edited fields are written.</summary>
+    internal readonly record struct ConfigEditorValues(
+        string FriendlyName, int BacklightDuty,
+        WireViewPro2Device.FanMode FanMode, WireViewPro2Device.TempSource FanTempSource,
+        int FanDutyMin, int FanDutyMax, double FanTempMinC, double FanTempMaxC,
+        WireViewPro2Device.Screen UiDefaultScreen, WireViewPro2Device.CurrentScale UiCurrentScale,
+        WireViewPro2Device.PowerScale UiPowerScale, WireViewPro2Device.Theme UiTheme,
+        WireViewPro2Device.DisplayRotation UiRotation, WireViewPro2Device.TimeoutMode UiTimeoutMode,
+        int UiCycleTimeSeconds, int UiTimeoutSeconds,
+        uint UiPrimaryColor, uint UiSecondaryColor, uint UiHighlightColor, uint UiBackgroundColor,
+        WireViewPro2Device.THEME_BACKGROUND UiBackgroundBitmap, bool UiDisplayInversionEnabled,
+        ushort FaultDisplayEnableMask, ushort FaultBuzzerEnableMask,
+        ushort FaultSoftPowerEnableMask, ushort FaultHardPowerEnableMask,
+        double TsFaultThresholdC, int OcpFaultThresholdA, double WireOcpFaultThresholdA,
+        int OppFaultThresholdW, int CurrentImbalanceFaultThresholdPercent,
+        int CurrentImbalanceFaultMinLoadA, int ShutdownWaitTimeSeconds, int LoggingIntervalSeconds,
+        WireViewPro2Device.AVG Averaging);
+
+    /// <summary>Editor values as last loaded from, or applied to, the device; null
+    /// until a config has been read.</summary>
+    private ConfigEditorValues? _configBaseline;
+
+    private ConfigEditorValues CaptureEditorValues() => new(
+        FriendlyName, BacklightDuty, FanMode, FanTempSource, FanDutyMin, FanDutyMax, FanTempMinC, FanTempMaxC,
+        UiDefaultScreen, UiCurrentScale, UiPowerScale, UiTheme, UiRotation, UiTimeoutMode,
+        UiCycleTimeSeconds, UiTimeoutSeconds,
+        ColorToArgb(UiPrimaryColor), ColorToArgb(UiSecondaryColor), ColorToArgb(UiHighlightColor), ColorToArgb(UiBackgroundColor),
+        UiBackgroundBitmap, UiDisplayInversionEnabled,
+        FaultDisplayEnableMask, FaultBuzzerEnableMask, FaultSoftPowerEnableMask, FaultHardPowerEnableMask,
+        TsFaultThresholdC, OcpFaultThresholdA, WireOcpFaultThresholdA, OppFaultThresholdW,
+        CurrentImbalanceFaultThresholdPercent, CurrentImbalanceFaultMinLoadA, ShutdownWaitTimeSeconds,
+        LoggingIntervalSeconds, Averaging);
+
+    /// <summary>Puts the fields that differ between <paramref name="was"/> and
+    /// <paramref name="now"/> into <paramref name="cfg"/> (the device's current
+    /// config) and leaves every other field as the device has it. The editor maps
+    /// values it cannot show (an unknown background id reads as Disabled, a clamped
+    /// backlight, an unknown enum), so writing unchanged fields back would replace
+    /// what the device holds, e.g. a Noctua Edition theme value.</summary>
+    internal static WireViewPro2Device.DeviceConfigStructV3 ApplyEditorChanges(
+        WireViewPro2Device.DeviceConfigStructV3 cfg, ConfigEditorValues was, ConfigEditorValues now,
+        bool averagingSupported, bool uiV2Supported)
     {
-        var cfg = (DeviceReadConfig()).GetValueOrDefault();
-        cfg.FriendlyName = EncodeDeviceString(FriendlyName, 32);
-        cfg.BacklightDuty = (byte)Math.Clamp(BacklightDuty, 0, 100);
-        cfg.FanConfig.Mode = FanMode;
-        cfg.FanConfig.TempSource = FanTempSource;
-        cfg.FanConfig.DutyMin = (byte)Math.Clamp(FanDutyMin, 0, 100);
-        cfg.FanConfig.DutyMax = (byte)Math.Clamp(FanDutyMax, 0, 100);
-        cfg.FanConfig.TempMin = (short)Math.Clamp((int)Math.Round(FanTempMinC * 10.0), -32768, 32767);
-        cfg.FanConfig.TempMax = (short)Math.Clamp((int)Math.Round(FanTempMaxC * 10.0), -32768, 32767);
-        cfg.Ui.DefaultScreen = UiDefaultScreen;
-        cfg.Ui.CurrentScale = UiCurrentScale;
-        cfg.Ui.PowerScale = UiPowerScale;
-        cfg.Ui.DisplayRotation = UiRotation;
-        cfg.Ui.TimeoutMode = UiTimeoutMode;
-        cfg.Ui.CycleTime = (byte)Math.Clamp(UiCycleTimeSeconds, 1, 60);
-        cfg.Ui.Timeout = (byte)Math.Clamp(UiTimeoutSeconds, 0, 255);
-        cfg.Ui.PrimaryColor = ColorToArgb(UiPrimaryColor);
-        cfg.Ui.SecondaryColor = ColorToArgb(UiSecondaryColor);
-        cfg.Ui.HighlightColor = ColorToArgb(UiHighlightColor);
-        cfg.Ui.BackgroundColor = ColorToArgb(UiBackgroundColor);
-        cfg.Ui.BackgroundBitmapId = (byte)UiBackgroundBitmap;
-        cfg.Ui.FanBitmapId = (byte)MapFanBitmapFromBackground(UiBackgroundBitmap);
-        cfg.Ui.DisplayInversion = UiDisplayInversionEnabled
-            ? WireViewPro2Device.DISPLAY_INVERSION.DISPLAY_INVERSION_ON
-            : WireViewPro2Device.DISPLAY_INVERSION.DISPLAY_INVERSION_OFF;
-        cfg.FaultDisplayEnable = FaultDisplayEnableMask;
-        cfg.FaultBuzzerEnable = FaultBuzzerEnableMask;
-        cfg.FaultSoftPowerEnable = FaultSoftPowerEnableMask;
-        cfg.FaultHardPowerEnable = FaultHardPowerEnableMask;
-        cfg.TsFaultThreshold = (short)Math.Clamp((int)Math.Round(TsFaultThresholdC * 10.0), -32768, 32767);
-        cfg.OcpFaultThreshold = (byte)Math.Clamp(OcpFaultThresholdA, 0, 255);
-        cfg.WireOcpFaultThreshold = (byte)Math.Clamp((int)Math.Round(WireOcpFaultThresholdA * 10.0), 0, 255);
-        cfg.OppFaultThreshold = (ushort)Math.Clamp(OppFaultThresholdW, 0, 65535);
-        cfg.CurrentImbalanceFaultThreshold = (byte)Math.Clamp(CurrentImbalanceFaultThresholdPercent, 0, 100);
-        cfg.CurrentImbalanceFaultMinLoad = (byte)Math.Clamp(CurrentImbalanceFaultMinLoadA, 0, 255);
-        cfg.ShutdownWaitTime = (byte)Math.Clamp(ShutdownWaitTimeSeconds, 0, 255);
-        cfg.LoggingInterval = (byte)Math.Clamp(LoggingIntervalSeconds, 0, 255);
-        if (IsAveragingSupported) cfg.Average = Averaging;
+        if (now.FriendlyName != was.FriendlyName) cfg.FriendlyName = EncodeDeviceString(now.FriendlyName, 32);
+        if (now.BacklightDuty != was.BacklightDuty) cfg.BacklightDuty = (byte)Math.Clamp(now.BacklightDuty, 0, 100);
+        if (now.FanMode != was.FanMode) cfg.FanConfig.Mode = now.FanMode;
+        if (now.FanTempSource != was.FanTempSource) cfg.FanConfig.TempSource = now.FanTempSource;
+        if (now.FanDutyMin != was.FanDutyMin) cfg.FanConfig.DutyMin = (byte)Math.Clamp(now.FanDutyMin, 0, 100);
+        if (now.FanDutyMax != was.FanDutyMax) cfg.FanConfig.DutyMax = (byte)Math.Clamp(now.FanDutyMax, 0, 100);
+        if (now.FanTempMinC != was.FanTempMinC) cfg.FanConfig.TempMin = (short)Math.Clamp((int)Math.Round(now.FanTempMinC * 10.0), -32768, 32767);
+        if (now.FanTempMaxC != was.FanTempMaxC) cfg.FanConfig.TempMax = (short)Math.Clamp((int)Math.Round(now.FanTempMaxC * 10.0), -32768, 32767);
+        if (now.UiDefaultScreen != was.UiDefaultScreen) cfg.Ui.DefaultScreen = now.UiDefaultScreen;
+        if (now.UiCurrentScale != was.UiCurrentScale) cfg.Ui.CurrentScale = now.UiCurrentScale;
+        if (now.UiPowerScale != was.UiPowerScale) cfg.Ui.PowerScale = now.UiPowerScale;
+        if (now.UiRotation != was.UiRotation) cfg.Ui.DisplayRotation = now.UiRotation;
+        if (now.UiTimeoutMode != was.UiTimeoutMode) cfg.Ui.TimeoutMode = now.UiTimeoutMode;
+        if (now.UiCycleTimeSeconds != was.UiCycleTimeSeconds) cfg.Ui.CycleTime = (byte)Math.Clamp(now.UiCycleTimeSeconds, 1, 60);
+        if (now.UiTimeoutSeconds != was.UiTimeoutSeconds) cfg.Ui.Timeout = (byte)Math.Clamp(now.UiTimeoutSeconds, 0, 255);
+        if (now.UiPrimaryColor != was.UiPrimaryColor) cfg.Ui.PrimaryColor = now.UiPrimaryColor;
+        if (now.UiSecondaryColor != was.UiSecondaryColor) cfg.Ui.SecondaryColor = now.UiSecondaryColor;
+        if (now.UiHighlightColor != was.UiHighlightColor) cfg.Ui.HighlightColor = now.UiHighlightColor;
+        if (now.UiBackgroundColor != was.UiBackgroundColor) cfg.Ui.BackgroundColor = now.UiBackgroundColor;
+        if (now.UiBackgroundBitmap != was.UiBackgroundBitmap)
+        {
+            cfg.Ui.BackgroundBitmapId = (byte)now.UiBackgroundBitmap;
+            cfg.Ui.FanBitmapId = (byte)MapFanBitmapFromBackground(now.UiBackgroundBitmap);
+        }
+        // Config V1/V2 devices store a legacy theme, derived from the bitmap id on
+        // the way to the device (ConvertConfigV3ToV2).
+        if (!uiV2Supported && now.UiTheme != was.UiTheme)
+            cfg.Ui.BackgroundBitmapId = now.UiTheme switch
+            {
+                WireViewPro2Device.Theme.ThemeTg1 => 1,
+                WireViewPro2Device.Theme.ThemeTg2 => 2,
+                _ => byte.MaxValue,
+            };
+        if (now.UiDisplayInversionEnabled != was.UiDisplayInversionEnabled)
+            cfg.Ui.DisplayInversion = now.UiDisplayInversionEnabled
+                ? WireViewPro2Device.DISPLAY_INVERSION.DISPLAY_INVERSION_ON
+                : WireViewPro2Device.DISPLAY_INVERSION.DISPLAY_INVERSION_OFF;
+        if (now.FaultDisplayEnableMask != was.FaultDisplayEnableMask) cfg.FaultDisplayEnable = now.FaultDisplayEnableMask;
+        if (now.FaultBuzzerEnableMask != was.FaultBuzzerEnableMask) cfg.FaultBuzzerEnable = now.FaultBuzzerEnableMask;
+        if (now.FaultSoftPowerEnableMask != was.FaultSoftPowerEnableMask) cfg.FaultSoftPowerEnable = now.FaultSoftPowerEnableMask;
+        if (now.FaultHardPowerEnableMask != was.FaultHardPowerEnableMask) cfg.FaultHardPowerEnable = now.FaultHardPowerEnableMask;
+        if (now.TsFaultThresholdC != was.TsFaultThresholdC) cfg.TsFaultThreshold = (short)Math.Clamp((int)Math.Round(now.TsFaultThresholdC * 10.0), -32768, 32767);
+        if (now.OcpFaultThresholdA != was.OcpFaultThresholdA) cfg.OcpFaultThreshold = (byte)Math.Clamp(now.OcpFaultThresholdA, 0, 255);
+        if (now.WireOcpFaultThresholdA != was.WireOcpFaultThresholdA) cfg.WireOcpFaultThreshold = (byte)Math.Clamp((int)Math.Round(now.WireOcpFaultThresholdA * 10.0), 0, 255);
+        if (now.OppFaultThresholdW != was.OppFaultThresholdW) cfg.OppFaultThreshold = (ushort)Math.Clamp(now.OppFaultThresholdW, 0, 65535);
+        if (now.CurrentImbalanceFaultThresholdPercent != was.CurrentImbalanceFaultThresholdPercent) cfg.CurrentImbalanceFaultThreshold = (byte)Math.Clamp(now.CurrentImbalanceFaultThresholdPercent, 0, 100);
+        if (now.CurrentImbalanceFaultMinLoadA != was.CurrentImbalanceFaultMinLoadA) cfg.CurrentImbalanceFaultMinLoad = (byte)Math.Clamp(now.CurrentImbalanceFaultMinLoadA, 0, 255);
+        if (now.ShutdownWaitTimeSeconds != was.ShutdownWaitTimeSeconds) cfg.ShutdownWaitTime = (byte)Math.Clamp(now.ShutdownWaitTimeSeconds, 0, 255);
+        if (now.LoggingIntervalSeconds != was.LoggingIntervalSeconds) cfg.LoggingInterval = (byte)Math.Clamp(now.LoggingIntervalSeconds, 0, 255);
+        if (averagingSupported && now.Averaging != was.Averaging) cfg.Average = now.Averaging;
         return cfg;
     }
 

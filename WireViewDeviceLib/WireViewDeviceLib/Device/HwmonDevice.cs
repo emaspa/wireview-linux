@@ -410,6 +410,18 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>The device config exactly as wireviewd read it, with its layout
+        /// version, including bytes this app does not model.</summary>
+        public (int Version, byte[] Data)? ReadConfigRaw()
+        {
+            if (!DaemonAvailable || _configVersion < 0 || _configVersion > 2) return null;
+            int size = WireViewPro2Device.ConfigSizeForVersion(_configVersion);
+            var payload = new byte[] { (byte)(size & 0xFF), (byte)((size >> 8) & 0xFF) };
+            var (status, data) = SendDaemonRequest(WCMD_READ_CONFIG, payload);
+            if (status != RESP_OK || data == null || data.Length < 2) return null;
+            return (data[0], data.AsSpan(1).ToArray());
+        }
+
         public DaemonResult WriteConfig(WireViewPro2Device.DeviceConfigStructV3 config)
         {
             if (!DaemonAvailable || _configVersion < 0) return DaemonResult.Unavailable;
@@ -719,22 +731,8 @@ namespace WireView2.Device
             }
         }
 
-        private static byte[] StructToBytes<T>(T s) where T : struct
-        {
-            int size = Marshal.SizeOf<T>();
-            byte[] bytes = new byte[size];
-            IntPtr ptr = Marshal.AllocHGlobal(size);
-            try
-            {
-                Marshal.StructureToPtr(s, ptr, false);
-                Marshal.Copy(ptr, bytes, 0, size);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(ptr);
-            }
-            return bytes;
-        }
+        private static byte[] StructToBytes<T>(T s) where T : struct =>
+            WireViewPro2Device.StructToBytes(s);
 
         // ---- Static discovery ----
 

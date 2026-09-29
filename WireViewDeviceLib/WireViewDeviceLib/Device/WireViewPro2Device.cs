@@ -211,6 +211,34 @@ namespace WireView2.Device
                 return null;
         }
 
+        /// <summary>The device config exactly as stored, in its version's layout
+        /// (<see cref="ConfigVersion"/>), including bytes this app does not model.</summary>
+        public byte[]? ReadConfigRaw()
+        {
+            if (!Connected || _port == null || ConfigVersion is < 0 or > 2) return null;
+            return SendCmd(UsbCmd.CMD_READ_CONFIG, ConfigSizeForVersion(ConfigVersion));
+        }
+
+        /// <summary>Applies an edited config to the raw bytes it was decoded from,
+        /// changing only the bytes whose serialized value differs between the
+        /// decoded original and <paramref name="edited"/>. Everything else, including
+        /// enum values and fields the app does not understand, padding and the CRC
+        /// field, keeps the device's bytes: a config round trip never replaces an
+        /// unknown value with an enum default.</summary>
+        public static byte[] MergeConfigChanges(int configVersion, byte[] deviceBytes, DeviceConfigStructV3 edited)
+        {
+            int size = ConfigSizeForVersion(configVersion);
+            var basis = deviceBytes.Length >= size ? deviceBytes : deviceBytes.Concat(new byte[size - deviceBytes.Length]).ToArray();
+            var original = DeserializeConfig(configVersion, basis);
+            byte[] before = SerializeConfig(original, configVersion);
+            byte[] after = SerializeConfig(edited, configVersion);
+            var result = (byte[])deviceBytes.Clone();
+            int n = Math.Min(result.Length, Math.Min(before.Length, after.Length));
+            for (int i = 0; i < n; i++)
+                if (before[i] != after[i]) result[i] = after[i];
+            return result;
+        }
+
         /// <summary>Raw config byte length for a device config version (0=V1, 1=V2, 2=V3).</summary>
         public static int ConfigSizeForVersion(int configVersion) => configVersion switch
         {
@@ -641,21 +669,20 @@ namespace WireView2.Device
             finally { handle.Free(); }
         }
 
+        /// <summary>Marshals into a zeroed buffer: AllocHGlobal memory is not cleared,
+        /// so padding bytes used to carry whatever was left in it.</summary>
         public static byte[] StructToBytes<T>(T value) where T : struct
         {
-            int size = Marshal.SizeOf<T>();
-            var bytes = new byte[size];
-
-            nint p = Marshal.AllocHGlobal(size);
+            var bytes = new byte[Marshal.SizeOf<T>()];
+            var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             try
             {
-                Marshal.StructureToPtr(value, p, false);
-                Marshal.Copy(p, bytes, 0, size);
+                Marshal.StructureToPtr(value, handle.AddrOfPinnedObject(), false);
                 return bytes;
             }
             finally
             {
-                Marshal.FreeHGlobal(p);
+                handle.Free();
             }
         }
 

@@ -25,6 +25,11 @@ internal static class ThemeFile
         public byte BackgroundBitmapId { get; set; }
         public byte FanBitmapId { get; set; }
         public string? BackgroundImageBase64 { get; set; }
+        // Linux-port extension, written by the theme asset backup: the two fan
+        // frames exactly as read from the device (RGB565, device layout). Readers
+        // that do not know them (upstream's client) ignore unknown members.
+        public string? FanFrame1Base64 { get; set; }
+        public string? FanFrame2Base64 { get; set; }
     }
 
     private const int CurrentVersion = 1;
@@ -52,6 +57,53 @@ internal static class ThemeFile
         };
         await using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
         await JsonSerializer.SerializeAsync(fs, doc, options).ConfigureAwait(false);
+    }
+
+    /// <summary>Saves a backup of theme assets read from the device: the stored
+    /// colors, the background slot and both frames of its fan, byte for byte.</summary>
+    internal static async Task SaveBackupAsync(string filePath, WireViewPro2Device.UiConfigStructV2 ui,
+        WireViewPro2Device.THEME_BACKGROUND backgroundSlot, WireViewPro2Device.THEME_FAN fanSlot,
+        byte[] backgroundRgb565, byte[] fanFrame1Rgb565, byte[] fanFrame2Rgb565)
+    {
+        var doc = new ThemeDocument
+        {
+            PrimaryColor = ui.PrimaryColor,
+            SecondaryColor = ui.SecondaryColor,
+            HighlightColor = ui.HighlightColor,
+            BackgroundColor = ui.BackgroundColor,
+            DisplayInversion = ui.DisplayInversion == WireViewPro2Device.DISPLAY_INVERSION.DISPLAY_INVERSION_ON,
+            BackgroundBitmapId = (byte)backgroundSlot,
+            FanBitmapId = (byte)fanSlot,
+            BackgroundImageBase64 = Convert.ToBase64String(backgroundRgb565),
+            FanFrame1Base64 = Convert.ToBase64String(fanFrame1Rgb565),
+            FanFrame2Base64 = Convert.ToBase64String(fanFrame2Rgb565),
+        };
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        };
+        await using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        await JsonSerializer.SerializeAsync(fs, doc, options).ConfigureAwait(false);
+    }
+
+    /// <summary>Both fan frames when the file carries them (a backup), else null.</summary>
+    internal static (byte[] Frame1, byte[] Frame2)? TryDecodeFanFrames(ThemeDocument doc, int expectedBytes)
+    {
+        if (string.IsNullOrWhiteSpace(doc.FanFrame1Base64) || string.IsNullOrWhiteSpace(doc.FanFrame2Base64))
+            return null;
+        try
+        {
+            var f1 = Convert.FromBase64String(doc.FanFrame1Base64);
+            var f2 = Convert.FromBase64String(doc.FanFrame2Base64);
+            if (f1.Length != expectedBytes || f2.Length != expectedBytes)
+                throw new InvalidDataException("Theme file fan frames have an unexpected size.");
+            return (f1, f2);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException("Theme file contains invalid fan frame data.", ex);
+        }
     }
 
     internal static async Task<ThemeDocument> LoadAsync(string filePath)

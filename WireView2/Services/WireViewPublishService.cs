@@ -71,14 +71,15 @@ namespace WireView2.Services
                 if (md.Device is NetworkDevice) continue;
                 if (!string.IsNullOrEmpty(deviceId) && md.Device.UniqueId != deviceId) continue;
 
-                int version;
-                WireViewPro2Device.DeviceConfigStructV3? cfg;
-                if (md.Device is WireViewPro2Device p) { version = p.ConfigVersion; cfg = p.ReadConfig(); }
-                else if (md.Device is HwmonDevice { DaemonAvailable: true } h) { version = h.ConfigVersion; cfg = h.ReadConfig(); }
+                // The stored bytes, not a decode/encode round trip: remote editors
+                // patch their changes onto exactly what the device holds.
+                (int Version, byte[] Data)? raw;
+                if (md.Device is WireViewPro2Device p) raw = p.ReadConfigRaw() is { } b ? (p.ConfigVersion, b) : null;
+                else if (md.Device is HwmonDevice { DaemonAvailable: true } h) raw = h.ReadConfigRaw();
                 else continue;
 
-                if (cfg is not { } v3) return null;
-                return new ConfigSnapshot(md.Device.UniqueId, version, WireViewPro2Device.SerializeConfig(v3, version));
+                if (raw is not { } r) return null;
+                return new ConfigSnapshot(md.Device.UniqueId, r.Version, r.Data);
             }
             return null;
         }
