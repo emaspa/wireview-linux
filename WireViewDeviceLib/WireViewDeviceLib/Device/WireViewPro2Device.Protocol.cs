@@ -207,7 +207,9 @@ namespace WireView2.Device
             AVG_354MS,
             AVG_709MS,
             AVG_1417MS,
-            AVG_NUM
+            // Firmware v05 and newer (upstream 1.0.8).
+            AVG_2834MS,
+            AVG_5668MS
         }
 
         public enum DISPLAY_INVERSION : byte

@@ -119,7 +119,22 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     public WireViewPro2Device.DisplayRotation[] DisplayRotations { get; } = Enum.GetValues<WireViewPro2Device.DisplayRotation>();
     public WireViewPro2Device.TimeoutMode[] TimeoutModes { get; } = Enum.GetValues<WireViewPro2Device.TimeoutMode>();
     public WireViewPro2Device.FAULT[] Faults { get; } = Enum.GetValues<WireViewPro2Device.FAULT>();
-    public WireViewPro2Device.AVG[] AveragingOptions { get; } = Enum.GetValues<WireViewPro2Device.AVG>();
+    // Upstream 1.0.8: all nine averaging windows on firmware v05 and newer, the
+    // first seven (up to 1417 ms) before.
+    private const int ExtendedAveragingMinProFirmwareVersion = 5;
+    private static readonly WireViewPro2Device.AVG[] AllAveragingOptions = Enum.GetValues<WireViewPro2Device.AVG>();
+    private static readonly WireViewPro2Device.AVG[] LegacyAveragingOptions =
+        AllAveragingOptions.Where(a => (int)a <= (int)WireViewPro2Device.AVG.AVG_1417MS).ToArray();
+    private WireViewPro2Device.AVG[] _averagingOptions = LegacyAveragingOptions;
+
+    /// <summary>The averaging windows offered for the connected firmware, plus the
+    /// device's current value when it is not among them (an unknown value, or an
+    /// extended one on older firmware), so it is shown and kept as it is.</summary>
+    public WireViewPro2Device.AVG[] AveragingOptions
+    {
+        get => _averagingOptions;
+        private set => Set(ref _averagingOptions, value);
+    }
     public WireViewPro2Device.Screen[] Screens { get; } = Enum.GetValues<WireViewPro2Device.Screen>();
     public WireViewPro2Device.THEME_BACKGROUND[] ThemeBackgrounds { get; } = Enum.GetValues<WireViewPro2Device.THEME_BACKGROUND>();
     public UiThemePreset[] UiThemePresets { get; } = Enum.GetValues<UiThemePreset>();
@@ -1015,6 +1030,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             else if (_device is NetworkDevice netDev) configVersion = netDev.ConfigVersion;
             IsAveragingSupported = configVersion >= 1;
             IsUiV2Supported = configVersion >= 2;
+            UpdateAveragingOptions(cfg.Value.Average);
             OnPropertyChanged(nameof(IsLegacyThemeSelectionVisible));
             OnPropertyChanged(nameof(IsThemePresetSelectionVisible));
             ApplyToEditor(cfg.Value);
@@ -1098,6 +1114,35 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // ======================== Averaging options ========================
+
+    /// <summary>Upstream's condition, verbatim: <c>(_lastKnownDeviceFirmwareVersionNumber
+    /// &gt;= 5) ? AllAveragingOptions : LegacyAveragingOptions</c>.</summary>
+    private WireViewPro2Device.AVG[] BaseAveragingOptions =>
+        _lastKnownDeviceFirmwareVersionNumber >= ExtendedAveragingMinProFirmwareVersion
+            ? AllAveragingOptions
+            : LegacyAveragingOptions;
+
+    private void UpdateAveragingOptions(WireViewPro2Device.AVG deviceValue)
+    {
+        var options = BaseAveragingOptions;
+        if (!options.Contains(deviceValue))
+            options = options.Append(deviceValue).ToArray();
+        // Replacing the list resets the ComboBox selection; only do it on a change.
+        if (!options.SequenceEqual(AveragingOptions))
+            AveragingOptions = options;
+    }
+
+    /// <summary>A profile saved on a v05 device may carry 2834/5668 ms; older
+    /// firmware only knows up to 1417 ms, so clamp to the longest window offered.</summary>
+    private WireViewPro2Device.AVG ClampAveragingForDevice(WireViewPro2Device.AVG value)
+    {
+        var options = BaseAveragingOptions;
+        if (options.Contains(value)) return value;
+        var longest = options.Max();
+        return (int)value > (int)longest ? longest : value;
+    }
+
     // ======================== Config editor mapping ========================
 
     private void ApplyToEditor(WireViewPro2Device.DeviceConfigStructV3 cfg)
@@ -1140,7 +1185,13 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         CurrentImbalanceFaultMinLoadA = cfg.CurrentImbalanceFaultMinLoad;
         ShutdownWaitTimeSeconds = cfg.ShutdownWaitTime;
         LoggingIntervalSeconds = cfg.LoggingInterval;
-        if (IsAveragingSupported) Averaging = cfg.Average;
+        if (IsAveragingSupported)
+        {
+            Averaging = cfg.Average;
+            // Re-announce even when unchanged: a new AveragingOptions list may have
+            // cleared the ComboBox selection.
+            OnPropertyChanged(nameof(Averaging));
+        }
         if (IsUiV2Supported)
         {
             _isApplyingThemePreset = true;
@@ -1421,7 +1472,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         UiTimeoutMode = (WireViewPro2Device.TimeoutMode)p.UiTimeoutMode;
         UiCycleTimeSeconds = p.UiCycleTimeSeconds;
         UiTimeoutSeconds = p.UiTimeoutSeconds;
-        Averaging = (WireViewPro2Device.AVG)p.Averaging;
+        Averaging = ClampAveragingForDevice((WireViewPro2Device.AVG)p.Averaging);
         FaultDisplayEnableMask = p.FaultDisplayEnableMask;
         FaultBuzzerEnableMask = p.FaultBuzzerEnableMask;
         FaultSoftPowerEnableMask = p.FaultSoftPowerEnableMask;
