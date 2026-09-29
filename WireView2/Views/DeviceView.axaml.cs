@@ -11,6 +11,7 @@ public partial class DeviceView : UserControl
     public DeviceView()
     {
         InitializeComponent();
+        ViewVisibilityTracker.Track(this);
     }
 
     private async void OnSelectBackgroundClicked(object? sender, RoutedEventArgs e)

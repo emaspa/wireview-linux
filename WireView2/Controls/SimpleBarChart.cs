@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -119,6 +120,8 @@ public sealed class SimpleBarChart : Control
     private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _propertyHandlers = new();
 
     private string? _lastRenderedSnapshot;
+    private int _invalidatePosted;
+    private bool _isAttached;
     private int _sameSnapshotUpdateCounter;
 
     public IBrush? Foreground
@@ -186,6 +189,7 @@ public sealed class SimpleBarChart : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (!_isAttached) return;
         if (change.Property == SeriesProperty)
             SubscribeToSeries(change.NewValue as IReadOnlyList<SimpleBarSeries>);
         if (change.Property == XAxesProperty || change.Property == YAxesProperty)
@@ -193,6 +197,24 @@ public sealed class SimpleBarChart : Control
             SubscribeToAxes(XAxes, YAxes);
             InvalidateOnUiThread();
         }
+    }
+
+    // Listen to the series only while on screen: the Overview view is rebuilt each
+    // time the page is shown, and a chart left subscribed kept reacting to every
+    // sample of the long-lived view model after its page was left.
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _isAttached = true;
+        SubscribeToSeries(Series);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _isAttached = false;
+        UnsubscribeAll();
+        _subscribedSeries = null;
     }
 
     private void SubscribeToSeries(IReadOnlyList<SimpleBarSeries>? series)
@@ -245,10 +267,19 @@ public sealed class SimpleBarChart : Control
 
     private void InvalidateOnUiThread()
     {
+        // Overview updates up to 18 bar values per sample from the poll thread:
+        // queue one check for the whole batch, not one per value.
+        if (Interlocked.Exchange(ref _invalidatePosted, 1) == 1) return;
         if (Dispatcher.UIThread.CheckAccess())
-            InvalidateIfValuesChangedOrNthRepeat();
+            Dispatcher.UIThread.Post(RunQueuedInvalidate, DispatcherPriority.Render);
         else
-            Dispatcher.UIThread.Post(InvalidateIfValuesChangedOrNthRepeat);
+            Dispatcher.UIThread.Post(RunQueuedInvalidate);
+    }
+
+    private void RunQueuedInvalidate()
+    {
+        Interlocked.Exchange(ref _invalidatePosted, 0);
+        InvalidateIfValuesChangedOrNthRepeat();
     }
 
     // Live telemetry pushes identical value sets every poll — skip those repaints

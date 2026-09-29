@@ -12,6 +12,7 @@ public partial class MonitoringView : UserControl
     public MonitoringView()
     {
         InitializeComponent();
+        ViewVisibilityTracker.Track(this);
     }
 
     private async void OnExportCsvClicked(object? sender, RoutedEventArgs e)

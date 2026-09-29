@@ -1,22 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
 
 namespace WireView2.ViewModels;
 
 /// <summary>Data model for <see cref="Controls.SimpleLineChart"/>: named series of
-/// (X, Y) points with an X window (points behind XMin are trimmed) and a Y range.
-/// Ported from the upstream 1.0.7 Windows client.</summary>
+/// (X, Y) points with an X window and a Y range. Ported from the upstream 1.0.7
+/// Windows client; since 1.0.8 a series holds an immutable snapshot replaced with
+/// <see cref="Series.SetPoints"/> (one change notification, one chart repaint)
+/// instead of an observable collection that notified per added/removed point.</summary>
 public sealed class SimpleChartViewModel : ViewModelBase
 {
     public sealed class Series : ViewModelBase
     {
+        private IReadOnlyList<DataPoint> _points = Array.Empty<DataPoint>();
+
         public string Key { get; }
 
         public string Name { get; }
 
-        public ObservableCollection<DataPoint> Points { get; } = new();
+        /// <summary>Points in ascending X order. Treat as read-only: the chart may
+        /// render it at any time, so replace it with <see cref="SetPoints"/>.</summary>
+        public IReadOnlyList<DataPoint> Points => _points;
 
         public Series(string key, string name)
         {
@@ -24,15 +28,16 @@ public sealed class SimpleChartViewModel : ViewModelBase
             Name = name;
         }
 
-        public void RaiseChanged()
+        public void SetPoints(IReadOnlyList<DataPoint> points)
         {
+            _points = points;
             OnPropertyChanged(nameof(Points));
         }
     }
 
     public readonly record struct DataPoint(double X, double Y);
 
-    private readonly Dictionary<string, Series> _seriesByKey = new();
+    private readonly Dictionary<string, Series> _seriesByKey = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyCollection<Series> SeriesItems => _seriesByKey.Values;
 
@@ -50,29 +55,22 @@ public sealed class SimpleChartViewModel : ViewModelBase
         OnPropertyChanged(nameof(SeriesItems));
     }
 
-    public void EnsureSeries(string key, string displayName)
+    public Series EnsureSeries(string key, string displayName)
     {
-        if (!_seriesByKey.ContainsKey(key))
-        {
-            _seriesByKey[key] = new Series(key, displayName);
-            OnPropertyChanged(nameof(SeriesItems));
-        }
+        if (_seriesByKey.TryGetValue(key, out var existing))
+            return existing;
+        var series = new Series(key, displayName);
+        _seriesByKey[key] = series;
+        OnPropertyChanged(nameof(SeriesItems));
+        return series;
     }
 
-    public void AddPoint(string key, double x, double y)
-    {
-        if (_seriesByKey.TryGetValue(key, out var series))
-        {
-            series.Points.Add(new DataPoint(x, y));
-            double xMin = XMin;
-            while (series.Points.Count > 0 && series.Points[0].X < xMin)
-                series.Points.RemoveAt(0);
-            series.RaiseChanged();
-        }
-    }
+    public Series? GetSeries(string key) =>
+        _seriesByKey.TryGetValue(key, out var series) ? series : null;
 
     public void SetXWindow(double xmin, double xmax)
     {
+        if (XMin == xmin && XMax == xmax) return;
         XMin = xmin;
         XMax = xmax;
         OnPropertyChanged(nameof(XMin));
@@ -81,22 +79,10 @@ public sealed class SimpleChartViewModel : ViewModelBase
 
     public void SetYRange(double ymin, double ymax)
     {
+        if (YMin == ymin && YMax == ymax) return;
         YMin = ymin;
         YMax = ymax;
         OnPropertyChanged(nameof(YMin));
         OnPropertyChanged(nameof(YMax));
-    }
-
-    public void AutoScaleY()
-    {
-        var all = _seriesByKey.Values.SelectMany(s => s.Points).ToList();
-        if (all.Count == 0) return;
-
-        double min = all.Min(p => p.Y);
-        double max = all.Max(p => p.Y);
-        if (Math.Abs(max - min) < 1e-9)
-            max = min + 1.0;
-        double pad = (max - min) * 0.1;
-        SetYRange(min - pad, max + pad);
     }
 }

@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
@@ -13,7 +14,7 @@ using WireView2.Services;
 
 namespace WireView2.ViewModels;
 
-public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
+public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibilityAware, IDisposable
 {
     // ======================== Nested types ========================
 
@@ -106,13 +107,26 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     private bool _isApplyingSettings;
 
     /// <summary>Per-channel sample buffers (window-trimmed) — the source of truth
-    /// the chart series, Y autoscale, and CSV export are all built from.</summary>
+    /// the chart series, Y autoscale, and CSV export are all built from. Every
+    /// channel is buffered, so enabling a series shows its whole window at once.
+    /// Guarded by <see cref="_gate"/>; filled on the device poll thread.</summary>
     private readonly Dictionary<string, List<SimpleChartViewModel.DataPoint>> _buffersByKey =
         new(StringComparer.OrdinalIgnoreCase);
 
     private StreamWriter? _exportWriter;
     private bool _exportHeaderWritten;
     private double _lastExportX = double.NegativeInfinity;
+    private List<TelemetryItem> _exportItems = new();
+
+    /// <summary>X (seconds since start) of the newest sample; the chart window ends here.</summary>
+    private double _latestX = double.NaN;
+
+    // Chart pushes are throttled: at most one every ChartPushMinIntervalMs, and
+    // only while the Monitoring page is attached and the window is visible. The
+    // buffers (and a live CSV export) keep up with every sample regardless.
+    private const int ChartPushMinIntervalMs = 250;
+    private int _chartPushQueued;
+    private long _lastChartPushTimestamp;
 
     private bool _isExportingCsv;
     private int _xWindowSeconds = 30;
@@ -120,7 +134,9 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     private bool _isConnected;
     private readonly DateTime _t0Utc = DateTime.UtcNow;
     private bool _disposed;
-    private bool _isViewVisible = true;
+    private bool _isAttachedToVisualTree;
+    private bool _isWindowVisible = true;
+    private volatile bool _isEffectivelyVisible;
 
     // ======================== Properties ========================
 
@@ -173,10 +189,27 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<TelemetryItem> Items { get; } = new();
 
+    /// <summary>Set by MonitoringView when it is attached to / detached from the
+    /// visual tree (the Monitoring page is shown or left). Together with the main
+    /// window's visibility it decides whether the chart is fed.</summary>
     public bool IsViewVisible
     {
-        get => _isViewVisible;
-        set => Set(ref _isViewVisible, value);
+        get => _isAttachedToVisualTree;
+        set
+        {
+            if (Set(ref _isAttachedToVisualTree, value))
+                UpdateEffectiveVisibility();
+        }
+    }
+
+    private void UpdateEffectiveVisibility()
+    {
+        if (_disposed) return;
+        bool visible = _isAttachedToVisualTree && _isWindowVisible;
+        if (visible == _isEffectivelyVisible) return;
+        _isEffectivelyVisible = visible;
+        if (visible)
+            PushChart(); // catch up with what arrived while hidden
     }
 
     // ======================== Constructor ========================
@@ -197,6 +230,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         BuildItems();
         ApplyMonitoringSettings();
 
+        foreach (var item in Items)
+            BufferFor(item.Key);
         foreach (var item in Items.Where(i => i.IsEnabled))
             Chart.EnsureSeries(item.Key, item.Label);
 
@@ -248,32 +283,43 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     private void OnMainWindowVisibilityChanged(object? sender, bool isVisible)
     {
-        if (!_disposed)
-            IsViewVisible = isVisible;
+        if (_disposed || _isWindowVisible == isVisible) return;
+        _isWindowVisible = isVisible;
+        UpdateEffectiveVisibility();
     }
 
     // ======================== CSV Export ========================
 
+    /// <summary>Writes the visible window, then appends one row per new sample
+    /// (from the poll thread) until stopped. The columns are the series enabled
+    /// when the export starts.</summary>
     public void StartCsvExport(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath)) return;
         StopCsvExport();
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-        _exportWriter = new StreamWriter(filePath, append: false,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: true))
-        { AutoFlush = true };
-        _exportHeaderWritten = false;
-        _lastExportX = double.NegativeInfinity;
+        lock (_gate)
+        {
+            _exportWriter = new StreamWriter(filePath, append: false,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: true))
+            { AutoFlush = true };
+            _exportHeaderWritten = false;
+            _lastExportX = double.NegativeInfinity;
+            _exportItems = Items.Where(i => i.IsEnabled).ToList();
+            ExportVisibleToCsvInternal();
+        }
         IsExportingCsv = true;
-        ExportVisibleToCsvInternal(writeOnlyNewPoints: false);
     }
 
     public void StopCsvExport()
     {
-        _exportWriter?.Dispose();
-        _exportWriter = null;
-        _exportHeaderWritten = false;
-        _lastExportX = double.NegativeInfinity;
+        lock (_gate)
+        {
+            _exportWriter?.Dispose();
+            _exportWriter = null;
+            _exportHeaderWritten = false;
+            _lastExportX = double.NegativeInfinity;
+        }
         IsExportingCsv = false;
     }
 
@@ -290,79 +336,96 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
         StopCsvExport();
     }
 
-    private void ExportVisibleToCsvInternal(bool writeOnlyNewPoints)
+    /// <summary>Writes every buffered sample of the current window (called under
+    /// <see cref="_gate"/>).</summary>
+    private void ExportVisibleToCsvInternal()
     {
-        if (_exportWriter == null) return;
+        if (_exportWriter == null || _exportItems.Count == 0) return;
 
-        var enabled = Items.Where(i => i.IsEnabled).ToList();
-        if (enabled.Count == 0) return;
+        double maxX = double.IsNaN(_latestX) ? double.PositiveInfinity : _latestX;
+        double minX = maxX - Math.Max(1, XWindowSeconds);
 
-        double minX = Chart.XMin;
-        double maxX = Chart.XMax;
-        if (writeOnlyNewPoints) minX = Math.Max(minX, _lastExportX);
+        var allX = _exportItems
+            .SelectMany(it => BufferFor(it.Key))
+            .Select(p => p.X)
+            .Where(x => x >= minX && x <= maxX)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
 
-        TimeZoneInfo local = TimeZoneInfo.Local;
+        var lookup = _exportItems.ToDictionary(
+            it => it,
+            it => BufferFor(it.Key)
+                .Where(p => p.X >= minX && p.X <= maxX)
+                .GroupBy(p => p.X)
+                .ToDictionary(g => g.Key, g => g.Last().Y));
 
-        lock (_gate)
+        WriteCsvHeaderIfNeeded();
+        foreach (double x in allX)
         {
-            var allX = enabled
-                .SelectMany(it => BufferFor(it.Key))
-                .Select(p => p.X)
-                .Where(x => x >= minX && x <= maxX)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
-            if (allX.Count == 0) return;
-
-            var lookup = enabled.ToDictionary(
-                it => it,
-                it => BufferFor(it.Key)
-                    .Where(p => p.X >= minX && p.X <= maxX)
-                    .GroupBy(p => p.X)
-                    .ToDictionary(g => g.Key, g => g.Last().Y));
-
-            if (!_exportHeaderWritten)
+            WriteCsvRowStart(x);
+            foreach (var item in _exportItems)
             {
-                _exportWriter.Write(CsvEscape("TimeLocal"));
                 _exportWriter.Write(",");
-                _exportWriter.Write(CsvEscape("Seconds"));
-                foreach (var item in enabled)
-                {
-                    _exportWriter.Write(",");
-                    _exportWriter.Write(CsvEscape(item.Label));
-                }
-                _exportWriter.WriteLine();
-                _exportHeaderWritten = true;
+                if (lookup[item].TryGetValue(x, out double val) && double.IsFinite(val))
+                    _exportWriter.Write(CsvNumber(val));
             }
-
-            foreach (double x in allX)
-            {
-                DateTime dt = TimeZoneInfo.ConvertTimeFromUtc(_t0Utc.AddSeconds(x), local);
-                _exportWriter.Write(CsvEscape(dt.ToString("o", CultureInfo.InvariantCulture)));
-                _exportWriter.Write(",");
-                _exportWriter.Write(F(x));
-                foreach (var item in enabled)
-                {
-                    _exportWriter.Write(",");
-                    if (lookup[item].TryGetValue(x, out double val) && double.IsFinite(val))
-                        _exportWriter.Write(F(val));
-                }
-                _exportWriter.WriteLine();
-                _lastExportX = Math.Max(_lastExportX, x);
-            }
+            _exportWriter.WriteLine();
+            _lastExportX = Math.Max(_lastExportX, x);
         }
-
-        static string CsvEscape(string? s)
-        {
-            s ??= string.Empty;
-            if (s.Contains('"') || s.Contains(',') || s.Contains('\n') || s.Contains('\r'))
-                return "\"" + s.Replace("\"", "\"\"") + "\"";
-            return s;
-        }
-
-        static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
     }
+
+    /// <summary>Appends the row of one new sample (called under <see cref="_gate"/>).
+    /// Only X values after the last exported one are written, so a row is never
+    /// repeated (the previous per-sample export rewrote the last row every time).</summary>
+    private void ExportSampleToCsv(double x, DeviceData d)
+    {
+        if (_exportWriter == null || _exportItems.Count == 0 || x <= _lastExportX) return;
+        WriteCsvHeaderIfNeeded();
+        WriteCsvRowStart(x);
+        foreach (var item in _exportItems)
+        {
+            _exportWriter.Write(",");
+            double val = item.Selector(d);
+            if (double.IsFinite(val))
+                _exportWriter.Write(CsvNumber(val));
+        }
+        _exportWriter.WriteLine();
+        _lastExportX = x;
+    }
+
+    private void WriteCsvHeaderIfNeeded()
+    {
+        if (_exportWriter == null || _exportHeaderWritten) return;
+        _exportWriter.Write(CsvEscape("TimeLocal"));
+        _exportWriter.Write(",");
+        _exportWriter.Write(CsvEscape("Seconds"));
+        foreach (var item in _exportItems)
+        {
+            _exportWriter.Write(",");
+            _exportWriter.Write(CsvEscape(item.Label));
+        }
+        _exportWriter.WriteLine();
+        _exportHeaderWritten = true;
+    }
+
+    private void WriteCsvRowStart(double x)
+    {
+        DateTime dt = TimeZoneInfo.ConvertTimeFromUtc(_t0Utc.AddSeconds(x), TimeZoneInfo.Local);
+        _exportWriter!.Write(CsvEscape(dt.ToString("o", CultureInfo.InvariantCulture)));
+        _exportWriter.Write(",");
+        _exportWriter.Write(CsvNumber(x));
+    }
+
+    private static string CsvEscape(string? s)
+    {
+        s ??= string.Empty;
+        if (s.Contains('"') || s.Contains(',') || s.Contains('\n') || s.Contains('\r'))
+            return "\"" + s.Replace("\"", "\"\"") + "\"";
+        return s;
+    }
+
+    private static string CsvNumber(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
     // ======================== Settings persistence ========================
 
@@ -537,6 +600,7 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     // ======================== Chart helpers ========================
 
+    /// <summary>The buffer of a channel (call under <see cref="_gate"/>).</summary>
     private List<SimpleChartViewModel.DataPoint> BufferFor(string key)
     {
         if (!_buffersByKey.TryGetValue(key, out var list))
@@ -549,19 +613,13 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     private void RebuildChartSeriesFromBuffer(string key)
     {
-        var series = Chart.SeriesItems.FirstOrDefault(
-            s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
-        if (series == null) return;
-
-        List<SimpleChartViewModel.DataPoint> snapshot;
-        lock (_gate) { snapshot = BufferFor(key).ToList(); }
-
         void Apply()
         {
-            series.Points.Clear();
-            foreach (var pt in snapshot)
-                series.Points.Add(pt);
-            series.RaiseChanged();
+            var series = Chart.GetSeries(key);
+            if (series == null) return;
+            SimpleChartViewModel.DataPoint[] snapshot;
+            lock (_gate) { snapshot = BufferFor(key).ToArray(); }
+            series.SetPoints(snapshot);
         }
         if (Dispatcher.UIThread.CheckAccess()) Apply();
         else Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
@@ -572,28 +630,24 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
     /// configured ranges (matches upstream 1.0.7 behavior).</summary>
     private void UpdateChartYScale()
     {
-        var enabled = Items.Where(i => i.IsEnabled).ToList();
-        if (enabled.Count == 0) return;
-
         if (YV.Auto || YA.Auto || YW.Auto || YC.Auto)
         {
-            List<double> ys;
+            double min = double.PositiveInfinity, max = double.NegativeInfinity;
             lock (_gate)
             {
-                ys = enabled
-                    .Select(it => it.Key)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .SelectMany(k => _buffersByKey.TryGetValue(k, out var buf)
-                        ? (IEnumerable<SimpleChartViewModel.DataPoint>)buf
-                        : Array.Empty<SimpleChartViewModel.DataPoint>())
-                    .Select(p => p.Y)
-                    .Where(double.IsFinite)
-                    .ToList();
+                foreach (var item in Items)
+                {
+                    if (!item.IsEnabled || !_buffersByKey.TryGetValue(item.Key, out var buf)) continue;
+                    for (int i = 0; i < buf.Count; i++)
+                    {
+                        double y = buf[i].Y;
+                        if (!double.IsFinite(y)) continue;
+                        if (y < min) min = y;
+                        if (y > max) max = y;
+                    }
+                }
             }
-            if (ys.Count == 0) return;
-
-            double min = ys.Min();
-            double max = ys.Max();
+            if (!double.IsFinite(min) || !double.IsFinite(max)) return;
             if (Math.Abs(max - min) < 1e-9)
                 max = min + 1.0;
             double pad = (max - min) * 0.1;
@@ -603,8 +657,9 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
         double rangeMin = double.PositiveInfinity;
         double rangeMax = double.NegativeInfinity;
-        foreach (var item in enabled)
+        foreach (var item in Items)
         {
+            if (!item.IsEnabled) continue;
             var (lo, hi) = item.YAxisIndex switch
             {
                 0 => (YV.Min, YV.Max),
@@ -622,39 +677,65 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IDisposable
 
     // ======================== Data handler ========================
 
+    /// <summary>Runs on the device poll thread: buffers the sample, appends it to a
+    /// live CSV export, and asks for a (throttled) chart update. No UI work here.</summary>
     private void OnDeviceData(DeviceData d)
     {
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.Post(() => OnDeviceData(d), DispatcherPriority.Background);
-            return;
-        }
-
+        if (_disposed) return;
         double x = (((d.Timestamp.Kind == DateTimeKind.Utc) ? d.Timestamp : d.Timestamp.ToUniversalTime()) - _t0Utc).TotalSeconds;
-        int win = Math.Max(1, XWindowSeconds);
-        double cutoff = x - win;
-
-        if (IsViewVisible)
-            Chart.SetXWindow(cutoff, x);
+        double cutoff = x - Math.Max(1, XWindowSeconds);
 
         lock (_gate)
         {
-            foreach (var item in Items.Where(i => i.IsEnabled))
+            foreach (var item in Items)
             {
                 double val = item.Selector(d);
-                if (!double.IsFinite(val)) continue;
-
                 var buffer = BufferFor(item.Key);
-                buffer.Add(new SimpleChartViewModel.DataPoint(x, val));
-                while (buffer.Count > 0 && buffer[0].X < cutoff)
-                    buffer.RemoveAt(0);
-
-                Chart.AddPoint(item.Key, x, val);
+                if (double.IsFinite(val))
+                    buffer.Add(new SimpleChartViewModel.DataPoint(x, val));
+                int stale = 0;
+                while (stale < buffer.Count && buffer[stale].X < cutoff) stale++;
+                if (stale > 0) buffer.RemoveRange(0, stale);
             }
-            if (IsExportingCsv)
-                ExportVisibleToCsvInternal(writeOnlyNewPoints: true);
+            _latestX = x;
+            ExportSampleToCsv(x, d);
         }
+        RequestChartPush();
+    }
 
+    private void RequestChartPush()
+    {
+        if (!_isEffectivelyVisible || _disposed) return;
+        if (Interlocked.Exchange(ref _chartPushQueued, 1) == 1) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            long elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - _lastChartPushTimestamp)
+                             * 1000 / System.Diagnostics.Stopwatch.Frequency;
+            long waitMs = ChartPushMinIntervalMs - elapsedMs;
+            if (waitMs <= 0) PushChart();
+            else DispatcherTimer.RunOnce(PushChart, TimeSpan.FromMilliseconds(waitMs), DispatcherPriority.Background);
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>UI thread: hands the chart one snapshot per enabled series, the X
+    /// window ending at the newest sample, and the Y range.</summary>
+    private void PushChart()
+    {
+        Interlocked.Exchange(ref _chartPushQueued, 0);
+        if (!_isEffectivelyVisible || _disposed) return;
+        _lastChartPushTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        double latest;
+        lock (_gate) { latest = _latestX; }
+        if (double.IsNaN(latest)) return;
+        Chart.SetXWindow(latest - Math.Max(1, XWindowSeconds), latest);
+        foreach (var item in Items)
+        {
+            if (!item.IsEnabled) continue;
+            SimpleChartViewModel.DataPoint[] snapshot;
+            lock (_gate) { snapshot = BufferFor(item.Key).ToArray(); }
+            Chart.EnsureSeries(item.Key, item.Label).SetPoints(snapshot);
+        }
         UpdateChartYScale();
     }
 

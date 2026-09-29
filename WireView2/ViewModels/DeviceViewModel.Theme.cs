@@ -321,14 +321,14 @@ public sealed partial class DeviceViewModel
 
     private void StartFanPreview()
     {
-        if (_fanPreviewTimer is { IsEnabled: false })
-            _fanPreviewTimer.Start();
+        _fanPreviewWanted = true;
+        UpdateFanPreviewTimer(); // runs only while the Device page is visible
     }
 
     private void StopFanPreview()
     {
-        if (_fanPreviewTimer is { IsEnabled: true })
-            _fanPreviewTimer.Stop();
+        _fanPreviewWanted = false;
+        UpdateFanPreviewTimer();
     }
 
     private async Task LoadThemePreviewAsync(CancellationToken ct, bool userInitiated)

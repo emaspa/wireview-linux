@@ -396,10 +396,7 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         void ClearPoints()
         {
             foreach (var series in Chart.SeriesItems)
-            {
-                series.Points.Clear();
-                series.RaiseChanged();
-            }
+                series.SetPoints(Array.Empty<SimpleChartViewModel.DataPoint>());
         }
         if (Dispatcher.UIThread.CheckAccess()) ClearPoints();
         else Dispatcher.UIThread.Post(ClearPoints, DispatcherPriority.Background);
@@ -492,13 +489,8 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
 
         void Apply()
         {
-            var series = Chart.SeriesItems.FirstOrDefault(
-                s => string.Equals(s.Key, it.Key, StringComparison.OrdinalIgnoreCase));
-            if (series == null) return;
-            series.Points.Clear();
-            foreach (var pt in newPoints)
-                series.Points.Add(pt);
-            series.RaiseChanged();
+            // One snapshot per series: a single repaint instead of one per point.
+            Chart.GetSeries(it.Key)?.SetPoints(newPoints);
         }
         if (Dispatcher.UIThread.CheckAccess()) Apply();
         else Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);

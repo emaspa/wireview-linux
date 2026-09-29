@@ -1568,6 +1568,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        DisposeViewVisibility();
         _connector.ConnectionChanged -= OnConnectionChanged;
         if (_ownsConnector)
             _connector.Dispose();
