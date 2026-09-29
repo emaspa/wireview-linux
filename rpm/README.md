@@ -75,8 +75,10 @@ sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 
-After install, the udev rule is in place; add yourself to the serial group and
-re-login:
+After install, the udev rule is in place: the serial port and the DFU bootloader
+are `0660 root:dialout` plus a `uaccess` ACL for the user logged in at the local
+seat, so a desktop session needs no group. SSH and other remote sessions get no
+seat ACL; join `dialout` and log in again:
 
 ```bash
 sudo usermod -aG dialout "$USER"

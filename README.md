@@ -209,15 +209,15 @@ Requires [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or lat
 ```bash
 git clone https://github.com/emaspa/wireview-linux.git
 cd wireview-linux
-sudo ./install.sh
+./install.sh
 ```
 
-The install script will:
-1. Install udev rules for automatic USB device permissions
-2. Add your user to the `dialout` and `plugdev` groups
+Run it as your own user; it uses `sudo` where it needs root. The install script will:
+1. Install the udev rule (serial port and DFU bootloader `0660 root:dialout`, plus a
+   `uaccess` ACL for the user logged in at the local seat)
+2. Only when there is no local seat session (SSH, for example): add your user to the
+   `dialout` group, which needs a new login to take effect
 3. Build the application
-
-**You must log out and back in** for the group changes to take effect.
 
 Or manually step by step:
 
@@ -230,11 +230,11 @@ sudo cp udev/99-wireview.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
-# Add yourself to the required groups
-sudo usermod -aG dialout $USER
-sudo usermod -aG plugdev $USER
+# Only over SSH or another session without a local seat (no uaccess ACL there):
+# join dialout, then log in again
+# sudo usermod -aG dialout $USER
 
-# Log out and back in, then build and run
+# Build and run
 dotnet build -c Release
 dotnet run --project WireView2/ -c Release
 ```
@@ -302,7 +302,8 @@ wireview-linux/
 
 1. Check that the device is connected: `lsusb | grep 0483`
 2. Check that `/dev/ttyACM0` exists: `ls -la /dev/ttyACM*`
-3. Check permissions: `groups` should include `dialout`
+3. Check permissions: in a local desktop session `getfacl /dev/ttyACM0` should list your
+   user (the `uaccess` ACL); over SSH, `groups` should include `dialout`
 4. If using a VM, ensure USB passthrough is configured for the VID/PID pair
 
 ### Permission denied on /dev/ttyACM0
@@ -315,8 +316,8 @@ sudo setfacl -m "u:$USER:rw" /dev/ttyACM0
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
+# Over SSH or without a local seat session, also join dialout and log in again:
 sudo usermod -aG dialout $USER
-# Then log out and back in
 ```
 
 ## Disclaimer
