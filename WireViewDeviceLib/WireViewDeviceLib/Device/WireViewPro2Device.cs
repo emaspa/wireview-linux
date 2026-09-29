@@ -270,10 +270,19 @@ namespace WireView2.Device
             SendData(new[] { (byte)UsbCmd.CMD_SCREEN_CHANGE, (byte)cmd }, 0);
         }
 
-        public void ClearFaults(int faultStatusMask = 0xFFFF, int faultLogMask = 0xFFFF)
+        /// <summary>
+        /// Clears latched faults. Both masks are KEEP-masks: the firmware does
+        /// <c>fault &amp;= mask</c>, so a set bit keeps that fault and a clear bit
+        /// clears it. <c>0</c> clears everything, <c>0xFFFF</c> clears nothing and
+        /// <c>~(1 &lt;&lt; (int)fault)</c> clears one fault. A parameterless call
+        /// clears both the active faults and the fault log.
+        /// </summary>
+        /// <param name="keepStatusMask">Active (status) faults to keep.</param>
+        /// <param name="keepLogMask">Fault-log (history) bits to keep.</param>
+        public void ClearFaults(int keepStatusMask = 0, int keepLogMask = 0)
         {
             if (!Connected || _port == null) return;
-            SendData(new[] { (byte)UsbCmd.CMD_CLEAR_FAULTS, (byte)(faultStatusMask & 0xFF), (byte)((faultStatusMask >> 8) & 0xFF), (byte)(faultLogMask & 0xFF), (byte)((faultLogMask >> 8) & 0xFF) }, 0);
+            SendData(new[] { (byte)UsbCmd.CMD_CLEAR_FAULTS, (byte)(keepStatusMask & 0xFF), (byte)((keepStatusMask >> 8) & 0xFF), (byte)(keepLogMask & 0xFF), (byte)((keepLogMask >> 8) & 0xFF) }, 0);
         }
 
         private void PollLoop(CancellationToken ct)

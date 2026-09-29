@@ -132,14 +132,16 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     [RelayCommand]
     public void DismissFault()
     {
+        // Keep-masks: clear every active fault, keep the whole fault log.
+        const int keepNoActive = 0, keepWholeLog = 0xFFFF;
         if (_connector.Device is WireViewPro2Device device)
         {
-            device.ClearFaults(0);
+            device.ClearFaults(keepStatusMask: keepNoActive, keepLogMask: keepWholeLog);
             device.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
         else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
         {
-            var r = hwmon.ClearFaults(0);
+            var r = hwmon.ClearFaults(keepStatusMask: keepNoActive, keepLogMask: keepWholeLog);
             if (r != DaemonResult.Ok)
             {
                 // Keep the banner: the fault is still latched on the device.

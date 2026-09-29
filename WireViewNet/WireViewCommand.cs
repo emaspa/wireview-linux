@@ -14,8 +14,13 @@ namespace WireView2.Net
         public string DeviceId { get; init; } = "";
         public string Op { get; init; } = "";          // screen | nvm | clearFaults | writeConfig
         public int Cmd { get; init; }                   // screen / nvm
-        public int StatusMask { get; init; } = 0xFFFF;  // clearFaults
-        public int LogMask { get; init; } = 0xFFFF;     // clearFaults
+        /// <summary>clearFaults: KEEP-mask for the active faults (the firmware does
+        /// <c>fault &amp;= mask</c>; 0 clears everything). Sent as "statusMask", the
+        /// field name wireviewd's HTTP API uses; an omitted mask means 0 there and here.</summary>
+        public int StatusMask { get; init; }
+        /// <summary>clearFaults: KEEP-mask for the fault log, same semantics
+        /// (sent as "logMask").</summary>
+        public int LogMask { get; init; }
         public int ConfigVersion { get; init; }         // writeConfig
         public byte[]? ConfigData { get; init; }        // writeConfig (raw bytes)
 
@@ -23,8 +28,10 @@ namespace WireView2.Net
             => new() { DeviceId = deviceId, Op = "screen", Cmd = cmd };
         public static WireViewCommand Nvm(string deviceId, int cmd)
             => new() { DeviceId = deviceId, Op = "nvm", Cmd = cmd };
-        public static WireViewCommand Faults(string deviceId, int statusMask, int logMask)
-            => new() { DeviceId = deviceId, Op = "clearFaults", StatusMask = statusMask, LogMask = logMask };
+        /// <summary>clearFaults with keep-masks: a set bit keeps that fault, 0 clears
+        /// everything, <c>~(1 &lt;&lt; fault)</c> clears one fault.</summary>
+        public static WireViewCommand Faults(string deviceId, int keepStatusMask, int keepLogMask)
+            => new() { DeviceId = deviceId, Op = "clearFaults", StatusMask = keepStatusMask, LogMask = keepLogMask };
         public static WireViewCommand WriteConfig(string deviceId, int version, byte[] data)
             => new() { DeviceId = deviceId, Op = "writeConfig", ConfigVersion = version, ConfigData = data };
 
@@ -64,8 +71,9 @@ namespace WireView2.Net
                     DeviceId = r.TryGetProperty("deviceId", out var d) ? d.GetString() ?? "" : "",
                     Op = op,
                     Cmd = r.TryGetProperty("cmd", out var c) ? c.GetInt32() : 0,
-                    StatusMask = r.TryGetProperty("statusMask", out var s) ? s.GetInt32() : 0xFFFF,
-                    LogMask = r.TryGetProperty("logMask", out var l) ? l.GetInt32() : 0xFFFF,
+                    // Omitted keep-masks default to 0 (clear), as in wireviewd's relay.
+                    StatusMask = r.TryGetProperty("statusMask", out var s) ? s.GetInt32() : 0,
+                    LogMask = r.TryGetProperty("logMask", out var l) ? l.GetInt32() : 0,
                     ConfigVersion = r.TryGetProperty("version", out var v) ? v.GetInt32() : 0,
                     ConfigData = r.TryGetProperty("data", out var da) && da.GetString() is string b64 && b64.Length > 0
                         ? Convert.FromBase64String(b64) : null,

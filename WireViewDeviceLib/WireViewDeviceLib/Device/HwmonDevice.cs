@@ -328,14 +328,23 @@ namespace WireView2.Device
 
         // ---- Command methods ----
 
-        public DaemonResult ClearFaults(int faultStatusMask = 0xFFFF, int faultLogMask = 0xFFFF)
+        /// <summary>
+        /// Clears latched faults through wireviewd. Both masks are KEEP-masks,
+        /// passed through to the firmware, which does <c>fault &amp;= mask</c>: a set
+        /// bit keeps that fault, a clear bit clears it. <c>0</c> clears everything,
+        /// <c>0xFFFF</c> clears nothing and <c>~(1 &lt;&lt; (int)fault)</c> clears one
+        /// fault. A parameterless call clears both the active faults and the log.
+        /// </summary>
+        /// <param name="keepStatusMask">Active (status) faults to keep.</param>
+        /// <param name="keepLogMask">Fault-log (history) bits to keep.</param>
+        public DaemonResult ClearFaults(int keepStatusMask = 0, int keepLogMask = 0)
         {
             if (!DaemonAvailable) return DaemonResult.Unavailable;
             var payload = new byte[4];
-            payload[0] = (byte)(faultStatusMask & 0xFF);
-            payload[1] = (byte)((faultStatusMask >> 8) & 0xFF);
-            payload[2] = (byte)(faultLogMask & 0xFF);
-            payload[3] = (byte)((faultLogMask >> 8) & 0xFF);
+            payload[0] = (byte)(keepStatusMask & 0xFF);
+            payload[1] = (byte)((keepStatusMask >> 8) & 0xFF);
+            payload[2] = (byte)(keepLogMask & 0xFF);
+            payload[3] = (byte)((keepLogMask >> 8) & 0xFF);
             return SendDaemonCommand(WCMD_CLEAR_FAULTS, payload);
         }
 

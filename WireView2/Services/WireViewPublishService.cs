@@ -112,8 +112,9 @@ namespace WireView2.Services
                         else return false;
                         return true;
                     case "clearFaults":
-                        if (dev is WireViewPro2Device s3) s3.ClearFaults(cmd.StatusMask, cmd.LogMask);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) return h3.ClearFaults(cmd.StatusMask, cmd.LogMask) == DaemonResult.Ok;
+                        // Keep-masks, passed through unchanged (same as wireviewd's relay).
+                        if (dev is WireViewPro2Device s3) s3.ClearFaults(keepStatusMask: cmd.StatusMask, keepLogMask: cmd.LogMask);
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) return h3.ClearFaults(keepStatusMask: cmd.StatusMask, keepLogMask: cmd.LogMask) == DaemonResult.Ok;
                         else return false;
                         return true;
                     case "writeConfig":

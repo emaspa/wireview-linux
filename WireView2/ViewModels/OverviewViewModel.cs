@@ -429,15 +429,16 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
     private void ClearFault(WireViewPro2Device.FAULT fault)
     {
-        ushort mask = (ushort)(~(1 << (int)fault));
+        // Keep-mask: keep every fault except this one, in both status and log.
+        ushort keep = (ushort)(~(1 << (int)fault));
         if (_connector.Device is WireViewPro2Device device)
         {
-            device.ClearFaults(mask, mask);
+            device.ClearFaults(keepStatusMask: keep, keepLogMask: keep);
             device.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
         else if (_connector.Device is HwmonDevice { DaemonAvailable: true } hwmon)
         {
-            var r = hwmon.ClearFaults(mask, mask);
+            var r = hwmon.ClearFaults(keepStatusMask: keep, keepLogMask: keep);
             if (r != DaemonResult.Ok)
             {
                 ConnectionStatus.ReportDaemonFailure("Clearing the fault", r);
