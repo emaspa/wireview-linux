@@ -33,6 +33,8 @@ namespace WireView2.Device
         private const byte RESP_TRANSPORT     = 0xFF;
 
         private readonly string _hwmonPath;
+        // A field rather than the const so a test harness can point it at a fake daemon.
+        private readonly string _socketPath = DaemonSocketPath;
         private CancellationTokenSource? _cts;
         private Task? _worker;
         private Socket? _daemonSocket;
@@ -108,7 +110,7 @@ namespace WireView2.Device
         {
             try
             {
-                if (!File.Exists(DaemonSocketPath)) return;
+                if (!File.Exists(_socketPath)) return;
 
                 var socket = OpenDaemonSocket();
 
@@ -146,14 +148,14 @@ namespace WireView2.Device
             }
         }
 
-        private static Socket OpenDaemonSocket()
+        private Socket OpenDaemonSocket()
         {
             var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             try
             {
                 socket.ReceiveTimeout = 3000;
                 socket.SendTimeout = 3000;
-                socket.Connect(new UnixDomainSocketEndPoint(DaemonSocketPath));
+                socket.Connect(new UnixDomainSocketEndPoint(_socketPath));
                 return socket;
             }
             catch
@@ -208,44 +210,37 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>Sends one request over the long-lived daemon socket. If the
+        /// connection turns out to be dead before any reply byte arrives (the daemon
+        /// closed an idle client, or restarted), reconnects and sends the request
+        /// once more. Replies are never retried: a denial or error is final, and a
+        /// timeout or a truncated reply may mean the daemon already acted.</summary>
         private (byte status, byte[]? data) SendDaemonRequest(byte cmdType, byte[] payload)
         {
             lock (_socketLock)
             {
+                if (_daemonSocket == null)
+                    return (RESP_TRANSPORT, null);
+
                 try
                 {
-                    if (_daemonSocket == null)
-                        return (RESP_TRANSPORT, null);
-
-                    // Send: [type:u8][len:u16 LE][payload]
-                    var hdr = new byte[3];
-                    hdr[0] = cmdType;
-                    hdr[1] = (byte)(payload.Length & 0xFF);
-                    hdr[2] = (byte)((payload.Length >> 8) & 0xFF);
-                    _daemonSocket.Send(hdr);
-                    if (payload.Length > 0)
-                        _daemonSocket.Send(payload);
-
-                    // Receive: [status:u8][len:u16 LE][payload]
-                    var respHdr = new byte[3];
-                    SocketReadExact(_daemonSocket, respHdr, 3);
-                    byte status = respHdr[0];
-                    int respLen = respHdr[1] | (respHdr[2] << 8);
-
-                    if (respLen > 1024)
-                        return (RESP_TRANSPORT, null);
-
-                    byte[]? respData = null;
-                    if (respLen > 0)
+                    (byte status, byte[]? data) reply;
+                    try
                     {
-                        respData = new byte[respLen];
-                        SocketReadExact(_daemonSocket, respData, respLen);
+                        reply = ExchangeDaemonRequest(_daemonSocket, cmdType, payload);
+                    }
+                    catch (DaemonConnectionLostException)
+                    {
+                        var fresh = OpenDaemonSocket();
+                        try { _daemonSocket.Dispose(); } catch { }
+                        _daemonSocket = fresh;
+                        reply = ExchangeDaemonRequest(fresh, cmdType, payload);
                     }
 
-                    if (status == RESP_DENIED)
+                    if (reply.status == RESP_DENIED)
                         RenewDaemonSocketAfterDenial();
 
-                    return (status, respData);
+                    return reply;
                 }
                 catch
                 {
@@ -257,12 +252,75 @@ namespace WireView2.Device
             }
         }
 
-        private static void SocketReadExact(Socket socket, byte[] buffer, int count)
+        /// <summary>One request/reply round trip. Throws
+        /// <see cref="DaemonConnectionLostException"/> only when the peer is gone and
+        /// no reply byte was read, i.e. when the daemon cannot have handled the
+        /// request (it dispatches a request only once it is complete and answers
+        /// before doing anything else with that client).</summary>
+        private static (byte status, byte[]? data) ExchangeDaemonRequest(Socket socket, byte cmdType, byte[] payload)
         {
-            int offset = 0;
-            while (offset < count)
+            // Send: [type:u8][len:u16 LE][payload]
+            var request = new byte[3 + payload.Length];
+            request[0] = cmdType;
+            request[1] = (byte)(payload.Length & 0xFF);
+            request[2] = (byte)((payload.Length >> 8) & 0xFF);
+            Buffer.BlockCopy(payload, 0, request, 3, payload.Length);
+            try
             {
-                int n = socket.Receive(buffer, offset, count - offset, SocketFlags.None);
+                socket.Send(request);
+            }
+            catch (SocketException ex) when (IsConnectionLost(ex.SocketErrorCode))
+            {
+                throw new DaemonConnectionLostException(ex);
+            }
+
+            // Receive: [status:u8][len:u16 LE][payload]
+            var respHdr = new byte[3];
+            int got;
+            try
+            {
+                got = socket.Receive(respHdr, 0, 3, SocketFlags.None);
+            }
+            catch (SocketException ex) when (IsConnectionLost(ex.SocketErrorCode))
+            {
+                throw new DaemonConnectionLostException(ex);
+            }
+            if (got == 0)
+                throw new DaemonConnectionLostException(null);
+            SocketReadExact(socket, respHdr, got, 3);
+
+            byte status = respHdr[0];
+            int respLen = respHdr[1] | (respHdr[2] << 8);
+            if (respLen > 1024)
+                throw new IOException($"Oversized daemon reply ({respLen} bytes)");
+
+            byte[]? respData = null;
+            if (respLen > 0)
+            {
+                respData = new byte[respLen];
+                SocketReadExact(socket, respData, 0, respLen);
+            }
+            return (status, respData);
+        }
+
+        // EPIPE surfaces as Shutdown; ECONNRESET when the daemon closed the socket
+        // with our request still unread.
+        private static bool IsConnectionLost(SocketError error) =>
+            error is SocketError.Shutdown or SocketError.ConnectionReset
+                  or SocketError.ConnectionAborted or SocketError.NotConnected;
+
+        private sealed class DaemonConnectionLostException : IOException
+        {
+            public DaemonConnectionLostException(Exception? inner)
+                : base("wireviewd closed the connection", inner) { }
+        }
+
+        /// <summary>Fills buffer[offset..end).</summary>
+        private static void SocketReadExact(Socket socket, byte[] buffer, int offset, int end)
+        {
+            while (offset < end)
+            {
+                int n = socket.Receive(buffer, offset, end - offset, SocketFlags.None);
                 if (n == 0) throw new IOException("Socket closed");
                 offset += n;
             }
