@@ -39,9 +39,29 @@ series needs a re-upload of the same version, bump the suffix (`~resolute2`).
 Add a new series to `SERIES_LIST` in `build-ppa-source.sh` and `SERIES` in
 `lp-builds.py`.
 
-## Release steps
+## The GitHub release .deb
 
-Do this after the GitHub release (with its `.deb` asset) is live.
+`packaging/build-deb.sh` builds `wireview-linux_<version>_amd64.deb` for the
+GitHub release from this `debian/` template, so the release .deb and the PPA
+packages share their metadata:
+
+```bash
+packaging/build-deb.sh <version> dist/     # needs dotnet and docker
+```
+
+It publishes the app like `rpm/build-srpm.sh` (the loose self-contained
+linux-x64 publish with the single-file `WireView2` overlaid as the launcher, no
+.pdb), assembles the same tree as the PPA source package (desktop entry, icons
+and udev rule from the repo), rewrites the top changelog header to
+`wireview-linux (<version>) unstable;` in its build copy, and runs
+`dpkg-buildpackage -b` in an `ubuntu:24.04` container (`DEB_BUILDER=host` builds
+on the host instead). The members are xz-compressed: every dpkg that may get
+the .deb (Ubuntu 24.04 and later, Debian) reads xz, while zstd needs dpkg
+1.21.18 or later. Up to 1.2.5.0 the release .deb was a hand repack of the
+previous one; the scripted build has the same file list, with 0755
+directories and 0644 libraries.
+
+## Release steps
 
 1. Add the changelog entry at the top of `packaging/ppa/debian/changelog`
    (`dch` or by hand), with the current UTC date (`date -uR`):
@@ -54,7 +74,11 @@ Do this after the GitHub release (with its `.deb` asset) is live.
     -- Emanuele Sparvoli <sparvoli@gmail.com>  <date -uR>
    ```
 
-   Keep `debian/control` in line with the release `.deb` (`dpkg-deb -f <deb> Recommends`).
+   Keep `debian/control` in line with what the release ships (Recommends).
+
+   Build the release .deb (`packaging/build-deb.sh <version> dist/`) and attach
+   it to the GitHub release. The rest of these steps run once that release is
+   live.
 
 2. Build both source packages:
 
