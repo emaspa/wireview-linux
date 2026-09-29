@@ -39,6 +39,10 @@ namespace WireView2.Net
         /// <summary>The host:port this device is read from (for UI display).</summary>
         public string Endpoint => _baseUrl;
 
+        /// <summary>The publishing host's name, as reported in its /sensors snapshot
+        /// ("" until the first poll).</summary>
+        public string HostName { get; private set; } = "";
+
         /// <summary>Config version learned from the last ReadConfigRaw (-1 until read).</summary>
         public int ConfigVersion { get; private set; } = -1;
 
@@ -84,6 +88,8 @@ namespace WireView2.Net
                 var snap = JsonSerializer.Deserialize<WireViewHostSnapshot>(json, WireViewJson.Options);
                 var dto = snap?.Devices.FirstOrDefault(d => d.Id == UniqueId);
                 if (dto == null) return false;
+
+                if (!string.IsNullOrWhiteSpace(snap!.Host)) HostName = snap.Host;
 
                 DeviceName = string.IsNullOrWhiteSpace(dto.Name) ? DeviceName : dto.Name;
                 HardwareRevision = dto.HwRev;
@@ -134,18 +140,50 @@ namespace WireView2.Net
             {
                 var r = await Http.SendAsync(req, ct).ConfigureAwait(false);
                 if (r.IsSuccessStatusCode) return CommandResult.Success;
-                return (int)r.StatusCode switch
+                int code = (int)r.StatusCode;
+                if (code == 401) return new CommandResult(CommandOutcome.Unauthorized, 401);
+                if (code == 403)
                 {
-                    401 => new CommandResult(CommandOutcome.Unauthorized, 401),
-                    403 => new CommandResult(CommandOutcome.WritesDisabled, 403),
-                    var code => new CommandResult(CommandOutcome.HttpError, code),
-                };
+                    // Both wireviewd and the GUI publisher answer {"error":"<reason>"}.
+                    // "denied": the relaying host's wireviewd refused the command.
+                    string errorBody = await r.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    var (reason, host) = ParseError(errorBody);
+                    if (reason == "denied")
+                        return new CommandResult(CommandOutcome.RemoteDenied, 403, RelayHostName(host));
+                    return new CommandResult(CommandOutcome.WritesDisabled, 403);
+                }
+                return new CommandResult(CommandOutcome.HttpError, code);
             }
             catch
             {
                 // HttpRequestException (refused/DNS), TaskCanceledException (timeout), etc.
                 return new CommandResult(CommandOutcome.Unreachable);
             }
+        }
+
+        /// <summary>The "error" reason and optional "host" of an error body, or nulls
+        /// when it is not JSON.</summary>
+        internal static (string? reason, string? host) ParseError(string body)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (root.ValueKind != JsonValueKind.Object) return (null, null);
+                string? reason = root.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                string? host = root.TryGetProperty("host", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null;
+                return (reason, host);
+            }
+            catch { return (null, null); }
+        }
+
+        /// <summary>Name for the relaying host: the one it reported, else the name
+        /// from its /sensors snapshot, else the address it is polled at.</summary>
+        private string RelayHostName(string? reported)
+        {
+            if (!string.IsNullOrWhiteSpace(reported)) return reported;
+            if (!string.IsNullOrWhiteSpace(HostName)) return HostName;
+            return Uri.TryCreate(_baseUrl, UriKind.Absolute, out var u) ? u.Host : _baseUrl;
         }
 
         /// <summary>Fetch this host's device config via GET /config. Returns the raw

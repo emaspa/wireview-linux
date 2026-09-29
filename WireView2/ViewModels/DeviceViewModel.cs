@@ -717,12 +717,10 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         return new CommandResult(CommandOutcome.HttpError);
     }
 
-    /// <summary>Status line for a failed command. A wireviewd permission denial
-    /// gets the full how-to-fix message instead of a terse reason.</summary>
-    private static string CommandFailureText(string action, CommandResult r) =>
-        r.Outcome == CommandOutcome.DaemonDenied
-            ? DaemonResults.DeniedMessage
-            : $"{action} failed: {r.Describe()}.";
+    /// <summary>Status line for a failed command. A wireviewd permission denial,
+    /// local or on the host relaying a remote device, gets the how-to-fix message
+    /// instead of a terse reason.</summary>
+    private static string CommandFailureText(string action, CommandResult r) => r.FailureText(action);
 
     private string? DeviceReadBuildString()
     {

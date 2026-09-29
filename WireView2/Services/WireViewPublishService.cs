@@ -83,8 +83,10 @@ namespace WireView2.Services
             return null;
         }
 
-        /// <summary>Relay an authenticated remote write to the matching local device.</summary>
-        private bool ExecuteCommand(WireViewCommand cmd)
+        /// <summary>Relay an authenticated remote write to the matching local device.
+        /// Returns wireviewd's answer for a daemon-backed device, so a permission
+        /// denial reaches the remote client as such (HTTP 403 "denied").</summary>
+        private DaemonResult ExecuteCommand(WireViewCommand cmd)
         {
             foreach (var md in DeviceManager.Shared.Devices)
             {
@@ -92,10 +94,10 @@ namespace WireView2.Services
                 if (!string.IsNullOrEmpty(cmd.DeviceId) && md.Device.UniqueId != cmd.DeviceId) continue;
                 return ExecuteOn(md.Device, cmd);
             }
-            return false;
+            return DaemonResult.NotConnected;
         }
 
-        private static bool ExecuteOn(IWireViewDevice dev, WireViewCommand cmd)
+        private static DaemonResult ExecuteOn(IWireViewDevice dev, WireViewCommand cmd)
         {
             try
             {
@@ -103,31 +105,31 @@ namespace WireView2.Services
                 {
                     case "screen":
                         if (dev is WireViewPro2Device s1) s1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h1) return h1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd) == DaemonResult.Ok;
-                        else return false;
-                        return true;
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h1) return h1.ScreenCmd((WireViewPro2Device.SCREEN_CMD)cmd.Cmd);
+                        else return DaemonResult.NotConnected;
+                        return DaemonResult.Ok;
                     case "nvm":
                         if (dev is WireViewPro2Device s2) s2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h2) return h2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd) == DaemonResult.Ok;
-                        else return false;
-                        return true;
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h2) return h2.NvmCmd((WireViewPro2Device.NVM_CMD)cmd.Cmd);
+                        else return DaemonResult.NotConnected;
+                        return DaemonResult.Ok;
                     case "clearFaults":
                         // Keep-masks, passed through unchanged (same as wireviewd's relay).
                         if (dev is WireViewPro2Device s3) s3.ClearFaults(keepStatusMask: cmd.StatusMask, keepLogMask: cmd.LogMask);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) return h3.ClearFaults(keepStatusMask: cmd.StatusMask, keepLogMask: cmd.LogMask) == DaemonResult.Ok;
-                        else return false;
-                        return true;
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h3) return h3.ClearFaults(keepStatusMask: cmd.StatusMask, keepLogMask: cmd.LogMask);
+                        else return DaemonResult.NotConnected;
+                        return DaemonResult.Ok;
                     case "writeConfig":
-                        if (cmd.ConfigData == null) return false;
+                        if (cmd.ConfigData == null) return DaemonResult.Error;
                         if (dev is WireViewPro2Device s4) s4.WriteConfigRaw(cmd.ConfigData);
-                        else if (dev is HwmonDevice { DaemonAvailable: true } h4) return h4.WriteConfigRaw(cmd.ConfigVersion, cmd.ConfigData) == DaemonResult.Ok;
-                        else return false;
-                        return true;
+                        else if (dev is HwmonDevice { DaemonAvailable: true } h4) return h4.WriteConfigRaw(cmd.ConfigVersion, cmd.ConfigData);
+                        else return DaemonResult.NotConnected;
+                        return DaemonResult.Ok;
                     default:
-                        return false;
+                        return DaemonResult.Error;
                 }
             }
-            catch { return false; }
+            catch { return DaemonResult.Error; }
         }
 
         private WireViewHostSnapshot BuildSnapshot()

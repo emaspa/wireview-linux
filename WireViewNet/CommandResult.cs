@@ -13,13 +13,16 @@ namespace WireView2.Net
         WritesDisabled,  // 403 — the remote has remote writes turned off / no secret
         Unreachable,     // connection refused / timeout / DNS failure
         HttpError,       // some other non-success HTTP status
+        RemoteDenied,    // 403 "denied" — the relaying host's wireviewd refused (its user is not in the "wireview" group)
         DaemonDenied,       // wireviewd: privileged command, user not in the "wireview" group
         DaemonError,        // wireviewd could not carry out the command
         DaemonNotConnected, // wireviewd has no link to the device
         DaemonUnavailable,  // wireviewd could not be reached
     }
 
-    public readonly record struct CommandResult(CommandOutcome Outcome, int StatusCode = 0)
+    /// <param name="Host">For <see cref="CommandOutcome.RemoteDenied"/>: the host whose
+    /// wireviewd refused the relayed command.</param>
+    public readonly record struct CommandResult(CommandOutcome Outcome, int StatusCode = 0, string? Host = null)
     {
         public bool Ok => Outcome == CommandOutcome.Ok;
 
@@ -35,6 +38,17 @@ namespace WireView2.Net
             _                         => new(CommandOutcome.DaemonError),
         };
 
+        /// <summary>Full status-line message for a failed command. The two group
+        /// denials get the how-to-fix text instead of a terse reason.</summary>
+        public string FailureText(string action) => Outcome switch
+        {
+            CommandOutcome.DaemonDenied => DaemonResults.DeniedMessage,
+            CommandOutcome.RemoteDenied =>
+                $"{action} failed: {Describe()}. On that host, run `sudo usermod -aG wireview <user>` " +
+                "for the user running WireView there, then try the action again.",
+            _ => $"{action} failed: {Describe()}.",
+        };
+
         /// <summary>Short human-readable reason, for appending to a status line.</summary>
         public string Describe() => Outcome switch
         {
@@ -44,6 +58,7 @@ namespace WireView2.Net
             CommandOutcome.WritesDisabled => "the remote host has remote writes disabled",
             CommandOutcome.Unreachable    => "the remote host is unreachable",
             CommandOutcome.HttpError      => StatusCode > 0 ? $"the remote host returned {StatusCode}" : "failed",
+            CommandOutcome.RemoteDenied   => $"the host {Host ?? "relaying this device"} needs its user in the 'wireview' group",
             CommandOutcome.DaemonDenied       => DaemonResult.Denied.Describe(),
             CommandOutcome.DaemonError        => DaemonResult.Error.Describe(),
             CommandOutcome.DaemonNotConnected => DaemonResult.NotConnected.Describe(),

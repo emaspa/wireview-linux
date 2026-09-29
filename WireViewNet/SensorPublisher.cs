@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using WireView2.Device;
 
 namespace WireView2.Net
 {
@@ -19,7 +20,7 @@ namespace WireView2.Net
         private readonly int _port;
         private readonly Func<WireViewHostSnapshot> _snapshotProvider;
         private readonly Func<string?>? _secretProvider;
-        private readonly Func<WireViewCommand, bool>? _commandSink;
+        private readonly Func<WireViewCommand, DaemonResult>? _commandSink;
         private readonly Func<string?, ConfigSnapshot?>? _configReader;
         private readonly int _maxRequestBytes;
         private readonly int _rateLimitPerMinute;
@@ -34,7 +35,7 @@ namespace WireView2.Net
             int port,
             Func<WireViewHostSnapshot> snapshotProvider,
             Func<string?>? secretProvider = null,
-            Func<WireViewCommand, bool>? commandSink = null,
+            Func<WireViewCommand, DaemonResult>? commandSink = null,
             Func<string?, ConfigSnapshot?>? configReader = null,
             int maxConnections = 8,
             int maxRequestBytes = 8192,
@@ -192,12 +193,27 @@ namespace WireView2.Net
                 return;
             }
 
-            bool ok;
-            try { ok = _commandSink(cmd); } catch { ok = false; }
-            FileLog.Write(ok ? "INFO" : "WARN", $"command from {ip}: op={cmd.Op} -> {(ok ? "executed" : "relay failed")}");
-            await WriteJson(stream, ok ? 200 : 500, ok ? "OK" : "Internal Server Error",
-                            ok ? "{\"ok\":true}" : "{\"error\":\"relay failed\"}").ConfigureAwait(false);
+            DaemonResult result;
+            try { result = _commandSink(cmd); } catch { result = DaemonResult.Error; }
+            var (status, text, json, outcome) = CommandResponse(result);
+            FileLog.Write(result == DaemonResult.Ok ? "INFO" : "WARN", $"command from {ip}: op={cmd.Op} -> {outcome}");
+            await WriteJson(stream, status, text, json).ConfigureAwait(false);
         }
+
+        /// <summary>HTTP answer for a relayed command, in wireviewd's HTTP API shapes
+        /// ({"ok":true} / {"error":"reason"}). A wireviewd permission denial on this
+        /// host (socket status 3) is 403 with the machine-readable reason "denied" and
+        /// this host's name, so the remote client can say which host needs its user in
+        /// the 'wireview' group. Clients tell it apart from the other 403 ("writes
+        /// disabled") by the reason.</summary>
+        internal static (int status, string text, string json, string outcome) CommandResponse(DaemonResult result) => result switch
+        {
+            DaemonResult.Ok => (200, "OK", "{\"ok\":true}", "executed"),
+            DaemonResult.Denied => (403, "Forbidden",
+                "{\"error\":\"denied\",\"host\":" + JsonSerializer.Serialize(Environment.MachineName) + "}", "denied by wireviewd"),
+            DaemonResult.NotConnected => (503, "Service Unavailable", "{\"error\":\"no device\"}", "no device"),
+            _ => (500, "Internal Server Error", "{\"error\":\"relay failed\"}", "relay failed"),
+        };
 
         private bool RateLimited(string ip)
         {
