@@ -47,9 +47,13 @@ namespace WireView2.Net
         public static WireViewSensorDto FromDevice(IWireViewDevice dev, DeviceData d) => new()
         {
             Id = dev.UniqueId,
-            Name = dev.DeviceName,
+            // The edition name ("WireView Pro II" / "... Noctua Edition"), as
+            // wireviewd publishes it; the transport suffix of DeviceName is local.
+            Name = WireViewEditions.DisplayName(dev.Edition),
             Connected = d.Connected,
-            HwRev = d.HardwareRevision,
+            // Upstream's "EF05"/"EF06"; the device's own identity, not the per-sample
+            // copy (which older builds left at the "A0" default for hwmon).
+            HwRev = string.IsNullOrEmpty(dev.HardwareRevision) ? d.HardwareRevision : dev.HardwareRevision,
             FwVer = d.FirmwareVersion,
             BuildString = dev.BuildString,
             Timestamp = d.Timestamp,

@@ -44,15 +44,21 @@ namespace WireView2.Device
         private string _uniqueId = string.Empty;
         private string _buildString = string.Empty;
         private int _configVersion = -1;
+        // wireviewd 1.6.0 and older only attach product 5 and do not report the ids;
+        // until a newer daemon says otherwise the device is a Pro II (EF05).
+        private byte _vendorId = WireViewEditions.ThermalGrizzlyVendorId;
+        private byte _productId = WireViewEditions.Pro2ProductId;
 
         public event EventHandler<DeviceData>? DataUpdated;
         public event EventHandler<bool>? ConnectionChanged;
 
         public bool Connected { get; private set; }
-        public string DeviceName => DaemonAvailable
-            ? "WireView Pro II (hwmon + daemon)"
-            : "WireView Pro II (hwmon)";
-        public string HardwareRevision => string.Empty;
+        public string DeviceName => WireViewEditions.DisplayName(Edition)
+            + (DaemonAvailable ? " (hwmon + daemon)" : " (hwmon)");
+        public string HardwareRevision => WireViewEditions.FormatHardwareRevision(_vendorId, _productId);
+        public byte VendorId => _vendorId;
+        public byte ProductId => _productId;
+        public WireViewEdition Edition => WireViewEditions.FromIds(_vendorId, _productId);
         public string FirmwareVersion => _firmwareVersion;
         public string UniqueId => _uniqueId;
         public string BuildString => _buildString;
@@ -127,12 +133,23 @@ namespace WireView2.Device
                     Buffer.BlockCopy(data, 2, uid, 0, 12);
                     _uniqueId = BitConverter.ToString(uid).Replace("-", "");
 
+                    byte vendorId = WireViewEditions.ThermalGrizzlyVendorId;
+                    byte productId = WireViewEditions.Pro2ProductId;
                     if (data.Length > 14)
                     {
                         int end = Array.IndexOf(data, (byte)0, 14);
                         if (end < 0) end = data.Length;
                         _buildString = System.Text.Encoding.ASCII.GetString(data, 14, end - 14).Trim();
+                        // Newer daemons append vendor_id, product_id after the build
+                        // string's NUL; older ones stop at the NUL (assume EF05).
+                        if (end + 2 < data.Length)
+                        {
+                            vendorId = data[end + 1];
+                            productId = data[end + 2];
+                        }
                     }
+                    _vendorId = vendorId;
+                    _productId = productId;
 
                     _firmwareVersion = fwVersion.ToString();
                     DaemonAvailable = true;
@@ -568,7 +585,12 @@ namespace WireView2.Device
         {
             try
             {
-                var dd = new DeviceData { Connected = true };
+                var dd = new DeviceData
+                {
+                    Connected = true,
+                    HardwareRevision = HardwareRevision,
+                    FirmwareVersion = _firmwareVersion,
+                };
 
                 for (int i = 0; i < 6; i++)
                     dd.PinVoltage[i] = ReadIntFile($"in{i}_input") / 1000.0;

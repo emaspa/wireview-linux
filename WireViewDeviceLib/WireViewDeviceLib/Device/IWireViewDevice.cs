@@ -10,6 +10,12 @@
         /// <summary>Firmware build string (e.g. "TG-WV-PRO2-FW_20260225_1902"), or empty if unknown.</summary>
         string BuildString { get; }
 
+        /// <summary>Vendor id (0xEF for Thermal Grizzly), 0 while unknown.</summary>
+        byte VendorId { get; }
+        /// <summary>Product id: 5 = WireView Pro II, 6 = Noctua Edition; 0 while unknown.</summary>
+        byte ProductId { get; }
+        WireViewEdition Edition { get; }
+
         void Connect();
         void Disconnect();
         event EventHandler<DeviceData>? DataUpdated;

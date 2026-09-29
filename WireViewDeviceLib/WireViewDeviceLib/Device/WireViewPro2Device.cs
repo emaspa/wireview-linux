@@ -8,7 +8,12 @@ namespace WireView2.Device
 
     public partial class WireViewPro2Device : IWireViewDevice, IDisposable
     {
+        /// <summary>Welcome string of the Pro II and its Noctua Edition (identical).</summary>
         public const string WelcomeMessage = "Thermal Grizzly WireView Pro II";
+        /// <summary>Common prefix of every WireView welcome string (upstream's
+        /// WireViewBasicDevice probe). WireView II sends "Thermal Grizzly WireView II".</summary>
+        private const string WelcomePrefix = "Thermal Grizzly WireView";
+        private const int MaxWelcomeLength = 64;
         private readonly string _portName;
         private readonly int _baud;
         private SerialPort? _port;
@@ -19,8 +24,17 @@ namespace WireView2.Device
         public event EventHandler<bool>? ConnectionChanged;
 
         public bool Connected { get; private set; }
-        public string DeviceName => "WireView Pro II";
+        public string DeviceName => WireViewEditions.DisplayName(Edition);
         public string HardwareRevision { get; private set; } = string.Empty;
+        public byte VendorId { get; private set; }
+        public byte ProductId { get; private set; }
+        public WireViewEdition Edition => WireViewEditions.FromIds(VendorId, ProductId);
+
+        /// <summary>Set when the last <see cref="Connect"/> found a WireView whose
+        /// product this class does not speak (WireView II / Phanteks Edition, products
+        /// 7 and 8, or anything newer). The device manager stops re-probing that port
+        /// until it disappears.</summary>
+        public (byte VendorId, byte ProductId)? RejectedProduct { get; private set; }
         public string FirmwareVersion { get; private set; } = string.Empty;
         public string UniqueId { get; private set; } = string.Empty;
         public string BuildString { get; private set; } = string.Empty;
@@ -48,17 +62,35 @@ namespace WireView2.Device
             _port.ReadTimeout = 1000;
             _port.WriteTimeout = 1000;
 
-            // First try to read welcome message without sending command
-            if (!ReadWelcomeMessage(false))
+            RejectedProduct = null;
+
+            // Probe like upstream's DeviceAutoConnector: any WireView answers RTS
+            // with a welcome string starting "Thermal Grizzly WireView", and its
+            // vendor data names the product.
+            string? welcome = ReadWelcomeString();
+            if (welcome == null || !welcome.StartsWith(WelcomePrefix, StringComparison.Ordinal))
             {
                 Connected = false;
                 return;
             }
 
             var vd = ReadVendorData();
-            if (vd != null && vd.Value.VendorId == 0xEF && vd.Value.ProductId == 0x05)
+            if (vd != null && !WireViewEditions.IsSupported(vd.Value.VendorId, vd.Value.ProductId))
             {
-                HardwareRevision = $"{vd.Value.VendorId:X2}{vd.Value.ProductId:X2}";
+                RejectedProduct = (vd.Value.VendorId, vd.Value.ProductId);
+                System.Diagnostics.Debug.WriteLine(
+                    $"[WireViewPro2Device] {_portName}: unsupported WireView product " +
+                    $"{vd.Value.VendorId:X2}{vd.Value.ProductId:X2} (\"{welcome}\"), skipped");
+                Connected = false;
+                return;
+            }
+
+            // Products 5 and 6 share the Pro II welcome string, protocol and config.
+            if (vd != null && welcome == WelcomeMessage)
+            {
+                VendorId = vd.Value.VendorId;
+                ProductId = vd.Value.ProductId;
+                HardwareRevision = WireViewEditions.FormatHardwareRevision(VendorId, ProductId);
                 FirmwareVersion = vd.Value.FwVersion.ToString();
 
                 int? cfgVer = ReadConfigVersion();
@@ -106,6 +138,8 @@ namespace WireView2.Device
             Connected = false;
 
             HardwareRevision = string.Empty;
+            VendorId = 0;
+            ProductId = 0;
             FirmwareVersion = string.Empty;
             UniqueId = string.Empty;
             BuildString = string.Empty;
@@ -314,16 +348,52 @@ namespace WireView2.Device
             return buf[2];
         }
 
-        private bool ReadWelcomeMessage(bool sendCmd = false)
+        /// <summary>Asserts RTS and reads the NUL-terminated welcome string the
+        /// device answers with. Its length depends on the product ("...Pro II" is 31
+        /// characters, "...WireView II" 27), so read up to the terminator instead of
+        /// a fixed size. Null when nothing (or no terminator) arrives in time.</summary>
+        private string? ReadWelcomeString()
         {
-            if (_port == null) return false;
+            if (_port == null) return null;
+            lock (_port)
+            {
+                if (!_port.Open()) return null;
+                try
+                {
+                    _port.DiscardInBuffer();
+                    _port.RtsEnable = true;
+                    Thread.Sleep(10);
+                    byte[]? buf = ReadUntilNul(MaxWelcomeLength);
+                    Thread.Sleep(10);
+                    _port.RtsEnable = false;
+                    return buf == null ? null : System.Text.Encoding.ASCII.GetString(buf);
+                }
+                finally
+                {
+                    _port.Close();
+                }
+            }
+        }
 
-            var size = WelcomeMessage.Length + 1;
-
-            byte[]? buf = SendData(new byte[0], size, rts: true);
-
-            if (buf == null) return false;
-            return System.Text.Encoding.ASCII.GetString(buf, 0, size).TrimEnd('\0').CompareTo(WelcomeMessage) == 0;
+        /// <summary>Blocking reads (ReadTimeout paced) until a NUL byte, at most
+        /// <paramref name="maxLength"/> bytes or one second. Returns the bytes before
+        /// the NUL, or null without one.</summary>
+        private byte[]? ReadUntilNul(int maxLength)
+        {
+            var buf = new byte[maxLength];
+            int offset = 0;
+            long deadline = Environment.TickCount64 + 1000;
+            while (offset < maxLength && Environment.TickCount64 < deadline)
+            {
+                int n;
+                try { n = _port!.Read(buf, offset, maxLength - offset); }
+                catch (TimeoutException) { break; }
+                if (n <= 0) break;
+                int nul = Array.IndexOf(buf, (byte)0, offset, n);
+                if (nul >= 0) return buf[..nul];
+                offset += n;
+            }
+            return null;
         }
 
         private VendorDataStruct? ReadVendorData()

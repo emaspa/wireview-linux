@@ -31,6 +31,9 @@ namespace WireView2.Net
         public bool Connected { get; private set; }
         public string DeviceName { get; private set; }
         public string HardwareRevision { get; private set; } = "";
+        public byte VendorId { get; private set; }
+        public byte ProductId { get; private set; }
+        public WireViewEdition Edition { get; private set; }
         public string FirmwareVersion { get; private set; } = "";
         public string BuildString { get; private set; } = "";
         public string UniqueId { get; }
@@ -93,6 +96,7 @@ namespace WireView2.Net
 
                 DeviceName = string.IsNullOrWhiteSpace(dto.Name) ? DeviceName : dto.Name;
                 HardwareRevision = dto.HwRev;
+                UpdateIdentity(dto.HwRev, dto.Name);
                 FirmwareVersion = dto.FwVer;
                 BuildString = dto.BuildString ?? "";
                 DataUpdated?.Invoke(this, dto.ToDeviceData());
@@ -102,6 +106,25 @@ namespace WireView2.Net
             {
                 return false;
             }
+        }
+
+        /// <summary>Edition and ids from the published hwRev ("EF05"/"EF06"). Publishers
+        /// that send none (wireviewd 1.6.0 and older send an empty hwRev, older GUIs
+        /// "A0" for hwmon devices) only ever had a Pro II attached, so fall back to
+        /// the published name, which names the Noctua Edition when it is one.</summary>
+        private void UpdateIdentity(string? hwRev, string? name)
+        {
+            if (WireViewEditions.TryParseHardwareRevision(hwRev, out byte vid, out byte pid))
+            {
+                VendorId = vid;
+                ProductId = pid;
+                Edition = WireViewEditions.FromIds(vid, pid);
+                return;
+            }
+            var edition = WireViewEditions.FromName(name);
+            if (edition == WireViewEdition.Unknown) edition = WireViewEdition.Pro2;
+            (VendorId, ProductId) = WireViewEditions.IdsOf(edition);
+            Edition = edition;
         }
 
         private void SetConnected(bool value)

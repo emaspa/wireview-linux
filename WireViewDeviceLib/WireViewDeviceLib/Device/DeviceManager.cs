@@ -41,6 +41,9 @@ namespace WireView2.Device
         private readonly Dictionary<string, ManagedDevice> _byId = new();   // UniqueId -> device
         private readonly HashSet<string> _openSources = new();              // sources we already hold
         private readonly Dictionary<IWireViewDevice, EventHandler<DeviceData>> _dataHandlers = new();
+        // Serial sources holding a WireView this app does not support yet (WireView II,
+        // product 7/8). Not re-probed every tick; forgotten once the port disappears.
+        private readonly Dictionary<string, (byte VendorId, byte ProductId)> _unsupportedSources = new();
 
         private CancellationTokenSource? _cts;
         private Task? _worker;
@@ -81,12 +84,31 @@ namespace WireView2.Device
                 if (HasDaemonBackedHwmon())
                     yield break;
             }
-            foreach (var port in Stm32PortFinder.FindMatchingComPorts())
+            var ports = Stm32PortFinder.FindMatchingComPorts();
+            lock (_gate)
+            {
+                foreach (var gone in _unsupportedSources.Keys
+                             .Where(s => !ports.Contains(s["serial:".Length..])).ToList())
+                    _unsupportedSources.Remove(gone);
+            }
+            foreach (var port in ports)
             {
                 string source = "serial:" + port;
-                if (!held.Contains(source))
-                    yield return (new WireViewPro2Device(port), source);
+                if (held.Contains(source) || IsUnsupportedSource(source)) continue;
+                yield return (new WireViewPro2Device(port), source);
             }
+        }
+
+        private bool IsUnsupportedSource(string source)
+        {
+            lock (_gate) { return _unsupportedSources.ContainsKey(source); }
+        }
+
+        /// <summary>Serial sources skipped because they hold an unsupported WireView
+        /// product, with its vendor/product id.</summary>
+        public IReadOnlyDictionary<string, (byte VendorId, byte ProductId)> UnsupportedSources
+        {
+            get { lock (_gate) { return new Dictionary<string, (byte, byte)>(_unsupportedSources); } }
         }
 
         private bool HasDaemonBackedHwmon()
@@ -156,6 +178,7 @@ namespace WireView2.Device
                 foreach (var md in _byId.Values.ToList()) Drop(md);
                 _byId.Clear();
                 _openSources.Clear();
+                _unsupportedSources.Clear();
                 _selectedId = null;
             }
         }
@@ -218,7 +241,13 @@ namespace WireView2.Device
             try
             {
                 device.Connect();
-                if (!device.Connected) { Dispose(device); return; }
+                if (!device.Connected)
+                {
+                    if (device is WireViewPro2Device { RejectedProduct: { } product })
+                        lock (_gate) { _unsupportedSources[source] = product; }
+                    Dispose(device);
+                    return;
+                }
 
                 lock (_gate)
                 {

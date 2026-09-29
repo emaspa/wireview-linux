@@ -43,6 +43,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private string _uniqueId = string.Empty;
     private bool _isConnected;
     private string _deviceName = "Not Connected";
+    private WireViewEdition _deviceEdition;
     private string? _deviceBuildString;
     private string _bundledFirmwareVersion = "-";
     private string? _bundledBuildString;
@@ -149,6 +150,19 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         get => _deviceName;
         set => Set(ref _deviceName, value);
     }
+
+    /// <summary>Edition of the connected device (Unknown while disconnected).</summary>
+    public WireViewEdition DeviceEdition
+    {
+        get => _deviceEdition;
+        private set
+        {
+            if (Set(ref _deviceEdition, value))
+                OnPropertyChanged(nameof(IsNoctuaEdition));
+        }
+    }
+
+    public bool IsNoctuaEdition => DeviceEdition == WireViewEdition.Pro2Noctua;
 
     public string? DeviceBuildString
     {
@@ -743,6 +757,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         if (!connected)
         {
             DeviceName = "Not Connected";
+            DeviceEdition = WireViewEdition.Unknown;
             FirmwareVersion = string.Empty;
             UniqueId = string.Empty;
             DeviceBuildString = null;
@@ -760,6 +775,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             DeviceName = _device is NetworkDevice nd
                 ? $"{_device.DeviceName}  ·  remote @ {nd.Endpoint.Replace("http://", string.Empty)}"
                 : _device.DeviceName;
+            DeviceEdition = _device.Edition;
             FirmwareVersion = string.IsNullOrEmpty(_device.FirmwareVersion)
                 ? "N/A" : "v" + _device.FirmwareVersion.ToString().PadLeft(2, '0');
             UniqueId = string.IsNullOrEmpty(_device.UniqueId) ? "N/A" : _device.UniqueId;
