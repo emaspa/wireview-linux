@@ -26,7 +26,7 @@ namespace WireView2.Device
         {
             var suspend = daemonDevice.RequestSuspendSerial(SuspendWindowSeconds);
             if (suspend == DaemonResult.Denied)
-                throw new UnauthorizedAccessException(DaemonResults.DeniedMessage);
+                throw new DaemonDeniedException();
             if (suspend != DaemonResult.Ok)
                 throw new InvalidOperationException(
                     "The hwmon daemon did not hand over the serial port (wireviewd too old? " +

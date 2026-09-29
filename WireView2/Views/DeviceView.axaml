@@ -238,6 +238,10 @@
                                     <TextBlock Text="Reading theme from device…" HorizontalAlignment="Center"
                                                VerticalAlignment="Center" Opacity="0.7"
                                                IsVisible="{Binding IsThemePreviewBusy}"/>
+                                    <TextBlock Text="{Binding ThemePreviewHint}" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" TextAlignment="Center"
+                                               TextWrapping="Wrap" Margin="16,0" Opacity="0.6"
+                                               IsVisible="{Binding !IsThemePreviewBusy}"/>
                                 </Panel>
                             </StackPanel>
                         </Border>

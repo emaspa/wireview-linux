@@ -1,3 +1,5 @@
+using System;
+
 namespace WireView2.Device
 {
     /// <summary>Outcome of a wireviewd socket command, as reported by
@@ -29,5 +31,14 @@ namespace WireView2.Device
             DaemonResult.Unavailable  => "wireviewd is not reachable",
             _                         => "failed",
         };
+    }
+
+    /// <summary>Thrown when wireviewd refuses a privileged command (status 3).
+    /// Its own type so automatic callers can tell "not permitted" apart from a
+    /// transient failure: retrying a denial cannot succeed until the user joins
+    /// the group and restarts the session.</summary>
+    public sealed class DaemonDeniedException : UnauthorizedAccessException
+    {
+        public DaemonDeniedException() : base(DaemonResults.DeniedMessage) { }
     }
 }

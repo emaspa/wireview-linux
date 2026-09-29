@@ -1,6 +1,7 @@
 using System;
 using System.Buffers.Binary;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -56,6 +57,11 @@ public sealed partial class DeviceViewModel
     private DispatcherTimer? _fanPreviewTimer;
     private CancellationTokenSource? _themePreviewCts;
     private int _previewRetriesLeft;
+    // wireviewd refused the serial handover (peer not root or in the 'wireview'
+    // group). Remembered for the rest of this connection so the automatic
+    // refreshes stop borrowing the port; cleared on disconnect.
+    private volatile bool _themePreviewDenied;
+    private string? _themePreviewHint;
 
     // ---- Pending background import state ----
     private string? _pendingBackgroundFilePath;
@@ -96,6 +102,15 @@ public sealed partial class DeviceViewModel
     {
         get => _isThemePreviewBusy;
         private set => Set(ref _isThemePreviewBusy, value);
+    }
+
+    /// <summary>Placeholder shown inside the empty preview box when the automatic
+    /// preview was skipped (wireviewd denied the serial handover). The full
+    /// how-to-fix message is shown when the user presses Refresh.</summary>
+    public string? ThemePreviewHint
+    {
+        get => _themePreviewHint;
+        private set => Set(ref _themePreviewHint, value);
     }
 
     public bool IsThemeUploadBusy
@@ -178,7 +193,11 @@ public sealed partial class DeviceViewModel
             // upgrading to daemon-backed a few seconds after startup, which is
             // when the first automatic preview read becomes possible.
             case nameof(IsConnected):
-                if (!IsConnected) ClearThemePreview();
+                if (!IsConnected)
+                {
+                    _themePreviewDenied = false;
+                    ClearThemePreview();
+                }
                 else if (IsUiV2Supported && ThemeBackgroundPreview == null)
                     RequestThemePreviewRefresh(force: true);
                 break;
@@ -214,6 +233,7 @@ public sealed partial class DeviceViewModel
         {
             StopFanPreview();
             ThemeBackgroundPreview = null;
+            ThemePreviewHint = null;
             _cachedThemeBackgroundImage = null;
             _cachedThemeBackgroundImageInverted = null;
             _cachedThemeFanFrame1 = null;
@@ -257,12 +277,22 @@ public sealed partial class DeviceViewModel
     [RelayCommand]
     private Task RefreshThemePreview()
     {
-        RequestThemePreviewRefresh(force: true);
+        RequestThemePreviewRefresh(force: true, userInitiated: true);
         return Task.CompletedTask;
     }
 
-    private void RequestThemePreviewRefresh(bool force = false)
+    /// <summary>Everything except the Refresh button is an automatic refresh
+    /// (connect, config load, slot change, after apply/upload). Automatic
+    /// refreshes are skipped once wireviewd has denied the handover on this
+    /// connection; the Refresh button always tries and reports the result.</summary>
+    private void RequestThemePreviewRefresh(bool force = false, bool userInitiated = false)
     {
+        if (!userInitiated && _themePreviewDenied)
+        {
+            Debug.WriteLine("[ThemePreview] skipped: wireviewd denied the serial handover on this connection");
+            return;
+        }
+
         if (!force && _cachedThemeFanFrame1 != null && _cachedThemeFanFrame2 != null)
         {
             Dispatcher.UIThread.Post(() =>
@@ -277,7 +307,7 @@ public sealed partial class DeviceViewModel
             _themePreviewCts = new CancellationTokenSource();
             CancellationToken ct = _themePreviewCts.Token;
             _previewRetriesLeft = 3;
-            _ = Task.Run(() => LoadThemePreviewAsync(ct), ct);
+            _ = Task.Run(() => LoadThemePreviewAsync(ct, userInitiated), ct);
         }
     }
 
@@ -293,7 +323,7 @@ public sealed partial class DeviceViewModel
             _fanPreviewTimer.Stop();
     }
 
-    private async Task LoadThemePreviewAsync(CancellationToken ct)
+    private async Task LoadThemePreviewAsync(CancellationToken ct, bool userInitiated)
     {
         try
         {
@@ -324,6 +354,8 @@ public sealed partial class DeviceViewModel
                 IImage fan1Image = Rgb565ToImage(fan1Bytes, ThemeFanSize, ThemeFanSize, columnMajor: true);
                 IImage fan2Image = Rgb565ToImage(fan2Bytes, ThemeFanSize, ThemeFanSize, columnMajor: true);
 
+                _themePreviewDenied = false;
+                ThemePreviewHint = null;
                 _cachedThemeBackgroundImage = bgImage;
                 _cachedThemeFanFrame1 = fan1Image;
                 _cachedThemeFanFrame2 = fan2Image;
@@ -338,6 +370,21 @@ public sealed partial class DeviceViewModel
         }
         catch (OperationCanceledException)
         {
+        }
+        catch (DaemonDeniedException ex)
+        {
+            // Not an error for the automatic preview: the user simply is not in the
+            // 'wireview' group. Retrying cannot help, so stop here and leave a quiet
+            // hint in the preview box. Only an explicit Refresh reports it.
+            _themePreviewDenied = true;
+            Debug.WriteLine("[ThemePreview] wireviewd denied the serial handover; preview skipped");
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                ThemeBackgroundPreview = null;
+                ThemePreviewHint = "Preview needs the 'wireview' group. Press Refresh for details.";
+                if (userInitiated)
+                    ConfigStatus = "Theme preview failed: " + ex.Message;
+            });
         }
         catch (Exception ex)
         {
@@ -354,7 +401,7 @@ public sealed partial class DeviceViewModel
                 _previewRetriesLeft--;
                 await Task.Delay(4000, ct).ConfigureAwait(false);
                 if (!ct.IsCancellationRequested && IsConnected && IsUiV2Supported)
-                    _ = LoadThemePreviewAsync(ct);
+                    _ = LoadThemePreviewAsync(ct, userInitiated);
             }
         }
         finally
