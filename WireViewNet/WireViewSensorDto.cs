@@ -34,6 +34,12 @@ namespace WireView2.Net
         public int FaultLog { get; set; }
         public int Fan { get; set; }   // live fan duty %
 
+        /// <summary>Energy in joules since wireviewd started (hwmon energy1_input);
+        /// the daemon's own /sensors carries it too. Omitted when unknown (direct
+        /// serial devices, older daemons and app versions).</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? EnergyJ { get; set; }
+
         // Convenience totals (also recomputable from the pin arrays).
         public double SumCurrentA { get; set; }
         public double SumPowerW { get; set; }
@@ -57,6 +63,7 @@ namespace WireView2.Net
             FaultStatus = d.FaultStatus,
             FaultLog = d.FaultLog,
             Fan = d.FanDuty,
+            EnergyJ = d.EnergyJ,
             SumCurrentA = d.SumCurrentA,
             SumPowerW = d.SumPowerW,
         };
@@ -78,6 +85,7 @@ namespace WireView2.Net
             FaultStatus = (ushort)FaultStatus,
             FaultLog = (ushort)FaultLog,
             FanDuty = Fan,
+            EnergyJ = EnergyJ,
         };
     }
 
@@ -89,7 +97,9 @@ namespace WireView2.Net
         public List<WireViewSensorDto> Devices { get; set; } = new();
     }
 
-    /// <summary>Shared JSON options for the publish/consume contract (camelCase).</summary>
+    /// <summary>Shared JSON options for the publish/consume contract (camelCase).
+    /// Unknown members are skipped (the System.Text.Json default), so newer
+    /// publishers can add fields without breaking older readers.</summary>
     public static class WireViewJson
     {
         public static readonly JsonSerializerOptions Options = new()
