@@ -51,6 +51,8 @@ public class App : Application
     private NativeMenuItem? _vTempOut;
     private NativeMenuItem? _vTempExt1;
     private NativeMenuItem? _vTempExt2;
+    // Absent temperature sensors get no row in the values dropdown.
+    private readonly TemperatureSensorPresence _trayTempPresence = new();
 
     public static event EventHandler<bool>? MainWindowVisibilityChanged;
 
@@ -246,6 +248,7 @@ public class App : Application
 
     private void OnTrayConnectionChanged(object? sender, bool connected)
     {
+        _trayTempPresence.Reset();
         if (_trayConnected == connected) return;
         _trayConnected = connected;
         if (!connected) _lastData = null;
@@ -269,6 +272,7 @@ public class App : Application
     private void OnTrayDataUpdated(object? sender, DeviceData data)
     {
         _lastData = data;
+        _trayTempPresence.Update(data);
         int watts = (int)Math.Round(data.SumPowerW);
         bool connected = data.Connected;
 
@@ -304,6 +308,13 @@ public class App : Application
     {
         if (!string.Equals(item.Header as string, text, StringComparison.Ordinal))
             item.Header = text;
+    }
+
+    /// <summary>Same change-only rule as <see cref="SetHeaderIfChanged"/>.</summary>
+    private static void SetVisibleIfChanged(NativeMenuItem item, bool visible)
+    {
+        if (item.IsVisible != visible)
+            item.IsVisible = visible;
     }
 
     private void UpdateTrayVisuals()
@@ -398,6 +409,10 @@ public class App : Application
             SetHeaderIfChanged(_vTempExt1, "Temp external 1: N/A");
             SetHeaderIfChanged(_vTempExt2, "Temp external 2: N/A");
             SetHeaderIfChanged(_vCableRating, "Cable rating: N/A");
+            SetVisibleIfChanged(_vTempIn, true);
+            SetVisibleIfChanged(_vTempOut, true);
+            SetVisibleIfChanged(_vTempExt1, true);
+            SetVisibleIfChanged(_vTempExt2, true);
             return;
         }
 
@@ -415,6 +430,10 @@ public class App : Application
         SetHeaderIfChanged(_vTempOut, $"Temp onboard out: {FormatTemp(d.OnboardTempOutC)}");
         SetHeaderIfChanged(_vTempExt1, $"Temp external 1: {FormatTemp(d.ExternalTemp1C)}");
         SetHeaderIfChanged(_vTempExt2, $"Temp external 2: {FormatTemp(d.ExternalTemp2C)}");
+        SetVisibleIfChanged(_vTempIn, _trayTempPresence.IsPresent(0));
+        SetVisibleIfChanged(_vTempOut, _trayTempPresence.IsPresent(1));
+        SetVisibleIfChanged(_vTempExt1, _trayTempPresence.IsPresent(2));
+        SetVisibleIfChanged(_vTempExt2, _trayTempPresence.IsPresent(3));
         SetHeaderIfChanged(_vCableRating, d.PsuCapabilityW > 0
             ? $"Cable rating: {d.PsuCapabilityW} W"
             : "Cable rating: N/A");

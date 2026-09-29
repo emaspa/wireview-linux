@@ -55,6 +55,7 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibility
     public sealed class TelemetryItem : ViewModelBase
     {
         private bool _isEnabled;
+        private bool _isAvailable = true;
         private Color _color;
 
         public string Key { get; }
@@ -62,6 +63,18 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibility
         public string Unit { get; }
         public Func<DeviceData, double> Selector { get; }
         public int YAxisIndex { get; }
+
+        /// <summary>Temperature sensor index (0..3) for the four temperature
+        /// channels, -1 for the others.</summary>
+        public int TempSensor { get; init; } = -1;
+
+        /// <summary>False for a temperature sensor that is not connected: its
+        /// toggle is hidden (the enabled choice is kept for when it returns).</summary>
+        public bool IsAvailable
+        {
+            get => _isAvailable;
+            set => Set(ref _isAvailable, value);
+        }
 
         public bool IsEnabled
         {
@@ -259,6 +272,8 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibility
 
         _connector.ConnectionChanged += (_, connected) =>
         {
+            if (_tempPresence.Reset())
+                PostTempAvailability();
             void Apply()
             {
                 IsConnected = connected;
@@ -571,18 +586,21 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibility
             Add($"I{idx + 1}", $"I{idx + 1} (A)", "A", d => d.PinCurrent[idx]);
         }
 
-        Add("Tin",  "Onboard In (°C)",  "°C", d => d.OnboardTempInC);
-        Add("Tout", "Onboard Out (°C)", "°C", d => d.OnboardTempOutC);
-        Add("T1",   "External 1 (°C)",  "°C", d => d.ExternalTemp1C);
-        Add("T2",   "External 2 (°C)",  "°C", d => d.ExternalTemp2C);
+        // An absent sensor reads -3276.8 °C over serial: NaN keeps it off the chart
+        // and out of the Y autoscale.
+        Add("Tin",  "Onboard In (°C)",  "°C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempInC), tempSensor: 0);
+        Add("Tout", "Onboard Out (°C)", "°C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempOutC), tempSensor: 1);
+        Add("T1",   "External 1 (°C)",  "°C", d => TemperatureSensorPresence.ValueOrNaN(d.ExternalTemp1C), tempSensor: 2);
+        Add("T2",   "External 2 (°C)",  "°C", d => TemperatureSensorPresence.ValueOrNaN(d.ExternalTemp2C), tempSensor: 3);
 
         TelemetryItem Add(string key, string label, string unit,
-            Func<DeviceData, double> sel, bool enabled = false)
+            Func<DeviceData, double> sel, bool enabled = false, int tempSensor = -1)
         {
             var color = palette[p++ % palette.Length];
             var item = new TelemetryItem(key, label, unit, sel, color, AxisForUnit(unit))
             {
-                IsEnabled = enabled
+                IsEnabled = enabled,
+                TempSensor = tempSensor,
             };
             Items.Add(item);
             return item;
@@ -700,7 +718,22 @@ public sealed partial class MonitoringViewModel : ViewModelBase, IViewVisibility
             _latestX = x;
             ExportSampleToCsv(x, d);
         }
+        if (_tempPresence.Update(d))
+            PostTempAvailability();
         RequestChartPush();
+    }
+
+    private readonly TemperatureSensorPresence _tempPresence = new();
+
+    /// <summary>Shows or hides the temperature toggles of connected / absent sensors.</summary>
+    private void PostTempAvailability()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var item in Items)
+                if (item.TempSensor >= 0)
+                    item.IsAvailable = _tempPresence.IsPresent(item.TempSensor);
+        }, DispatcherPriority.Background);
     }
 
     private void RequestChartPush()

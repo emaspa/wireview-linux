@@ -93,11 +93,14 @@
             </Grid>
 
             <!-- Temperature gauges -->
-            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
+            <!-- A sensor that is not connected has its column hidden (the others
+                 share the row); the panel hides when none is connected. -->
+            <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16"
+                    IsVisible="{Binding AnyTempPresent}">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Temperatures" FontWeight="SemiBold" FontSize="16"/>
-                    <Grid ColumnDefinitions="*,*,*,*" Height="160">
-                        <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                    <UniformGrid Rows="1" Height="160">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2" IsVisible="{Binding TempInPresent}">
                             <TextBlock Text="Onboard In" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempInGauge}" Max="{Binding TempMaxC}"
@@ -107,7 +110,7 @@
                                                        IsVisible="{Binding TempInAvailable}"/>
                             <TextBlock Text="{Binding TempInText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2" IsVisible="{Binding TempOutPresent}">
                             <TextBlock Text="Onboard Out" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempOutGauge}" Max="{Binding TempMaxC}"
@@ -117,7 +120,7 @@
                                                        IsVisible="{Binding TempOutAvailable}"/>
                             <TextBlock Text="{Binding TempOutText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2" IsVisible="{Binding TempExt1Present}">
                             <TextBlock Text="External 1" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempExt1Gauge}" Max="{Binding TempMaxC}"
@@ -127,7 +130,7 @@
                                                        IsVisible="{Binding TempExt1Available}"/>
                             <TextBlock Text="{Binding TempExt1Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="3" HorizontalAlignment="Center" Spacing="2">
+                        <StackPanel HorizontalAlignment="Center" Spacing="2" IsVisible="{Binding TempExt2Present}">
                             <TextBlock Text="External 2" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempExt2Gauge}" Max="{Binding TempMaxC}"
@@ -137,7 +140,7 @@
                                                        IsVisible="{Binding TempExt2Available}"/>
                             <TextBlock Text="{Binding TempExt2Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
-                    </Grid>
+                    </UniformGrid>
                 </StackPanel>
             </Border>
 

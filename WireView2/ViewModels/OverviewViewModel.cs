@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia.Media;
 using WireView2.Controls;
 using WireView2.Device;
+using WireView2.Services;
 
 namespace WireView2.ViewModels;
 
@@ -117,6 +118,25 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     public bool TempOutAvailable => IsTempValid(OnboardTempOutC);
     public bool TempExt1Available => IsTempValid(ExternalTemp1C);
     public bool TempExt2Available => IsTempValid(ExternalTemp2C);
+
+    // Connected sensors: an absent sensor's whole column is hidden, and comes back
+    // as soon as the sensor reports a temperature.
+    private readonly TemperatureSensorPresence _tempPresence = new();
+
+    public bool TempInPresent => _tempPresence.IsPresent(0);
+    public bool TempOutPresent => _tempPresence.IsPresent(1);
+    public bool TempExt1Present => _tempPresence.IsPresent(2);
+    public bool TempExt2Present => _tempPresence.IsPresent(3);
+    public bool AnyTempPresent => TempInPresent || TempOutPresent || TempExt1Present || TempExt2Present;
+
+    private void RaiseTempPresenceChanged()
+    {
+        OnPropertyChanged(nameof(TempInPresent));
+        OnPropertyChanged(nameof(TempOutPresent));
+        OnPropertyChanged(nameof(TempExt1Present));
+        OnPropertyChanged(nameof(TempExt2Present));
+        OnPropertyChanged(nameof(AnyTempPresent));
+    }
 
     public string TempInText => IsTempValid(OnboardTempInC) ? $"{OnboardTempInC:0.#} °C" : "N/A";
     public string TempOutText => IsTempValid(OnboardTempOutC) ? $"{OnboardTempOutC:0.#} °C" : "N/A";
@@ -302,6 +322,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
     private void OnConnectionChanged(object? sender, bool connected)
     {
         lock (_pendingGate) { _pendingDeviceData = null; }
+        // Another device (or none): decide the sensors again from its first sample.
+        if (_tempPresence.Reset())
+            RaiseTempPresenceChanged();
     }
 
     // --------------- Device data handler ---------------
@@ -347,6 +370,8 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(TempOutGauge));
         OnPropertyChanged(nameof(TempExt1Gauge));
         OnPropertyChanged(nameof(TempExt2Gauge));
+        if (_tempPresence.Update(d))
+            RaiseTempPresenceChanged();
 
         PowerCableRatingText = TryResolveCableRatingText(d);
 

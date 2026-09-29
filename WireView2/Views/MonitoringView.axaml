@@ -20,7 +20,8 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:MonitoringViewModel+TelemetryItem">
-                    <CheckBox IsChecked="{Binding IsEnabled}" Margin="0,0,10,0" FontSize="12">
+                    <CheckBox IsChecked="{Binding IsEnabled}" IsVisible="{Binding IsAvailable}"
+                              Margin="0,0,10,0" FontSize="12">
                         <TextBlock Text="{Binding Label}" Foreground="{Binding ColorBrush}"/>
                     </CheckBox>
                 </DataTemplate>

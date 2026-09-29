@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
+using WireView2.Services;
 
 namespace WireView2.ViewModels;
 
@@ -214,18 +215,20 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
             Add($"I{idx + 1}", $"I{idx + 1} (A)", "A", d => d.PinCurrent[idx], enabled: true);
         }
 
-        Add("Tin",  "Onboard In (\u00b0C)",  "\u00b0C", d => d.OnboardTempInC,  enabled: true);
-        Add("Tout", "Onboard Out (\u00b0C)", "\u00b0C", d => d.OnboardTempOutC, enabled: true);
-        Add("T1",   "External 1 (\u00b0C)",  "\u00b0C", d => d.ExternalTemp1C);
-        Add("T2",   "External 2 (\u00b0C)",  "\u00b0C", d => d.ExternalTemp2C);
+        // Absent sensors log -3276.8 \u00b0C: NaN keeps them off the chart.
+        Add("Tin",  "Onboard In (\u00b0C)",  "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempInC),  enabled: true, tempSensor: 0);
+        Add("Tout", "Onboard Out (\u00b0C)", "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempOutC), enabled: true, tempSensor: 1);
+        Add("T1",   "External 1 (\u00b0C)",  "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.ExternalTemp1C), tempSensor: 2);
+        Add("T2",   "External 2 (\u00b0C)",  "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.ExternalTemp2C), tempSensor: 3);
 
         MonitoringViewModel.TelemetryItem Add(string key, string label, string unit,
-            Func<DeviceData, double> sel, bool enabled = false)
+            Func<DeviceData, double> sel, bool enabled = false, int tempSensor = -1)
         {
             var color = palette[p++ % palette.Length];
             var item = new MonitoringViewModel.TelemetryItem(key, label, unit, sel, color, AxisForUnit(unit))
             {
-                IsEnabled = enabled
+                IsEnabled = enabled,
+                TempSensor = tempSensor,
             };
             Items.Add(item);
             return item;
@@ -393,6 +396,13 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         {
             _history.Clear();
         }
+        void ShowAllToggles()
+        {
+            foreach (var t in Items)
+                t.IsAvailable = true;
+        }
+        if (Dispatcher.UIThread.CheckAccess()) ShowAllToggles();
+        else Dispatcher.UIThread.Post(ShowAllToggles, DispatcherPriority.Background);
         void ClearPoints()
         {
             foreach (var series in Chart.SeriesItems)
@@ -465,6 +475,19 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         Chart.SetXWindow(0.0, Math.Max(1.0, span));
 
         lock (_gate) { _history.AddRange(rows); }
+
+        // Hide the toggles of temperature sensors that logged no reading in this cycle.
+        // Posted like ClearUiAndHistory's reset above, so it lands after it.
+        var logged = Items.Where(i => i.TempSensor >= 0)
+            .Select(t => (t, rows.Any(r => TemperatureSensorPresence.IsValid(TemperatureSensorPresence.Read(r, t.TempSensor)))))
+            .ToList();
+        void ApplyAvailability()
+        {
+            foreach (var (t, any) in logged)
+                t.IsAvailable = any;
+        }
+        if (Dispatcher.UIThread.CheckAccess()) ApplyAvailability();
+        else Dispatcher.UIThread.Post(ApplyAvailability, DispatcherPriority.Background);
 
         foreach (var item2 in Items.Where(i => i.IsEnabled))
             RebuildSeriesPointsFor(item2);
