@@ -22,7 +22,7 @@
                     <Color x:Key="SystemAccentColorDark2">#FFE02A25</Color>
                     <Color x:Key="SystemAccentColorDark3">#FFE02A25</Color>
                     <ImageBrush x:Key="AppBackgroundBrush"
-                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE_inv.png"
+                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE_inv.jpg"
                                 Stretch="UniformToFill"
                                 AlignmentX="Center" AlignmentY="Center"
                                 Opacity="1.0"/>
@@ -41,7 +41,7 @@
                     <Color x:Key="SystemAccentColorDark2">#FFE02A25</Color>
                     <Color x:Key="SystemAccentColorDark3">#FFE02A25</Color>
                     <ImageBrush x:Key="AppBackgroundBrush"
-                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE.png"
+                                Source="avares://WireView2/Assets/Backgrounds/CPU_WELLE.jpg"
                                 Stretch="UniformToFill"
                                 AlignmentX="Center" AlignmentY="Center"
                                 Opacity="0.5"/>
