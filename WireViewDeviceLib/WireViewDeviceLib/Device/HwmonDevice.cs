@@ -24,7 +24,13 @@ namespace WireView2.Device
         private const byte WCMD_SUSPEND_SERIAL   = 0x09;
         private const byte WCMD_RESUME_SERIAL    = 0x0A;
 
-        private const byte RESP_OK = 0;
+        // Socket protocol response status (must match wireviewd)
+        private const byte RESP_OK            = 0;
+        private const byte RESP_ERROR         = 1;
+        private const byte RESP_NOT_CONNECTED = 2;
+        private const byte RESP_DENIED        = 3;
+        // Local marker: no socket, or the request failed in transport.
+        private const byte RESP_TRANSPORT     = 0xFF;
 
         private readonly string _hwmonPath;
         private CancellationTokenSource? _cts;
@@ -104,10 +110,7 @@ namespace WireView2.Device
             {
                 if (!File.Exists(DaemonSocketPath)) return;
 
-                var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-                socket.ReceiveTimeout = 3000;
-                socket.SendTimeout = 3000;
-                socket.Connect(new UnixDomainSocketEndPoint(DaemonSocketPath));
+                var socket = OpenDaemonSocket();
 
                 lock (_socketLock)
                     _daemonSocket = socket;
@@ -143,6 +146,57 @@ namespace WireView2.Device
             }
         }
 
+        private static Socket OpenDaemonSocket()
+        {
+            var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            try
+            {
+                socket.ReceiveTimeout = 3000;
+                socket.SendTimeout = 3000;
+                socket.Connect(new UnixDomainSocketEndPoint(DaemonSocketPath));
+                return socket;
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>wireviewd decides a client's privilege once, when it accepts the
+        /// connection. After a denial, swap in a fresh connection so the next
+        /// attempt is judged against the user's current groups (e.g. after
+        /// <c>usermod -aG wireview</c>). The denied request itself is not retried.
+        /// Caller holds <see cref="_socketLock"/>.</summary>
+        private void RenewDaemonSocketAfterDenial()
+        {
+            try
+            {
+                var fresh = OpenDaemonSocket();
+                try { _daemonSocket?.Dispose(); } catch { }
+                _daemonSocket = fresh;
+            }
+            catch
+            {
+                // Keep the old connection: it still serves unprivileged commands.
+            }
+        }
+
+        private static DaemonResult ToResult(byte status) => status switch
+        {
+            RESP_OK            => DaemonResult.Ok,
+            RESP_NOT_CONNECTED => DaemonResult.NotConnected,
+            RESP_DENIED        => DaemonResult.Denied,
+            RESP_TRANSPORT     => DaemonResult.Unavailable,
+            _                  => DaemonResult.Error,
+        };
+
+        private DaemonResult SendDaemonCommand(byte cmdType, byte[] payload)
+        {
+            var (status, _) = SendDaemonRequest(cmdType, payload);
+            return ToResult(status);
+        }
+
         private void DisconnectDaemon()
         {
             lock (_socketLock)
@@ -161,7 +215,7 @@ namespace WireView2.Device
                 try
                 {
                     if (_daemonSocket == null)
-                        return (0xFF, null);
+                        return (RESP_TRANSPORT, null);
 
                     // Send: [type:u8][len:u16 LE][payload]
                     var hdr = new byte[3];
@@ -179,7 +233,7 @@ namespace WireView2.Device
                     int respLen = respHdr[1] | (respHdr[2] << 8);
 
                     if (respLen > 1024)
-                        return (0xFF, null);
+                        return (RESP_TRANSPORT, null);
 
                     byte[]? respData = null;
                     if (respLen > 0)
@@ -188,6 +242,9 @@ namespace WireView2.Device
                         SocketReadExact(_daemonSocket, respData, respLen);
                     }
 
+                    if (status == RESP_DENIED)
+                        RenewDaemonSocketAfterDenial();
+
                     return (status, respData);
                 }
                 catch
@@ -195,7 +252,7 @@ namespace WireView2.Device
                     try { _daemonSocket?.Dispose(); } catch { }
                     _daemonSocket = null;
                     DaemonAvailable = false;
-                    return (0xFF, null);
+                    return (RESP_TRANSPORT, null);
                 }
             }
         }
@@ -213,15 +270,15 @@ namespace WireView2.Device
 
         // ---- Command methods ----
 
-        public void ClearFaults(int faultStatusMask = 0xFFFF, int faultLogMask = 0xFFFF)
+        public DaemonResult ClearFaults(int faultStatusMask = 0xFFFF, int faultLogMask = 0xFFFF)
         {
-            if (!DaemonAvailable) return;
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
             var payload = new byte[4];
             payload[0] = (byte)(faultStatusMask & 0xFF);
             payload[1] = (byte)((faultStatusMask >> 8) & 0xFF);
             payload[2] = (byte)(faultLogMask & 0xFF);
             payload[3] = (byte)((faultLogMask >> 8) & 0xFF);
-            SendDaemonRequest(WCMD_CLEAR_FAULTS, payload);
+            return SendDaemonCommand(WCMD_CLEAR_FAULTS, payload);
         }
 
         public WireViewPro2Device.DeviceConfigStructV3? ReadConfig()
@@ -269,9 +326,9 @@ namespace WireView2.Device
             }
         }
 
-        public void WriteConfig(WireViewPro2Device.DeviceConfigStructV3 config)
+        public DaemonResult WriteConfig(WireViewPro2Device.DeviceConfigStructV3 config)
         {
-            if (!DaemonAvailable || _configVersion < 0) return;
+            if (!DaemonAvailable || _configVersion < 0) return DaemonResult.Unavailable;
 
             byte[] configBytes;
             if (_configVersion == 0)
@@ -290,36 +347,37 @@ namespace WireView2.Device
             }
             else
             {
-                return;
+                return DaemonResult.Error;
             }
 
             var payload = new byte[1 + configBytes.Length];
             payload[0] = (byte)_configVersion;
             Buffer.BlockCopy(configBytes, 0, payload, 1, configBytes.Length);
 
-            SendDaemonRequest(WCMD_WRITE_CONFIG, payload);
+            return SendDaemonCommand(WCMD_WRITE_CONFIG, payload);
         }
 
         /// <summary>Write already-serialized config bytes (relayed from the network).</summary>
-        public void WriteConfigRaw(int version, byte[] configBytes)
+        public DaemonResult WriteConfigRaw(int version, byte[] configBytes)
         {
-            if (!DaemonAvailable || configBytes == null || configBytes.Length == 0) return;
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
+            if (configBytes == null || configBytes.Length == 0) return DaemonResult.Error;
             var payload = new byte[1 + configBytes.Length];
             payload[0] = (byte)version;
             Buffer.BlockCopy(configBytes, 0, payload, 1, configBytes.Length);
-            SendDaemonRequest(WCMD_WRITE_CONFIG, payload);
+            return SendDaemonCommand(WCMD_WRITE_CONFIG, payload);
         }
 
-        public void ScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
+        public DaemonResult ScreenCmd(WireViewPro2Device.SCREEN_CMD cmd)
         {
-            if (!DaemonAvailable) return;
-            SendDaemonRequest(WCMD_SCREEN_CMD, new[] { (byte)cmd });
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
+            return SendDaemonCommand(WCMD_SCREEN_CMD, new[] { (byte)cmd });
         }
 
-        public void NvmCmd(WireViewPro2Device.NVM_CMD cmd)
+        public DaemonResult NvmCmd(WireViewPro2Device.NVM_CMD cmd)
         {
-            if (!DaemonAvailable) return;
-            SendDaemonRequest(WCMD_NVM_CMD, new[] { (byte)cmd });
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
+            return SendDaemonCommand(WCMD_NVM_CMD, new[] { (byte)cmd });
         }
 
         public string? ReadBuildString()
@@ -332,11 +390,16 @@ namespace WireView2.Device
             return Encoding.ASCII.GetString(data, 0, end);
         }
 
-        public void EnterBootloader()
+        /// <summary>Asks wireviewd to reboot the device into its DFU bootloader. Only
+        /// disconnects when the daemon accepted the command; on a denial or error
+        /// the device is still running normally and stays connected.</summary>
+        public DaemonResult EnterBootloader()
         {
-            if (!DaemonAvailable) return;
-            SendDaemonRequest(WCMD_ENTER_BOOTLOADER, Array.Empty<byte>());
-            try { Disconnect(); } catch { }
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
+            var result = SendDaemonCommand(WCMD_ENTER_BOOTLOADER, Array.Empty<byte>());
+            if (result == DaemonResult.Ok)
+                try { Disconnect(); } catch { }
+            return result;
         }
 
         /// <summary>Set while a <see cref="DirectSerialSession"/> owns the port. The
@@ -353,22 +416,25 @@ namespace WireView2.Device
         /// Re-arming before the deadline extends it (heartbeat pattern). The daemon
         /// resumes on its own at the deadline even if the caller dies; call
         /// <see cref="ResumeSerial"/> when done to hand the port back early.</summary>
-        public bool SuspendSerial(int seconds)
+        public bool SuspendSerial(int seconds) => RequestSuspendSerial(seconds) == DaemonResult.Ok;
+
+        /// <summary><see cref="SuspendSerial"/> with the daemon's answer, so a caller
+        /// can tell a permission denial from an old daemon or a dead socket.</summary>
+        public DaemonResult RequestSuspendSerial(int seconds)
         {
-            if (!DaemonAvailable) return false;
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
             var payload = new byte[] { (byte)(seconds & 0xFF), (byte)((seconds >> 8) & 0xFF) };
-            var (status, _) = SendDaemonRequest(WCMD_SUSPEND_SERIAL, payload);
-            return status == RESP_OK;
+            return SendDaemonCommand(WCMD_SUSPEND_SERIAL, payload);
         }
 
-        public void ResumeSerial()
+        public DaemonResult ResumeSerial()
         {
             // The socket may have died during the handover (daemon restart, entry
             // churn) — reconnect rather than leave the daemon waiting out its
             // suspension deadline.
             if (!DaemonAvailable) TryConnectDaemon();
-            if (!DaemonAvailable) return;
-            SendDaemonRequest(WCMD_RESUME_SERIAL, Array.Empty<byte>());
+            if (!DaemonAvailable) return DaemonResult.Unavailable;
+            return SendDaemonCommand(WCMD_RESUME_SERIAL, Array.Empty<byte>());
         }
 
         // ---- Sensor reading ----
