@@ -126,12 +126,7 @@ internal static class EditionThemeService
     {
         if (device is not { Connected: true })
             return WireViewDeviceTheme.WireViewPro2;
-        string rev = device.HardwareRevision ?? string.Empty;
-        if (rev.Length > 0)
-            return string.Equals(rev, "EF06", StringComparison.OrdinalIgnoreCase)
-                ? WireViewDeviceTheme.WireViewPro2Noctua
-                : WireViewDeviceTheme.WireViewPro2;
-        return (device.DeviceName ?? string.Empty).Contains("Noctua", StringComparison.OrdinalIgnoreCase)
+        return device.Edition == WireViewEdition.Pro2Noctua
             ? WireViewDeviceTheme.WireViewPro2Noctua
             : WireViewDeviceTheme.WireViewPro2;
     }
