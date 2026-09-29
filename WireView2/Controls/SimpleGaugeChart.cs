@@ -32,6 +32,10 @@ public sealed class SimpleGaugeChart : Control
     public static readonly StyledProperty<IBrush> AccentBrushProperty =
         AvaloniaProperty.Register<SimpleGaugeChart, IBrush>(nameof(AccentBrush), Brushes.DeepSkyBlue);
 
+    public static readonly StyledProperty<IBrush> TrackBrushProperty =
+        AvaloniaProperty.Register<SimpleGaugeChart, IBrush>(nameof(TrackBrush),
+            new SolidColorBrush(Color.FromRgb(220, 220, 220)));
+
     public static readonly StyledProperty<bool> ShowLabelProperty =
         AvaloniaProperty.Register<SimpleGaugeChart, bool>(nameof(ShowLabel), true);
 
@@ -77,6 +81,13 @@ public sealed class SimpleGaugeChart : Control
         set => SetValue(AccentBrushProperty, value);
     }
 
+    /// <summary>Unfilled part of the arc (upstream 1.0.8 themable track).</summary>
+    public IBrush TrackBrush
+    {
+        get => GetValue(TrackBrushProperty);
+        set => SetValue(TrackBrushProperty, value);
+    }
+
     public bool ShowLabel
     {
         get => GetValue(ShowLabelProperty);
@@ -86,7 +97,7 @@ public sealed class SimpleGaugeChart : Control
     static SimpleGaugeChart()
     {
         AffectsRender<SimpleGaugeChart>(MaxProperty, LabelProperty, UnitProperty,
-            AccentBrushProperty, ShowLabelProperty, ForegroundProperty);
+            AccentBrushProperty, TrackBrushProperty, ShowLabelProperty, ForegroundProperty);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -137,7 +148,7 @@ public sealed class SimpleGaugeChart : Control
         double thickness = Math.Max(18.0, radius * 0.28);
         double arcRadius = Math.Max(0.0, radius - thickness / 2.0);
 
-        var backgroundPen = new Pen(new SolidColorBrush(Color.FromRgb(220, 220, 220)), thickness)
+        var backgroundPen = new Pen(TrackBrush, thickness)
         {
             LineCap = PenLineCap.Flat,
         };
@@ -152,8 +163,17 @@ public sealed class SimpleGaugeChart : Control
         if (!double.IsFinite(ratio)) ratio = 0.0;
         ratio = Math.Clamp(ratio, 0.0, 1.0);
 
-        DrawArc(context, center, arcRadius, 180.0, -180.0, backgroundPen);
-        DrawArc(context, center, arcRadius, 180.0, -180.0 * ratio, accentPen);
+        // The track covers only the unfilled part of the arc, one pixel apart from
+        // the value (upstream 1.0.8), so a translucent or dark track does not
+        // blend into the value arc.
+        double valueSweep = -180.0 * ratio;
+        double trackSweep = -180.0 - valueSweep;
+        if (Math.Abs(trackSweep) > 0.01)
+        {
+            double gapDeg = Math.Min(180.0 / (Math.PI * arcRadius), Math.Abs(valueSweep));
+            DrawArc(context, center, arcRadius, 180.0 + valueSweep + gapDeg, trackSweep - gapDeg, backgroundPen);
+        }
+        DrawArc(context, center, arcRadius, 180.0, valueSweep, accentPen);
 
         string valueText = string.IsNullOrWhiteSpace(Unit)
             ? string.Format(CultureInfo.InvariantCulture, "{0:0.#}", Value)

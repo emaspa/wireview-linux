@@ -1,8 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WireView2.ViewModels"
+             xmlns:svc="using:WireView2.Services"
+             xmlns:conv="using:WireView2.Converters"
              x:Class="WireView2.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
+    <UserControl.Resources>
+        <conv:ThemeModeNameConverter x:Key="ThemeModeName"/>
+    </UserControl.Resources>
     <ScrollViewer>
         <StackPanel Margin="16" Spacing="16">
             <TextBlock Text="Settings" FontSize="24" FontWeight="Bold"/>
@@ -12,7 +17,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Theme:" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding ThemeModes}"
-                                  SelectedItem="{Binding ThemePreference}" Width="150"/>
+                                  SelectedItem="{Binding ThemePreference}" Width="150">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="svc:AppSettings+ThemeMode">
+                                    <TextBlock Text="{Binding Converter={StaticResource ThemeModeName}}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Background:" VerticalAlignment="Center"/>

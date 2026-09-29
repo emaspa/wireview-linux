@@ -24,6 +24,9 @@ public sealed class SimpleBarSeries : INotifyPropertyChanged
 
     public string? Name { get; init; }
     public Color? Fill { get; init; }
+    /// <summary>Use the chart's <see cref="SimpleBarChart.LowColor"/> (the edition
+    /// palette's bar colour) instead of <see cref="Fill"/> as the gradient base.</summary>
+    public bool UsesChartLowColor { get; init; }
     public int ScalesYAt { get; init; }
     public ObservableCollection<double> Values { get; } = new();
 
@@ -80,8 +83,8 @@ public sealed class SimpleAxis : INotifyPropertyChanged
 /// <summary>Grouped vertical bar chart drawn directly with DrawingContext,
 /// ported from the upstream 1.0.7 Windows client (which fed it LiveCharts data
 /// types; this port uses its own <see cref="SimpleBarSeries"/>/<see cref="SimpleAxis"/>
-/// so the LiveCharts dependency could be dropped). Bars get a fill→red gradient
-/// scaled by each value's position in its Y range.</summary>
+/// so the LiveCharts dependency could be dropped). Bars get a fill→<see cref="HighColor"/>
+/// gradient scaled by each value's position in its Y range.</summary>
 public sealed class SimpleBarChart : Control
 {
     private const double MinBarHeightPx = 3.0;
@@ -104,6 +107,12 @@ public sealed class SimpleBarChart : Control
 
     public static readonly StyledProperty<bool> ShowBarValuesProperty =
         AvaloniaProperty.Register<SimpleBarChart, bool>(nameof(ShowBarValues));
+
+    public static readonly StyledProperty<Color> LowColorProperty =
+        AvaloniaProperty.Register<SimpleBarChart, Color>(nameof(LowColor), Colors.DeepSkyBlue);
+
+    public static readonly StyledProperty<Color> HighColorProperty =
+        AvaloniaProperty.Register<SimpleBarChart, Color>(nameof(HighColor), Colors.Red);
 
     private IReadOnlyList<SimpleBarSeries>? _subscribedSeries;
     private readonly Dictionary<INotifyCollectionChanged, NotifyCollectionChangedEventHandler> _collectionHandlers = new();
@@ -152,10 +161,26 @@ public sealed class SimpleBarChart : Control
         set => SetValue(ShowBarValuesProperty, value);
     }
 
+    /// <summary>Gradient base of series with <see cref="SimpleBarSeries.UsesChartLowColor"/>
+    /// (upstream 1.0.8 themable bar colour).</summary>
+    public Color LowColor
+    {
+        get => GetValue(LowColorProperty);
+        set => SetValue(LowColorProperty, value);
+    }
+
+    /// <summary>Colour a bar's tip blends towards as its value approaches the axis maximum.</summary>
+    public Color HighColor
+    {
+        get => GetValue(HighColorProperty);
+        set => SetValue(HighColorProperty, value);
+    }
+
     static SimpleBarChart()
     {
         AffectsRender<SimpleBarChart>(LabelProperty, SeriesProperty, XAxesProperty,
-            YAxesProperty, ForegroundProperty, ShowBarValuesProperty);
+            YAxesProperty, ForegroundProperty, ShowBarValuesProperty, LowColorProperty,
+            HighColorProperty);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -347,6 +372,8 @@ public sealed class SimpleBarChart : Control
             }
         }
 
+        Color lowColor = LowColor;
+        Color highColor = HighColor;
         double groupWidth = plot.Width / valueCount;
         double groupGap = Math.Max(1.0, groupWidth * 0.15);
         double barWidth = Math.Max(1.0, groupWidth - groupGap) / visible.Count;
@@ -372,8 +399,8 @@ public sealed class SimpleBarChart : Control
                 if (top > minTop) top = minTop;
 
                 var barRect = new Rect(new Point(left, top), new Point(right, plot.Bottom));
-                Color baseColor = s.Fill ?? Colors.DeepSkyBlue;
-                var tipColor = Lerp(baseColor, Colors.Red, ratio);
+                Color baseColor = s.UsesChartLowColor ? lowColor : s.Fill ?? lowColor;
+                var tipColor = Lerp(baseColor, highColor, ratio);
                 var brush = new LinearGradientBrush
                 {
                     StartPoint = new RelativePoint(0.0, 1.0, RelativeUnit.Relative),

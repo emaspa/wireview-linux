@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace WireView2.Services;
 
@@ -14,11 +15,15 @@ public class AppSettings
         White
     }
 
+    // Stored as a number: append new modes, never reorder (upstream 1.0.8 added
+    // the two Noctua modes the same way, so both apps read each other's files).
     public enum ThemeMode
     {
         Auto,
         Light,
-        Dark
+        Dark,
+        NoctuaLight,
+        NoctuaDark
     }
 
     public enum StartupScreen
@@ -151,14 +156,30 @@ public class AppSettings
             }
             try
             {
-                Current = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path))
+                Current = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), ReadOptions)
                           ?? new AppSettings();
             }
             catch
             {
                 Current = new AppSettings();
             }
+            Current.Normalize();
         }
+    }
+
+    // Reading also accepts enum names ("NoctuaDark"); files are still written with
+    // numbers so older app versions can read them.
+    private static readonly JsonSerializerOptions ReadOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    /// <summary>A value this version does not know (a newer app's theme, a
+    /// hand-edited file) falls back to the default instead of reaching the UI.</summary>
+    private void Normalize()
+    {
+        if (!Enum.IsDefined(ThemePreference)) ThemePreference = ThemeMode.Auto;
+        if (!Enum.IsDefined(BackgroundColorPreference)) BackgroundColorPreference = BackgroundColorMode.Auto;
     }
 
     public static void SaveCurrent()

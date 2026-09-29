@@ -577,6 +577,7 @@ public class App : Application
                         desktop.MainWindow = null;
                 };
                 desktop.MainWindow = window;
+                EditionThemeService.ApplyBackgroundColor(AppSettings.Current.BackgroundColorPreference);
                 window.Show();
                 MainWindowVisibilityChanged?.Invoke(this, !startMinimized);
                 if (!startMinimized) window.Activate();
@@ -602,12 +603,8 @@ public class App : Application
     {
         var current = Application.Current;
         if (current == null) return;
-        current.RequestedThemeVariant = mode switch
-        {
-            AppSettings.ThemeMode.Light => ThemeVariant.Light,
-            AppSettings.ThemeMode.Dark => ThemeVariant.Dark,
-            _ => ThemeVariant.Default,
-        };
+        current.RequestedThemeVariant = EditionThemeService.GetThemeVariant(mode);
+        EditionThemeService.ApplyCurrentThemePalette();
     }
 
     private static void StartActivationListener(IClassicDesktopStyleApplicationLifetime desktop)

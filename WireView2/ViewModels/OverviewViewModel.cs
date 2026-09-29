@@ -213,7 +213,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
 
         // Explicit fills keep the toggled series distinct: SimpleBarChart uses
         // the fill as its gradient base and for the per-bar value labels
-        // (voltage = orange, current = blue, power = red).
+        // (voltage = orange, current = blue, power = red). Current, the series
+        // upstream shows, takes the edition palette's bar colour instead
+        // (OverviewBarLowColor, the same blue in the default palette).
         _seriesVoltage = new SimpleBarSeries
         {
             Name = "Voltage (V)",
@@ -226,6 +228,7 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             Name = "Current (A)",
             ScalesYAt = 1,
             Fill = Color.FromRgb(33, 150, 243),
+            UsesChartLowColor = true,
             IsVisible = _showCurrent,
         };
         _seriesPower = new SimpleBarSeries

@@ -124,6 +124,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         _connector.DataUpdated += OnDataUpdated;
         _connector.Start();
         SetConnected(_connector.Device?.Connected ?? false);
+        ApplyEditionFromCurrentDevice();
         SetFault(0, 0);
     }
 
@@ -167,11 +168,25 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     {
         if (!connected)
             SetFault(0, 0);
+        // Also raised when the multi-device picker selects another device, so the
+        // palette follows the selected device.
+        ApplyEditionFromCurrentDevice();
         SetConnected(connected);
+    }
+
+    /// <summary>Noctua Edition device: Noctua palette while the theme is Auto
+    /// (upstream 1.0.8). No device or any other device: the default palette.</summary>
+    private void ApplyEditionFromCurrentDevice()
+    {
+        EditionThemeService.SetEdition(EditionThemeService.EditionOf(_connector.Device));
     }
 
     private void OnDataUpdated(object? sender, DeviceData data)
     {
+        // A LAN device learns its hardware revision from its first /sensors
+        // reply, after the connect event; SetEdition ignores an unchanged edition.
+        ApplyEditionFromCurrentDevice();
+
         // Debounce: the serial protocol has no framing/CRC, so a desynced
         // read can pulse garbage into the fault fields for a single poll.
         // Real faults persist until cleared (the device latches them in the

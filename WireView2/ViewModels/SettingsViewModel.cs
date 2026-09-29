@@ -73,8 +73,10 @@ public class SettingsViewModel : ViewModelBase
             if (Set(ref _themePreference, value))
             {
                 AppSettings.Current.ThemePreference = value;
-                AppSettings.SaveCurrent();
+                // Apply first: the theme sets the background opacity, which the
+                // save then persists and OnSettingsSaved pushes to the slider.
                 ApplyTheme(value);
+                AppSettings.SaveCurrent();
             }
         }
     }
@@ -395,18 +397,10 @@ public class SettingsViewModel : ViewModelBase
         var app = Application.Current;
         if (app == null) return;
 
-        app.RequestedThemeVariant = mode switch
-        {
-            AppSettings.ThemeMode.Auto  => ThemeVariant.Default,
-            AppSettings.ThemeMode.Light => ThemeVariant.Light,
-            AppSettings.ThemeMode.Dark  => ThemeVariant.Dark,
-            _                           => ThemeVariant.Default,
-        };
-
-        AppSettings.Current.BackgroundOpacity =
-            app.ActualThemeVariant == ThemeVariant.Light ? 1.0 : 0.5;
+        app.RequestedThemeVariant = EditionThemeService.GetThemeVariant(mode);
+        EditionThemeService.ApplyCurrentThemePalette();
+        AppSettings.Current.BackgroundOpacity = EditionThemeService.ActiveBackgroundOpacity;
         ApplyBackgroundOpacity(AppSettings.Current.BackgroundOpacity);
-        ApplyBackgroundColor(AppSettings.Current.BackgroundColorPreference);
     }
 
     private static double ClampOpacity(double value)
@@ -415,34 +409,9 @@ public class SettingsViewModel : ViewModelBase
         return Math.Clamp(value, 0.0, 1.0);
     }
 
-    private static void ApplyBackgroundOpacity(double opacity)
-    {
-        var app = Application.Current;
-        if (app != null
-            && app.TryFindResource("AppBackgroundBrush", app.ActualThemeVariant, out object? resource)
-            && resource is ImageBrush imageBrush)
-        {
-            imageBrush.Opacity = opacity;
-        }
-    }
+    private static void ApplyBackgroundOpacity(double opacity) =>
+        EditionThemeService.ApplyBackgroundOpacity(opacity);
 
-    private static void ApplyBackgroundColor(AppSettings.BackgroundColorMode mode)
-    {
-        var app = Application.Current;
-        if (app?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
-            return;
-
-        var mainWindow = desktop.MainWindow;
-        if (mainWindow == null) return;
-
-        mainWindow.Background = mode switch
-        {
-            AppSettings.BackgroundColorMode.Black => Brushes.Black,
-            AppSettings.BackgroundColorMode.White => Brushes.White,
-            AppSettings.BackgroundColorMode.Auto  => app.ActualThemeVariant == ThemeVariant.Light
-                                                         ? Brushes.White
-                                                         : Brushes.Black,
-            _ => Brushes.Black,
-        };
-    }
+    private static void ApplyBackgroundColor(AppSettings.BackgroundColorMode mode) =>
+        EditionThemeService.ApplyBackgroundColor(mode);
 }

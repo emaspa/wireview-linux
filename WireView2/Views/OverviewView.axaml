@@ -24,6 +24,9 @@
                             <CheckBox Content="Power" IsChecked="{Binding ShowPower}"/>
                         </StackPanel>
                         <controls:SimpleBarChart Grid.Row="2" MinHeight="220" ShowBarValues="True"
+                                                 LowColor="{DynamicResource OverviewBarLowColor}"
+                                                 HighColor="{DynamicResource OverviewBarHighColor}"
+                                                 Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                                  Series="{Binding BarSeries}"
                                                  XAxes="{Binding XAxes}" YAxes="{Binding YAxes}"/>
                     </Grid>
@@ -67,19 +70,25 @@
                     <TextBlock Text="Total Power" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                     <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
                                                Value="{Binding TotalPowerW}" Max="{Binding PowerMaxW}"
-                                               Unit="W" AccentBrush="MediumPurple"/>
+                                               Unit="W" AccentBrush="{DynamicResource OverviewGaugeTotalPowerBrush}"
+                                               TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
                     <TextBlock Text="Total Current" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                     <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
                                                Value="{Binding TotalCurrentA}" Max="{Binding CurrentMaxA}"
-                                               Unit="A" AccentBrush="DarkTurquoise"/>
+                                               Unit="A" AccentBrush="{DynamicResource OverviewGaugeTotalCurrentBrush}"
+                                               TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
                     <TextBlock Text="Avg Voltage" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                     <controls:SimpleGaugeChart Height="150" Width="170" ShowLabel="False"
                                                Value="{Binding AvgVoltageV}" Max="{Binding VoltageMaxV}"
-                                               Unit="V" AccentBrush="Gold"/>
+                                               Unit="V" AccentBrush="{DynamicResource OverviewGaugeAvgVoltageBrush}"
+                                               TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                 </StackPanel>
             </Grid>
 
@@ -92,7 +101,9 @@
                             <TextBlock Text="Onboard In" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempInGauge}" Max="{Binding TempMaxC}"
-                                                       Unit="°C" AccentBrush="DodgerBlue"
+                                                       Unit="°C" AccentBrush="{DynamicResource OverviewGaugeTempInBrush}"
+                                                       TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                                        IsVisible="{Binding TempInAvailable}"/>
                             <TextBlock Text="{Binding TempInText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
@@ -100,7 +111,9 @@
                             <TextBlock Text="Onboard Out" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempOutGauge}" Max="{Binding TempMaxC}"
-                                                       Unit="°C" AccentBrush="MediumSeaGreen"
+                                                       Unit="°C" AccentBrush="{DynamicResource OverviewGaugeTempOutBrush}"
+                                                       TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                                        IsVisible="{Binding TempOutAvailable}"/>
                             <TextBlock Text="{Binding TempOutText}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
@@ -108,7 +121,9 @@
                             <TextBlock Text="External 1" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempExt1Gauge}" Max="{Binding TempMaxC}"
-                                                       Unit="°C" AccentBrush="Orange"
+                                                       Unit="°C" AccentBrush="{DynamicResource OverviewGaugeExternal1Brush}"
+                                                       TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                                        IsVisible="{Binding TempExt1Available}"/>
                             <TextBlock Text="{Binding TempExt1Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>
@@ -116,7 +131,9 @@
                             <TextBlock Text="External 2" HorizontalAlignment="Center" FontWeight="SemiBold" Opacity="0.7"/>
                             <controls:SimpleGaugeChart Height="110" Width="140" ShowLabel="False"
                                                        Value="{Binding TempExt2Gauge}" Max="{Binding TempMaxC}"
-                                                       Unit="°C" AccentBrush="IndianRed"
+                                                       Unit="°C" AccentBrush="{DynamicResource OverviewGaugeExternal2Brush}"
+                                                       TrackBrush="{DynamicResource OverviewGaugeTrackBrush}"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                                        IsVisible="{Binding TempExt2Available}"/>
                             <TextBlock Text="{Binding TempExt2Text}" HorizontalAlignment="Center" FontWeight="Bold"/>
                         </StackPanel>

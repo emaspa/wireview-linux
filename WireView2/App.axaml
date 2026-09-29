@@ -12,6 +12,23 @@
     </Application.Styles>
     <Application.Resources>
         <ResourceDictionary>
+            <!-- Overview chart colours. EditionThemeService overrides them with
+                 top-level keys for the Noctua palettes and removes the overrides
+                 again for the default edition, which falls back to these. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary>
+                    <Color x:Key="OverviewBarLowColor">#FF2196F3</Color>
+                    <Color x:Key="OverviewBarHighColor">#FFFF0000</Color>
+                    <SolidColorBrush x:Key="OverviewGaugeTrackBrush" Color="#FFDCDCDC"/>
+                    <SolidColorBrush x:Key="OverviewGaugeTotalPowerBrush" Color="MediumPurple"/>
+                    <SolidColorBrush x:Key="OverviewGaugeTotalCurrentBrush" Color="DarkTurquoise"/>
+                    <SolidColorBrush x:Key="OverviewGaugeAvgVoltageBrush" Color="Gold"/>
+                    <SolidColorBrush x:Key="OverviewGaugeTempInBrush" Color="DodgerBlue"/>
+                    <SolidColorBrush x:Key="OverviewGaugeTempOutBrush" Color="MediumSeaGreen"/>
+                    <SolidColorBrush x:Key="OverviewGaugeExternal1Brush" Color="Orange"/>
+                    <SolidColorBrush x:Key="OverviewGaugeExternal2Brush" Color="IndianRed"/>
+                </ResourceDictionary>
+            </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="SystemAccentColor">#FFE02A25</Color>
