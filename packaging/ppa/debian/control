@@ -1,0 +1,20 @@
+Source: wireview-linux
+Section: misc
+Priority: optional
+Maintainer: Emanuele Sparvoli <sparvoli@gmail.com>
+Build-Depends: debhelper (>= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/emaspa/wireview-linux
+
+Package: wireview-linux
+Architecture: amd64
+Depends: ${misc:Depends}
+Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util
+Description: WireView Pro II Linux GUI application
+ Unofficial Linux GUI for the Thermal Grizzly WireView Pro II GPU power
+ monitor. Features real-time monitoring with live charts, device
+ configuration, data logging with CSV export, desktop notifications,
+ and optional software shutdown on fault.
+ .
+ Supports direct serial and hwmon + daemon connection modes.
+ Self-contained binary — no .NET runtime required.

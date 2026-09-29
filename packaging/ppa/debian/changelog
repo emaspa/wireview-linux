@@ -1,0 +1,40 @@
+wireview-linux (1.2.5.0~resolute1) resolute; urgency=medium
+
+  * wireviewd permission handling: commands the daemon refuses (status 3,
+    not root or in the 'wireview' group) are reported with how to join the
+    group instead of as success; a dead daemon socket is reconnected and
+    the command retried once.
+  * Theme preview no longer fails on every connect for users outside the
+    'wireview' group: the automatic preview is skipped quietly, Refresh
+    shows the group message.
+  * udev rule: 0660 root:dialout plus uaccess, matching wireview-hwmon.
+  * hwmon: read power1_cap, pwm1 (fan duty) and energy1_input; energyJ is
+    carried in the LAN /sensors schema.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Tue, 29 Sep 2026 03:10:34 +0000
+
+wireview-linux (1.2.0.0~resolute1) resolute; urgency=medium
+
+  * Port of the upstream WireView2 1.0.7 feature set:
+    - In-app firmware updates over USB DFU (dfu-util); shows bundled vs.
+      device firmware version and warns before downgrades.
+    - Display theme editor: custom background images, text/highlight colors,
+      display inversion, live on-screen preview, .wv2t theme files, factory
+      restore. Works over direct serial and through the wireview-hwmon
+      daemon (needs wireview-hwmon 1.5.0).
+    - Custom telemetry charts and per-power-cycle device log browsing.
+    - Overview: fault status/log table with per-fault clear, per-bar value
+      labels, restorable V/A/W bar toggles.
+    - Collapsible navigation pane; Avalonia 12 migration.
+  * Recommend dfu-util for firmware flashing.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Fri, 10 Jul 2026 11:00:00 +0000
+
+wireview-linux (1.1.0.1~resolute1) resolute; urgency=medium
+
+  * Fix phantom fault alerts: debounce fault bits across two consecutive
+    polls before alerting (and before software-shutdown-on-fault), discard
+    corrupt serial frames via padding/fan-duty sanity checks, and name the
+    actual faults in the notification instead of a generic message.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Thu, 11 Jun 2026 18:45:00 +0000

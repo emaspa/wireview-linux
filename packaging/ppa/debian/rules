@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+# Pre-built self-contained .NET binaries shipped in source tarball — no build step.
+override_dh_auto_build:
+
+override_dh_auto_test:
+
+# .NET single-file bundles must not be stripped or processed by dwz.
+override_dh_strip:
+
+override_dh_dwz:
+
+# Skip shlibdeps — all native libs are bundled (self-contained .NET) and
+# private to /usr/lib/wireview-linux/. Matches v1.0.4.0 .deb (no Depends field).
+override_dh_shlibdeps:

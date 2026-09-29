@@ -1,0 +1,4 @@
+linux-x64/* usr/lib/wireview-linux/
+wireview-linux.desktop usr/share/applications/
+icons/hicolor usr/share/icons/
+udev/99-wireview.rules lib/udev/rules.d/

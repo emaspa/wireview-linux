@@ -1,0 +1,24 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: wireview-linux
+Source: https://github.com/emaspa/wireview-linux
+
+Files: *
+Copyright: 2025-2026 Emanuele Sparvoli
+License: proprietary
+ This package contains code derived from the original WireView Pro II
+ Windows application (Thermal Grizzly) and from the WireViewDeviceLib
+ repository (https://github.com/ElmorLabs-ThermalGrizzly/WireViewDeviceLib).
+ .
+ Provided for personal use and interoperability with WireView Pro II
+ hardware on Linux. Original authors' rights reserved.
+
+Files: linux-x64/*
+Copyright: Various third-party authors
+License: bundled-runtime
+ Bundled .NET 8 runtime, Avalonia UI framework, and other third-party
+ libraries. Each component is distributed under its own license (MIT,
+ BSD, Apache-2.0, etc.) by its respective authors. See upstream sources
+ for individual licensing terms.
+ .
+ The Inter font is bundled inside WireView2.dll as an Avalonia resource
+ and is licensed under the SIL Open Font License, Version 1.1.
