@@ -42,6 +42,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.2.5.0" date="2026-09-29">
+      <description>
+        <p>wireviewd permission handling: commands the daemon refuses are reported with how to join the 'wireview' group, and a dead daemon socket is reconnected and retried once. The theme preview no longer fails on every connect for users outside the group. The udev rule is now 0660 root:dialout plus uaccess. hwmon mode reads power1_cap, pwm1 and energy1_input, and energy is carried in LAN publishing.</p>
+      </description>
+    </release>
     <release version="1.2.0.0" date="2026-07-10">
       <description>
         <p>Upstream 1.0.7 feature port: in-app firmware updates over USB DFU, display theme editor with live preview, custom telemetry charts, per-power-cycle log browsing, fault table, collapsible navigation.</p>

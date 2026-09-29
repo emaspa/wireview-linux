@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.2.0.0
+Version:        1.2.5.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -90,6 +90,18 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Tue Sep 29 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.2.5.0-1
+- wireviewd permission handling: commands the daemon refuses (status 3, not
+  root or in the 'wireview' group) are reported with how to join the group
+  instead of as success; a dead daemon socket is reconnected and the command
+  retried once
+- Theme preview no longer fails on every connect for users outside the
+  'wireview' group: the automatic preview is skipped quietly, Refresh shows
+  the group message
+- udev rule: 0660 root:dialout plus uaccess, matching wireview-hwmon
+- hwmon: read power1_cap, pwm1 (fan duty) and energy1_input; energyJ is
+  carried in the LAN /sensors schema
+
 * Fri Jul 10 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.2.0.0-1
 - Port of the upstream WireView2 1.0.7 feature set: bundled firmware info and
   in-app DFU firmware updates (dfu-util), display theme editor with custom
