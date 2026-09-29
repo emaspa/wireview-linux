@@ -87,6 +87,10 @@ namespace WireView2.Device
                 // Port couldn't be opened (e.g. already in use). Release the bus lock
                 // immediately so we never wedge other sensor apps, then report failure.
                 Debug.WriteLine($"[SharedSerialPort.Open] base.Open failed: {ex.Message}");
+                // hasMutex is only set once the port is open, so ReleaseMutexSafe()
+                // alone was a no-op here: a vanished port (unplug) left the mutex
+                // owned by the polling thread and every later Open() timed out.
+                hasMutex = true;
                 ReleaseMutexSafe();
                 return false;
             }

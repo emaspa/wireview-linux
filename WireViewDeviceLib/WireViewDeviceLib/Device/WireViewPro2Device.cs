@@ -19,6 +19,14 @@ namespace WireView2.Device
         private SerialPort? _port;
         private CancellationTokenSource? _cts;
         private Task? _worker;
+        private int _disconnecting; // 1 once a Disconnect has begun; reset on connect
+
+        /// <summary>Consecutive failed sensor reads after which a device whose port
+        /// node still exists is given up. Same rule as HwmonDevice ("more than 5"),
+        /// so both transports drop a silent device after the same number of missed
+        /// samples; one corrupt frame or a 2 s bus-mutex wait never trips it, and an
+        /// unplug is caught at once by the port-node check.</summary>
+        public const int MaxConsecutiveFailedReads = 6;
 
         public event EventHandler<DeviceData>? DataUpdated;
         public event EventHandler<bool>? ConnectionChanged;
@@ -119,19 +127,25 @@ namespace WireView2.Device
 
             if (Connected)
             {
+                Interlocked.Exchange(ref _disconnecting, 0);
                 _cts = new CancellationTokenSource();
                 _worker = Task.Run(() => PollLoop(_cts.Token));
             }
         }
 
-        public void Disconnect()
+        public void Disconnect() => DisconnectCore(fromWorker: false);
+
+        /// <param name="fromWorker">True when the poll loop gives up on the device:
+        /// it must not wait for its own task (that only stalled for the 1 s timeout).</param>
+        private void DisconnectCore(bool fromWorker)
         {
             if (!Connected) return;
+            if (Interlocked.CompareExchange(ref _disconnecting, 1, 0) != 0) return;
 
             try
             {
                 _cts?.Cancel();
-                _worker?.Wait(1000);
+                if (!fromWorker) _worker?.Wait(1000);
             }
             catch { }
 
@@ -319,24 +333,73 @@ namespace WireView2.Device
             SendData(new[] { (byte)UsbCmd.CMD_CLEAR_FAULTS, (byte)(keepStatusMask & 0xFF), (byte)((keepStatusMask >> 8) & 0xFF), (byte)(keepLogMask & 0xFF), (byte)((keepLogMask >> 8) & 0xFF) }, 0);
         }
 
+        /// <summary>Upstream 1.0.8 disconnects on the first failed read. Here a read
+        /// also fails for a corrupt frame (discarded, see ReadSensorValues) and when
+        /// the bus mutex stays busy for 2 s, so: disconnect at once when the port node
+        /// is gone (unplug), otherwise after <see cref="MaxConsecutiveFailedReads"/>
+        /// failed reads in a row. Long SPI transfers (log read, theme upload) hold the
+        /// port lock, so the poll waits for them instead of failing.</summary>
         private void PollLoop(CancellationToken ct)
         {
+            int failures = 0;
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    var sensors = ReadSensorValues();
+                    SensorStruct? sensors;
+                    bool corrupt;
+                    try
+                    {
+                        sensors = ReadSensorValues(out corrupt);
+                    }
+                    catch (Exception) when (!ct.IsCancellationRequested)
+                    {
+                        sensors = null; // e.g. IOException writing to a vanished port
+                        corrupt = false;
+                    }
+                    if (ct.IsCancellationRequested) break;
+
                     if (sensors != null)
                     {
+                        failures = 0;
                         var d = MapSensorStruct(sensors.Value);
                         DataUpdated?.Invoke(this, d);
+                    }
+                    else
+                    {
+                        failures++;
+                        // A corrupt frame proves the device answered; it only counts.
+                        if ((!corrupt && !PortNodeExists()) || failures >= MaxConsecutiveFailedReads)
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[WireViewPro2Device] {_portName}: lost after {failures} failed read(s)");
+                            DisconnectCore(fromWorker: true);
+                            return;
+                        }
                     }
                     Thread.Sleep(_pollIntervalMs);
                 }
             }
             catch (Exception)
             {
-                Disconnect();
+                DisconnectCore(fromWorker: true);
+            }
+        }
+
+        /// <summary>Whether the serial device node still exists: /dev/ttyACM* (or the
+        /// path given) on Linux, a registered COM port on Windows.</summary>
+        private bool PortNodeExists()
+        {
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                    return System.IO.Ports.SerialPort.GetPortNames()
+                        .Any(p => string.Equals(p, _portName, StringComparison.OrdinalIgnoreCase));
+                return File.Exists(_portName);
+            }
+            catch
+            {
+                return true; // cannot tell: leave it to the failure count
             }
         }
 
@@ -421,8 +484,9 @@ namespace WireView2.Device
             return BitConverter.ToString(buf).Replace("-", string.Empty);
         }
 
-        private SensorStruct? ReadSensorValues()
+        private SensorStruct? ReadSensorValues(out bool corrupt)
         {
+            corrupt = false;
             if (_port == null) return null;
 
             var size = Marshal.SizeOf<SensorStruct>();
@@ -440,7 +504,10 @@ namespace WireView2.Device
             // 16-bit fault masks).
             if (buf.Length > 11 &&
                 (buf[10] > 100 || buf[11] != 0 || buf[buf.Length - 5] != 0))
+            {
+                corrupt = true;
                 return null;
+            }
 
             return BytesToStruct<SensorStruct>(buf);
         }
