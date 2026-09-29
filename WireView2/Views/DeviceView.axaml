@@ -1,8 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:WireView2.ViewModels"
+             xmlns:conv="using:WireView2.Converters"
+             xmlns:dev="using:WireView2.Device"
              x:Class="WireView2.Views.DeviceView"
              x:DataType="vm:DeviceViewModel">
+    <UserControl.Resources>
+        <conv:AveragingNameConverter x:Key="AveragingName"/>
+    </UserControl.Resources>
     <ScrollViewer>
         <StackPanel Margin="16" Spacing="16">
             <TextBlock Text="Device" FontSize="24" FontWeight="Bold"/>
@@ -187,7 +192,13 @@
                             <TextBlock Grid.Row="7" Grid.Column="0" Text="Averaging:" VerticalAlignment="Center"/>
                             <ComboBox Grid.Row="7" Grid.Column="1" ItemsSource="{Binding AveragingOptions}"
                                       SelectedItem="{Binding Averaging}" Width="160"
-                                      IsEnabled="{Binding IsAveragingSupported}"/>
+                                      IsEnabled="{Binding IsAveragingSupported}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="dev:WireViewPro2Device+AVG">
+                                        <TextBlock Text="{Binding Converter={StaticResource AveragingName}}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </Grid>
                     </StackPanel>
 
