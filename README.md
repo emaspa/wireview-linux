@@ -255,11 +255,11 @@ The app has five pages accessible from the left sidebar:
 
 | Page | Description |
 |------|-------------|
-| **Overview** | Summary of total current, power, voltage, cable rating, and a fault status/log table with per-fault clear |
+| **Overview** | Summary of total current, power, voltage, cable rating, temperatures (sensors that are not connected are hidden), and a fault status/log table with per-fault clear |
 | **Monitoring** | Real-time charts for voltage, current, power, and temperature; custom series selection, colors, and Y scaling |
 | **Logging** | Read device logs per power cycle and export to CSV |
 | **Device** | Device info, full device configuration (fan, display, alarms, thresholds), display theme editor, and firmware updates |
-| **Settings** | App theme, startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
+| **Settings** | App theme (Auto, Light, Dark, Noctua Light, Noctua Dark; Auto follows the desktop's light/dark setting and switches to the Noctua colors while a WireView Pro II Noctua Edition is selected), startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
 
 ### Configuration profiles
 

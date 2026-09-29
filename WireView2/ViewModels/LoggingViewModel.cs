@@ -215,7 +215,7 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
             Add($"I{idx + 1}", $"I{idx + 1} (A)", "A", d => d.PinCurrent[idx], enabled: true);
         }
 
-        // Absent sensors log -3276.8 \u00b0C: NaN keeps them off the chart.
+        // Absent sensors log -3276.8 degrees: NaN keeps them off the chart.
         Add("Tin",  "Onboard In (\u00b0C)",  "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempInC),  enabled: true, tempSensor: 0);
         Add("Tout", "Onboard Out (\u00b0C)", "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.OnboardTempOutC), enabled: true, tempSensor: 1);
         Add("T1",   "External 1 (\u00b0C)",  "\u00b0C", d => TemperatureSensorPresence.ValueOrNaN(d.ExternalTemp1C), tempSensor: 2);
@@ -513,7 +513,7 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         void Apply()
         {
             // One snapshot per series: a single repaint instead of one per point.
-            Chart.GetSeries(it.Key)?.SetPoints(newPoints);
+            Chart.EnsureSeries(it.Key, it.Label).SetPoints(newPoints);
         }
         if (Dispatcher.UIThread.CheckAccess()) Apply();
         else Dispatcher.UIThread.Post(Apply, DispatcherPriority.Background);
