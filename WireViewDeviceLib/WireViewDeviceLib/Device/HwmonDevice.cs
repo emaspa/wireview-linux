@@ -583,7 +583,13 @@ namespace WireView2.Device
                 else
                     dd.FaultLog = ReadIntFile("intrusion1_alarm") != 0 ? (ushort)0xFFFF : (ushort)0;
 
-                if (TryReadIntFile("psu_cap", out int psuCap))
+                // PSU capability: power1_cap (microwatts) on current modules, else
+                // the deprecated psu_cap enum.
+                if (TryReadLongFile("power1_cap", out long psuCapUw))
+                {
+                    dd.PsuCapabilityW = (int)Math.Round(psuCapUw / 1_000_000.0);
+                }
+                else if (TryReadIntFile("psu_cap", out int psuCap))
                 {
                     dd.PsuCapabilityW = psuCap switch
                     {
@@ -594,6 +600,18 @@ namespace WireView2.Device
                         _ => 0
                     };
                 }
+
+                // Fan duty: pwm1 (0-255) on current modules, else the deprecated
+                // fan1_input (percent).
+                if (TryReadIntFile("pwm1", out int pwm))
+                    dd.FanDuty = (int)Math.Round(Math.Clamp(pwm, 0, 255) * 100 / 255.0, MidpointRounding.AwayFromZero);
+                else if (TryReadIntFile("fan1_input", out int fanPercent))
+                    dd.FanDuty = fanPercent;
+
+                // Energy in microjoules since the daemon started; absent on older
+                // modules and ENODATA until the device sends v3 frames.
+                if (TryReadLongFile("energy1_input", out long energyUj))
+                    dd.EnergyJ = energyUj / 1_000_000.0;
 
                 return dd;
             }
@@ -636,6 +654,19 @@ namespace WireView2.Device
             {
                 string text = File.ReadAllText(path).Trim();
                 return int.TryParse(text, out value);
+            }
+            catch { return false; }
+        }
+
+        private bool TryReadLongFile(string fileName, out long value)
+        {
+            value = 0;
+            string path = Path.Combine(_hwmonPath, fileName);
+            if (!File.Exists(path)) return false;
+            try
+            {
+                string text = File.ReadAllText(path).Trim();
+                return long.TryParse(text, out value);
             }
             catch { return false; }
         }

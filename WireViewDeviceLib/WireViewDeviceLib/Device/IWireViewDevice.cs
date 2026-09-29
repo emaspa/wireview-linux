@@ -40,5 +40,10 @@
         public ushort FaultLog { get; set; }
 
         public int FanDuty { get; set; }   // live fan duty %
+
+        /// <summary>Energy through the connector in joules, counted by wireviewd
+        /// since it started (hwmon energy1_input). Null when the source has no
+        /// energy counter.</summary>
+        public double? EnergyJ { get; set; }
     }
 }
