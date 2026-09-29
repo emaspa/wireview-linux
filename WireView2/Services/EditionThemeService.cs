@@ -39,7 +39,8 @@ internal static class EditionThemeService
 
     private sealed record ResourceOverrides(
         Color Accent, Color NavPaneBackground, Color NavPaneBorder, Color SideNavHover,
-        Color SideNavPressed, Color OverlayPanel, string BackgroundUri, ChartPalette Charts);
+        Color SideNavPressed, Color OverlayPanel, string BackgroundUri, ChartPalette Charts,
+        Color? CheckGlyph = null);
 
     private readonly record struct EditionPaletteSet(ThemePalette Light, ThemePalette Dark);
 
@@ -56,6 +57,16 @@ internal static class EditionThemeService
     {
         "NavPaneBackgroundBrush", "NavPaneBorderBrush", "SideNavHoverBrush",
         "SideNavPressedBrush", "OverlayPanelBrush",
+    };
+
+    // Fluent draws the check mark of a checked CheckBox in white on the accent
+    // colour. Noctua Dark's accent is near-white (#E9E9EE, upstream's value), which
+    // leaves the mark invisible; that palette sets a dark glyph instead.
+    private static readonly string[] CheckGlyphKeys =
+    {
+        "CheckBoxCheckGlyphForegroundChecked", "CheckBoxCheckGlyphForegroundCheckedPointerOver",
+        "CheckBoxCheckGlyphForegroundCheckedPressed", "CheckBoxCheckGlyphForegroundIndeterminate",
+        "CheckBoxCheckGlyphForegroundIndeterminatePointerOver", "CheckBoxCheckGlyphForegroundIndeterminatePressed",
     };
 
     private const string OverviewBarLowColorKey = "OverviewBarLowColor";
@@ -87,7 +98,8 @@ internal static class EditionThemeService
         Color.Parse("#22E9E9EE"), Color.Parse("#33E9E9EE"), Color.Parse("#22000000"),
         "avares://WireView2/Assets/Backgrounds/thermal_grizzly_wireview_pro_II_noctua_edition_software_background_dark_v2.jpg",
         new ChartPalette(Color.Parse("#FFE9E9EE"), Color.Parse("#FF1E0D09"),
-            Color.Parse("#FFE9E9EE"), Color.Parse("#FF1E0D09"))));
+            Color.Parse("#FFE9E9EE"), Color.Parse("#FF1E0D09")),
+        CheckGlyph: Color.Parse("#FF1E0D09")));
 
     private static WireViewDeviceTheme _activeEdition = WireViewDeviceTheme.WireViewPro2;
     private static bool _followsThemeVariant;
@@ -206,6 +218,7 @@ internal static class EditionThemeService
                 app.Resources.Remove(OverviewBarHighColorKey);
                 app.Resources.Remove(OverviewGaugeTrackBrushKey);
                 foreach (string key in OverviewGaugeAccentBrushKeys) app.Resources.Remove(key);
+                foreach (string key in CheckGlyphKeys) app.Resources.Remove(key);
             }
             else
             {
@@ -226,6 +239,15 @@ internal static class EditionThemeService
                 app.Resources[OverviewGaugeTrackBrushKey] = new SolidColorBrush(o.Charts.GaugeTrack);
                 var accent = new SolidColorBrush(o.Charts.GaugeAccent);
                 foreach (string key in OverviewGaugeAccentBrushKeys) app.Resources[key] = accent;
+                if (o.CheckGlyph is { } glyph)
+                {
+                    var glyphBrush = new SolidColorBrush(glyph);
+                    foreach (string key in CheckGlyphKeys) app.Resources[key] = glyphBrush;
+                }
+                else
+                {
+                    foreach (string key in CheckGlyphKeys) app.Resources.Remove(key);
+                }
             }
             _appliedOverrides = o;
         }
