@@ -3,8 +3,9 @@
 # One-time setup for the precompiled WireView Pro II tarball: installs the udev
 # rule that grants access to the device's USB serial port and reloads udev.
 #
-# The rule (MODE=0666 + uaccess) grants access without any group membership, so
-# no logout is needed.
+# The rule (0660 root:dialout + a uaccess ACL for the local seat user) grants
+# desktop access without any group membership, so no logout is needed. Over SSH,
+# join the dialout group instead.
 #
 set -e
 

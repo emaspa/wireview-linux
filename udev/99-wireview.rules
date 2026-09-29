@@ -1,6 +1,18 @@
 # WireView Pro II udev rules
-# Normal operation (STM32 CDC/ACM virtual serial port)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0666", TAG+="uaccess", SYMLINK+="wireview-pro2"
+#
+# Same access policy as wireview-hwmon's 99-wireview-hwmon.rules: the node is
+# 0660 root:dialout, and the user logged in at the local seat gets an ACL via
+# uaccess. systemd applies that tag on hotplug from 73-seat-late.rules, which
+# runs before this 99- file and so never sees it, so each rule also runs the
+# uaccess builtin itself. The tag is still needed: logind uses it to move the
+# ACL to the new active session on a user switch.
 
-# DFU bootloader mode
-SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666", TAG+="uaccess"
+ACTION=="remove", GOTO="wireview_end"
+
+# Normal operation (STM32 CDC/ACM virtual serial port)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess", SYMLINK+="wireview-pro2"
+
+# DFU bootloader mode (firmware update)
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess"
+
+LABEL="wireview_end"

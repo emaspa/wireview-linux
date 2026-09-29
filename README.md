@@ -169,10 +169,11 @@ From the next boot onward both come up automatically (the dkms package registers
 ### Serial access (package installs)
 
 The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
-the system reloads it automatically, so **serial access works out of the box** -
-the rule grants the device node access directly (`MODE="0666"` plus a logind
-`uaccess` ACL for the active session), with no group membership or logout
-required.
+the system reloads it automatically, so **serial access works out of the box**
+for the user logged in at the local seat - the rule makes the serial port and
+the DFU bootloader `0660 root:dialout` and gives the active session a logind
+`uaccess` ACL, so no group membership or logout is needed there. The rule
+matches the one shipped by `wireview-hwmon`.
 
 If access still fails in an unusual setup (for example over SSH, where the
 `uaccess` ACL doesn't apply), add yourself to the `dialout` group and log back
@@ -305,8 +306,8 @@ wireview-linux/
 ### Permission denied on /dev/ttyACM0
 
 ```bash
-# Temporary fix:
-sudo chmod 666 /dev/ttyACM0
+# Temporary fix (until the device is replugged):
+sudo setfacl -m "u:$USER:rw" /dev/ttyACM0
 
 # Permanent fix:
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/

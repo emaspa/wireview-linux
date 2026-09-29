@@ -52,8 +52,9 @@ sudo curl -fsSL \
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-The rule grants access via `MODE=0666` + a logind `uaccess` ACL, so no group
-membership is needed. The Flatpak requests `--device=all` because Flatpak has no
+The rule makes the device node `0660 root:dialout` and gives the user at the
+local seat a logind `uaccess` ACL, so no group membership is needed for a
+desktop session (over SSH, join the `dialout` group instead). The Flatpak requests `--device=all` because Flatpak has no
 finer-grained tty filter.
 
 ## Notes
