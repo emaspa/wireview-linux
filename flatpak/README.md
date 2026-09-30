@@ -63,6 +63,10 @@ finer-grained tty filter.
   needs the `wireview-hwmon` kernel module on the host, which is out of scope on
   immutable distros.
 - The version and `sha256` in the manifest must be bumped to match each new
-  release tarball.
+  release tarball. To attach the bundle to the release when it is created,
+  build it from a copy of the manifest whose tarball source is
+  `path: <local tarball>` with the same `sha256`, then commit the manifest
+  with the release URL once the release is live. Both give the same app
+  files.
 - Publishing to **Flathub** additionally requires submitting this manifest to
   the flathub repo; expect review of the `--device=all` permission.

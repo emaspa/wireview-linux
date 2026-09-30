@@ -49,6 +49,10 @@ packages share their metadata:
 packaging/build-deb.sh <version> dist/     # needs dotnet and docker
 ```
 
+Run it, like the other release builds, from a clean checkout of the release
+tag: the app shows `git describe` as its version, so a build from any other
+state shows a commit suffix instead of the plain version.
+
 It publishes the app like `rpm/build-srpm.sh` (the loose self-contained
 linux-x64 publish with the single-file `WireView2` overlaid as the launcher, no
 .pdb), assembles the same tree as the PPA source package (desktop entry, icons
