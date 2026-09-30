@@ -17,4 +17,4 @@ Description: WireView Pro II Linux GUI application
  and optional software shutdown on fault.
  .
  Supports direct serial and hwmon + daemon connection modes.
- Self-contained binary — no .NET runtime required.
+ Self-contained binary, no .NET runtime required.

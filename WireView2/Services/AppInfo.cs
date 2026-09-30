@@ -16,7 +16,10 @@ public static class AppInfo
         OperatingSystem.IsMacOS()   ? "macOS"   :
                                       "Linux";
 
-    /// <summary>Numeric assembly version, e.g. "1.1.0.0".</summary>
+    /// <summary>The build's displayed version: the informational version without its
+    /// "+build..." suffix. A release build says "1.3.0.0 beta"; a build from any other
+    /// git state carries its `git describe`, e.g. "1.3.0.0-2-g1a2b3c4-dirty beta"
+    /// (set in WireView2.csproj). Falls back to the numeric assembly version.</summary>
     public static string Version
     {
         get

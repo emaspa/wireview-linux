@@ -14,8 +14,9 @@
       raise desktop notifications on fault.
     </p>
     <p>
-      The app talks to the device directly over USB serial — no .NET runtime is
+      The app talks to the device directly over USB serial. No .NET runtime is
       required, and the optional wireview-hwmon kernel module is not needed.
+      The WireView Pro II Noctua Edition is supported as well.
     </p>
     <p>
       This is an unofficial, community-made port. It is not affiliated with,
@@ -42,6 +43,12 @@
   </screenshots>
 
   <releases>
+    <release version="1.3.0.0" date="2026-09-30">
+      <description>
+        <p>Upstream 1.0.8 port: WireView Pro II Noctua Edition support, Noctua Light and Noctua Dark themes with their backgrounds, bundled firmware v05 build 20260902_0741, averaging up to 5.7 s, a firmware update check by build date with product and downgrade gates, lower idle CPU use, detection of an unplugged device, and temperature sensors that are not connected are hidden.</p>
+        <p>Fixes: a chart legend crash, reconnecting a replugged device, flashing and restoring stay on the confirmed device, config writes change only the edited fields, gauge text in the light theme, duplicate rows in the live CSV export. The settings file is now readable by its owner only and written atomically.</p>
+      </description>
+    </release>
     <release version="1.2.5.0" date="2026-09-29">
       <description>
         <p>wireviewd permission handling: commands the daemon refuses are reported with how to join the 'wireview' group, and a dead daemon socket is reconnected and retried once. The theme preview no longer fails on every connect for users outside the group. The udev rule is now 0660 root:dialout plus uaccess. hwmon mode reads power1_cap, pwm1 and energy1_input, and energy is carried in LAN publishing.</p>

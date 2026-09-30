@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.2.5.0
+Version:        1.3.0.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -90,6 +90,20 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Wed Sep 30 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.0.0-1
+- Port of the upstream WireView2 1.0.8 changes: WireView Pro II Noctua
+  Edition support, Noctua Light/Dark themes and backgrounds, bundled
+  firmware v05 build 20260902_0741, averaging up to 5.7 s, firmware update
+  check by build date with product and downgrade gates, lower idle CPU use,
+  direct-serial disconnect detection, absent temperature sensors hidden
+- Fixes: hover legend crash, replug after unplug on direct serial, flash and
+  restore stay on the confirmed device, config writes change only edited
+  fields, light-theme gauge text, duplicate rows in the live CSV export
+- settings.json is written atomically and readable by its owner only
+- udev rule: ModemManager ignores the device
+- Backgrounds downscaled to 3840 px; the app binary is smaller
+- Needs wireview-hwmon 1.7.0 or later for the hwmon + daemon mode
+
 * Tue Sep 29 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.2.5.0-1
 - wireviewd permission handling: commands the daemon refuses (status 3, not
   root or in the 'wireview' group) are reported with how to join the group

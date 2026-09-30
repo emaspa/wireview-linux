@@ -12,10 +12,12 @@
     <ApplicationIcon>Assets\Icons\bear.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <AssemblyTitle>WireView Pro II</AssemblyTitle>
-    <Version>1.2.5.0</Version>
-    <!-- Displayed version (AppInfo reads this, stripping the +build suffix). Numeric
-         assembly/file version stays 1.2.5.0; this carries the "beta" label. -->
-    <InformationalVersion>1.2.5.0 beta</InformationalVersion>
+    <Version>1.3.0.0</Version>
+    <!-- Displayed version (AppInfo reads this, stripping the +build suffix). The
+         numeric assembly/file version stays $(Version); this carries the "beta"
+         label. In a git checkout SetGitInformationalVersion replaces it with the
+         exact build (see below); a build outside git (source tarball) keeps it. -->
+    <InformationalVersion>$(Version) beta</InformationalVersion>
     <SourceRevisionId>build$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</SourceRevisionId>
   </PropertyGroup>
 
@@ -46,6 +48,32 @@
     <None Include="Firmware\ext_flash.bin" CopyToOutputDirectory="PreserveNewest"
           TargetPath="ext_flash.bin" />
   </ItemGroup>
+
+  <!-- Build identity: in a git checkout of this repo the displayed version is
+       the output of the git describe command below (tags, always, dirty)
+       without the leading "v". The release build at tag v1.3.0.0 shows
+       "1.3.0.0 beta"; anything else shows what it was built from, e.g.
+       "1.3.0.0-2-g1a2b3c4-dirty beta". Without git, or outside a checkout, the
+       plain "$(Version) beta" stays. The .git check keeps a source tarball
+       unpacked inside another repository (an AUR build directory) from picking
+       up that repository's commits. -->
+  <Target Name="SetGitInformationalVersion"
+          BeforeTargets="GetAssemblyVersion;AddSourceRevisionToInformationalVersion"
+          Condition="Exists('$(MSBuildProjectDirectory)/../.git')">
+    <Exec Command="git describe --tags --always --dirty" WorkingDirectory="$(MSBuildProjectDirectory)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true"
+          StandardOutputImportance="low" StandardErrorImportance="low" EchoOff="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_WvGitDescribe" />
+      <Output TaskParameter="ExitCode" PropertyName="_WvGitDescribeExit" />
+    </Exec>
+    <PropertyGroup Condition="'$(_WvGitDescribeExit)' == '0' and '$(_WvGitDescribe.Trim())' != ''">
+      <_WvGitDescribe>$(_WvGitDescribe.Trim())</_WvGitDescribe>
+      <_WvGitDescribe Condition="$(_WvGitDescribe.StartsWith('v'))">$(_WvGitDescribe.Substring(1))</_WvGitDescribe>
+      <!-- No version tag reachable (shallow or tagless clone): only a hash. -->
+      <_WvGitDescribe Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(_WvGitDescribe)', '^[0-9]+\.'))">$(Version)-g$(_WvGitDescribe)</_WvGitDescribe>
+      <InformationalVersion>$(_WvGitDescribe) beta</InformationalVersion>
+    </PropertyGroup>
+  </Target>
 
   <!-- Windows ships the executable as wireview2-plus.exe. The assembly stays
        "WireView2" so Avalonia's avares:// resource URIs keep resolving; only the

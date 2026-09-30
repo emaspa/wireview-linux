@@ -1,7 +1,7 @@
-WireView Pro II — Linux (Unofficial)
+WireView Pro II - Linux (Unofficial)
 ====================================
 
-Self-contained build — no .NET runtime required.
+Self-contained build, no .NET runtime required.
 
 Quick start
 -----------
