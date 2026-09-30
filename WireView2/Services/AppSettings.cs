@@ -154,6 +154,7 @@ public class AppSettings
                 Current = new AppSettings();
                 return;
             }
+            RestrictToOwner(path);
             try
             {
                 Current = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), ReadOptions)
@@ -191,9 +192,56 @@ public class AppSettings
             {
                 WriteIndented = true
             });
-            File.WriteAllText(path, json);
+            WriteOwnerOnly(path, json);
         }
         Saved?.Invoke(Current, EventArgs.Empty);
+    }
+
+    // The file holds the LAN write secret, so only its owner may read it. It is
+    // written to a temporary file created with that mode and then renamed over the
+    // old one, which also means a crash mid-write cannot leave a truncated file.
+    private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+    private static void WriteOwnerOnly(string path, string text)
+    {
+        string tmp = path + ".tmp";
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+        };
+        if (!OperatingSystem.IsWindows())
+            options.UnixCreateMode = OwnerOnly;
+        try
+        {
+            File.Delete(tmp);
+            using (var stream = new FileStream(tmp, options))
+            using (var writer = new StreamWriter(stream))
+                writer.Write(text);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
+    }
+
+    /// <summary>Tightens a file written by an older version, which was created
+    /// readable by everyone.</summary>
+    private static void RestrictToOwner(string path)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        try
+        {
+            if ((File.GetUnixFileMode(path) & ~OwnerOnly) != 0)
+                File.SetUnixFileMode(path, OwnerOnly);
+        }
+        catch
+        {
+            // Not ours to change (read-only mount, foreign owner): keep going.
+        }
     }
 
     public static AppSettings Load()
