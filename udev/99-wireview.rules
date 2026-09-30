@@ -12,6 +12,12 @@ ACTION=="remove", GOTO="wireview_end"
 # Normal operation (STM32 CDC/ACM virtual serial port)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess", SYMLINK+="wireview-pro2"
 
+# Keep ModemManager away: it probes every new CDC-ACM port with AT and QCDM
+# commands for about half a minute, holding the port and sending the device
+# bytes it does not expect.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="5740", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", ENV{ID_MM_PORT_IGNORE}="1"
+
 # DFU bootloader mode (firmware update)
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess"
 
