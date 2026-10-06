@@ -49,8 +49,8 @@ accessible:
 sudo curl -fsSL \
   https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \
   -o /etc/udev/rules.d/99-wireview.rules
-# Arch-based distros only: there is no dialout group, the serial group is uucp
-# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
+# Arch-based distros have no dialout group, their serial group is uucp
+getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
