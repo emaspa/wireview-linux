@@ -176,11 +176,12 @@ the system reloads it automatically, so **serial access works out of the box**
 for the user logged in at the local seat - the rule makes the serial port and
 the DFU bootloader `0660 root:dialout` and gives the active session a logind
 `uaccess` ACL, so no group membership or logout is needed there. The rule
-matches the one shipped by `wireview-hwmon`.
+matches the one shipped by `wireview-hwmon`. Arch-based distros have no
+`dialout` group, so the AUR package uses their serial group `uucp` instead.
 
 If access still fails in an unusual setup (for example over SSH, where the
-`uaccess` ACL doesn't apply), add yourself to the `dialout` group and log back
-in:
+`uaccess` ACL doesn't apply), add yourself to the `dialout` group (`uucp` on
+Arch-based distros) and log back in:
 
 ```bash
 sudo usermod -aG dialout "$USER"
@@ -215,9 +216,10 @@ cd wireview-linux
 
 Run it as your own user; it uses `sudo` where it needs root. The install script will:
 1. Install the udev rule (serial port and DFU bootloader `0660 root:dialout`, plus a
-   `uaccess` ACL for the user logged in at the local seat)
-2. Only when there is no local seat session (SSH, for example): add your user to the
-   `dialout` group, which needs a new login to take effect
+   `uaccess` ACL for the user logged in at the local seat). On Arch-based distros,
+   which have no `dialout` group, it uses `uucp` instead
+2. Only when there is no local seat session (SSH, for example): add your user to that
+   group, which needs a new login to take effect
 3. Build the application
 
 Or manually step by step:
@@ -228,11 +230,13 @@ cd wireview-linux
 
 # Install udev rules (grants access to the WireView USB device)
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/
+# Arch-based distros only: there is no dialout group, the serial group is uucp
+# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
 # Only over SSH or another session without a local seat (no uaccess ACL there):
-# join dialout, then log in again
+# join dialout (uucp on Arch-based distros), then log in again
 # sudo usermod -aG dialout $USER
 
 # Build and run
@@ -304,7 +308,8 @@ wireview-linux/
 1. Check that the device is connected: `lsusb | grep 0483`
 2. Check that `/dev/ttyACM0` exists: `ls -la /dev/ttyACM*`
 3. Check permissions: in a local desktop session `getfacl /dev/ttyACM0` should list your
-   user (the `uaccess` ACL); over SSH, `groups` should include `dialout`
+   user (the `uaccess` ACL); over SSH, `groups` should include `dialout` (`uucp` on
+   Arch-based distros)
 4. If using a VM, ensure USB passthrough is configured for the VID/PID pair
 
 ### Permission denied on /dev/ttyACM0
@@ -315,9 +320,12 @@ sudo setfacl -m "u:$USER:rw" /dev/ttyACM0
 
 # Permanent fix:
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/
+# Arch-based distros only: there is no dialout group, the serial group is uucp
+# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
-# Over SSH or without a local seat session, also join dialout and log in again:
+# Over SSH or without a local seat session, also join dialout (uucp on
+# Arch-based distros) and log in again:
 sudo usermod -aG dialout $USER
 ```
 

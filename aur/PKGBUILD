@@ -1,7 +1,7 @@
 # Maintainer: Emanuele Sparvoli <sparvoli@gmail.com>
 pkgname=wireview-linux-bin
 pkgver=1.3.0.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Unofficial Linux GUI for the Thermal Grizzly WireView Pro II (prebuilt binary)"
 arch=('x86_64')
 url="https://github.com/emaspa/wireview-linux"
@@ -26,8 +26,12 @@ package() {
   install -d "$pkgdir/usr/bin"
   ln -s /usr/lib/wireview-linux/WireView2 "$pkgdir/usr/bin/wireview-linux"
 
-  # udev rule (USB serial access)
+  # udev rule (USB serial access). Arch has no dialout group, its serial group
+  # is uucp, and udev drops a rule line whose GROUP it cannot resolve. The grep
+  # fails the build if a future rule stops matching the substitution.
   install -Dm644 "$src/99-wireview.rules" "$pkgdir/usr/lib/udev/rules.d/99-wireview.rules"
+  sed -i 's/GROUP="dialout"/GROUP="uucp"/g' "$pkgdir/usr/lib/udev/rules.d/99-wireview.rules"
+  grep -q 'GROUP="uucp"' "$pkgdir/usr/lib/udev/rules.d/99-wireview.rules"
 
   # Desktop entry + icon
   install -Dm644 "$srcdir/wireview-linux.desktop" "$pkgdir/usr/share/applications/wireview-linux.desktop"

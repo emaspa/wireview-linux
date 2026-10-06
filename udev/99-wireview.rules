@@ -6,6 +6,11 @@
 # runs before this 99- file and so never sees it, so each rule also runs the
 # uaccess builtin itself. The tag is still needed: logind uses it to move the
 # ACL to the new active session on a user switch.
+#
+# Arch-based distros have no dialout group (their serial group is uucp), and
+# udev drops a whole rule line whose GROUP it cannot resolve. The AUR package
+# and the install scripts replace dialout with uucp there. Do the same in the
+# two GROUP keys below when installing this file by hand.
 
 ACTION=="remove", GOTO="wireview_end"
 

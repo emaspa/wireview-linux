@@ -49,12 +49,14 @@ accessible:
 sudo curl -fsSL \
   https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \
   -o /etc/udev/rules.d/99-wireview.rules
+# Arch-based distros only: there is no dialout group, the serial group is uucp
+# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 The rule makes the device node `0660 root:dialout` and gives the user at the
 local seat a logind `uaccess` ACL, so no group membership is needed for a
-desktop session (over SSH, join the `dialout` group instead). The Flatpak requests `--device=all` because Flatpak has no
+desktop session (over SSH, join the `dialout` group instead, `uucp` on Arch-based distros). The Flatpak requests `--device=all` because Flatpak has no
 finer-grained tty filter.
 
 ## Notes

@@ -17,8 +17,9 @@ Notes
 -----
 - install.sh uses sudo for the privileged step; run it as your normal user.
 - The udev rule grants serial access to the user logged in at the local seat
-  (no group membership or logout needed). Over SSH, join the dialout group:
-  sudo usermod -aG dialout $USER, then log in again.
+  (no group membership or logout needed). Over SSH, join the dialout group
+  (uucp on Arch-based distros): sudo usermod -aG dialout $USER, then log in
+  again.
 - The hwmon kernel module (wireview-hwmon) is optional. Without it the app talks
   to the device directly over USB serial and everything works.
 

@@ -1,7 +1,7 @@
 pkgbase = wireview-linux-bin
 	pkgdesc = Unofficial Linux GUI for the Thermal Grizzly WireView Pro II (prebuilt binary)
 	pkgver = 1.3.0.0
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/emaspa/wireview-linux
 	arch = x86_64
 	license = custom
