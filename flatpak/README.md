@@ -56,8 +56,18 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 The rule makes the device node `0660 root:dialout` and gives the user at the
 local seat a logind `uaccess` ACL, so no group membership is needed for a
-desktop session (over SSH, join the `dialout` group instead, `uucp` on Arch-based distros). The Flatpak requests `--device=all` because Flatpak has no
-finer-grained tty filter.
+desktop session. Over SSH, join the serial group instead and log in again:
+
+```bash
+# Debian, Ubuntu, Fedora and most other distros
+sudo usermod -aG dialout "$USER"
+
+# Arch-based distros
+sudo usermod -aG uucp "$USER"
+```
+
+The Flatpak requests `--device=all` because Flatpak has no finer-grained tty
+filter.
 
 ## Notes
 

@@ -180,11 +180,15 @@ matches the one shipped by `wireview-hwmon`. Arch-based distros have no
 `dialout` group, so the AUR package uses their serial group `uucp` instead.
 
 If access still fails in an unusual setup (for example over SSH, where the
-`uaccess` ACL doesn't apply), add yourself to the `dialout` group (`uucp` on
-Arch-based distros) and log back in:
+`uaccess` ACL doesn't apply), add yourself to the serial group and log back
+in:
 
 ```bash
+# Debian, Ubuntu, Fedora and most other distros
 sudo usermod -aG dialout "$USER"
+
+# Arch-based distros
+sudo usermod -aG uucp "$USER"
 ```
 
 ### Option 1: Pre-built binary (no .NET required)
@@ -236,8 +240,9 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger
 
 # Only over SSH or another session without a local seat (no uaccess ACL there):
-# join dialout (uucp on Arch-based distros), then log in again
+# join the serial group, then log in again
 # sudo usermod -aG dialout $USER
+# Arch-based distros: sudo usermod -aG uucp $USER
 
 # Build and run
 dotnet build -c Release
@@ -324,9 +329,10 @@ sudo cp udev/99-wireview.rules /etc/udev/rules.d/
 getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
-# Over SSH or without a local seat session, also join dialout (uucp on
-# Arch-based distros) and log in again:
+# Over SSH or without a local seat session, also join the serial group and
+# log in again:
 sudo usermod -aG dialout $USER
+# Arch-based distros: sudo usermod -aG uucp $USER
 ```
 
 ## Disclaimer
