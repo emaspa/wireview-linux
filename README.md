@@ -230,8 +230,8 @@ cd wireview-linux
 
 # Install udev rules (grants access to the WireView USB device)
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/
-# Arch-based distros only: there is no dialout group, the serial group is uucp
-# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
+# Arch-based distros have no dialout group, their serial group is uucp
+getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 
@@ -320,8 +320,8 @@ sudo setfacl -m "u:$USER:rw" /dev/ttyACM0
 
 # Permanent fix:
 sudo cp udev/99-wireview.rules /etc/udev/rules.d/
-# Arch-based distros only: there is no dialout group, the serial group is uucp
-# sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
+# Arch-based distros have no dialout group, their serial group is uucp
+getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 # Over SSH or without a local seat session, also join dialout (uucp on
