@@ -337,7 +337,7 @@ sudo usermod -aG dialout $USER
 
 ## Thanks
 
-Thanks to Thermal Grizzly for providing a WireView Pro II Noctua Edition unit for development.
+Thanks to [Thermal Grizzly](https://www.thermal-grizzly.com/) for providing a WireView Pro II Noctua Edition unit for development.
 
 ## Disclaimer
 
