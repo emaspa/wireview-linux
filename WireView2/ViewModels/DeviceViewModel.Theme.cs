@@ -11,7 +11,6 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using MsgBox;
@@ -75,13 +74,9 @@ public sealed partial class DeviceViewModel
     private IImage? _pendingFanPreviewFrame2Inverted;
     private CancellationTokenSource? _pendingBackgroundCts;
     private long _pendingBackgroundGeneration;
-    // Fan frames staged from a theme backup: uploaded as they are instead of being
-    // regenerated from the background and the highlight tint.
+    // Fan frames staged from a theme file that carries them: uploaded as they are
+    // instead of being regenerated from the background and the highlight tint.
     private (byte[] Frame1, byte[] Frame2)? _pendingFanRgb565;
-
-    // Test hooks for the Noctua restore dialogs (null: the real dialog / picker).
-    internal Func<string, string, string[], int, int, Task<int>>? ChoicePromptOverride { get; set; }
-    internal Func<string, Task<string?>>? BackupPathPromptOverride { get; set; }
 
     private BackgroundImportFitMode _backgroundImportFit = BackgroundImportFitMode.UniformToFill;
     private double _backgroundImportScale = 1.0;
@@ -1104,58 +1099,17 @@ public sealed partial class DeviceViewModel
 
             var background = UiBackgroundBitmap;
             var fanSlot = DefaultFanForBackground(background);
-            // The confirmation (and the backup) are about this device; the picker
+            // The confirmation is about this device; the picker
             // may switch the selection while a dialog is open.
             var device = _device;
 
-            if (IsNoctuaEdition)
-            {
-                // ext_flash.bin holds Thermal Grizzly artwork only; on a Noctua
-                // Edition it replaces whatever the slot holds with no way back
-                // unless the user keeps a copy. Backing up is the default choice.
-                int choice = await PromptChoiceAsync(
-                    "This restores the standard Thermal Grizzly artwork, not the Noctua Edition artwork. " +
-                    $"The {SlotLabel(background)} background slot and its fan frames on this {WireViewEditions.Pro2NoctuaName} " +
-                    "are overwritten, and this app has no copy of the Noctua artwork to put back.\n\n" +
-                    "Save a backup of the device's current theme assets first? The backup is a theme file " +
-                    "(.wv2t) with the background and both fan frames as read from the device; Load theme " +
-                    "and Apply put them back.",
-                    "Restore Thermal Grizzly artwork",
-                    new[] { "Back up, then restore", "Restore without backup", "Cancel" },
-                    defaultIndex: 0, cancelIndex: 2);
-                if (choice == 2)
-                {
-                    ConfigStatus = "Restore cancelled.";
-                    return;
-                }
-                if (choice == 0)
-                {
-                    string? backupPath = await PromptBackupPathAsync();
-                    if (backupPath == null)
-                    {
-                        ConfigStatus = "Restore cancelled: no backup file chosen. Nothing was written.";
-                        return;
-                    }
-                    ConfigStatus = "Backing up the device's theme assets…";
-                    try
-                    {
-                        await BackupThemeAssetsAsync(backupPath, background, fanSlot);
-                    }
-                    catch (Exception backupEx)
-                    {
-                        ConfigStatus = "Backup failed, nothing was restored: " + backupEx.Message;
-                        return;
-                    }
-                }
-            }
-            else
-            {
-                var confirm = await MessageBox.Show(null,
-                    "This will overwrite the selected background slot and its matching fan frames with factory defaults. Continue?",
-                    "Restore theme assets", MessageBox.MessageBoxButtons.YesNo);
-                if (confirm != MessageBox.MessageBoxResult.Yes)
-                    return;
-            }
+            // ext_flash.bin is also the Noctua Edition's factory artwork: a unit's
+            // SPI flash reads back byte for byte the same; its look is a color preset.
+            var confirm = await MessageBox.Show(null,
+                "This will overwrite the selected background slot and its matching fan frames with factory defaults. Continue?",
+                "Restore theme assets", MessageBox.MessageBoxButtons.YesNo);
+            if (confirm != MessageBox.MessageBoxResult.Yes)
+                return;
 
             if (!ReferenceEquals(device, _device) || !device.Connected)
             {
@@ -1242,79 +1196,5 @@ public sealed partial class DeviceViewModel
             SetThemeUploadBusy(false);
             ReportThemeUpload(1.0);
         }
-    }
-
-    // ======================== Theme asset backup ========================
-
-    private static string SlotLabel(WireViewPro2Device.THEME_BACKGROUND slot) => slot switch
-    {
-        WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyOrange => "Orange",
-        WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark => "Dark",
-        _ => slot.ToString(),
-    };
-
-    private Task<int> PromptChoiceAsync(string text, string title, string[] buttons, int defaultIndex, int cancelIndex) =>
-        ChoicePromptOverride?.Invoke(text, title, buttons, defaultIndex, cancelIndex)
-        ?? MessageBox.ShowChoice(null, text, title, buttons, defaultIndex, cancelIndex);
-
-    private async Task<string?> PromptBackupPathAsync()
-    {
-        string suggested = $"wireview-noctua-theme-backup-{DateTime.Now:yyyyMMdd-HHmm}.wv2t";
-        if (BackupPathPromptOverride != null)
-            return await BackupPathPromptOverride(suggested);
-        return await Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            if (Application.Current?.ApplicationLifetime
-                    is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
-                return null;
-            var file = await window.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
-            {
-                Title = "Save a backup of the device's theme assets",
-                SuggestedFileName = suggested,
-                DefaultExtension = "wv2t",
-                FileTypeChoices = new[]
-                {
-                    new Avalonia.Platform.Storage.FilePickerFileType("WireView2 Theme") { Patterns = new[] { "*.wv2t" } },
-                },
-            });
-            return file?.TryGetLocalPath();
-        });
-    }
-
-    /// <summary>Reads the background slot and both frames of its fan back over SPI
-    /// and saves them, with the stored colors, as a .wv2t theme file; then reads the
-    /// file back and checks it. Throws when anything fails, so no restore runs
-    /// without a good backup.</summary>
-    internal async Task BackupThemeAssetsAsync(string path, WireViewPro2Device.THEME_BACKGROUND background,
-        WireViewPro2Device.THEME_FAN fan)
-    {
-        _themePreviewCts?.Cancel();
-        var (bg, f1, f2) = await RunOnSerialDeviceAsync(async dev =>
-        {
-            byte[] b = await dev.ReadThemeBackgroundRgb565Async(background).ConfigureAwait(false)
-                       ?? throw new InvalidOperationException("No background slot to back up.");
-            var (a1, a2) = await dev.ReadThemeFanRgb565Async(fan).ConfigureAwait(false);
-            return (b, a1, a2);
-        }).ConfigureAwait(false);
-
-        // Colors as the device stores them, not unsaved editor edits.
-        var raw = DeviceReadConfigRaw();
-        var ui = raw is { } r ? WireViewPro2Device.DeserializeConfig(r.Version, r.Data).Ui : new WireViewPro2Device.UiConfigStructV2
-        {
-            PrimaryColor = ColorToArgb(UiPrimaryColor),
-            SecondaryColor = ColorToArgb(UiSecondaryColor),
-            HighlightColor = ColorToArgb(UiHighlightColor),
-            BackgroundColor = ColorToArgb(UiBackgroundColor),
-        };
-        await ThemeFile.SaveBackupAsync(path, ui, background, fan, bg, f1, f2).ConfigureAwait(false);
-
-        var check = await ThemeFile.LoadAsync(path).ConfigureAwait(false);
-        var bgBack = ThemeFile.TryDecodeBackgroundRgb565(check, ThemeBgBytes);
-        var fansBack = ThemeFile.TryDecodeFanFrames(check, ThemeFanBytes);
-        if (bgBack == null || !bgBack.AsSpan().SequenceEqual(bg) || fansBack is not { } fb
-            || !fb.Frame1.AsSpan().SequenceEqual(f1) || !fb.Frame2.AsSpan().SequenceEqual(f2))
-            throw new IOException("The backup file does not read back as written.");
-        await Dispatcher.UIThread.InvokeAsync(() =>
-            ConfigStatus = "Theme assets backed up to " + Path.GetFileName(path) + ".");
     }
 }

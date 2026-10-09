@@ -24,6 +24,7 @@ public enum UiThemePreset
     ThemeTg4,
     ThemeTg5,
     ThemeTg6,
+    ThemeNoctua,
     Custom
 }
 
@@ -1381,6 +1382,10 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark, WireViewPro2Device.THEME_FAN.ThermalGrizzlyDark, true),
         UiThemePreset.ThemeTg6 => new(0xFF969696, 0xFF505050, 0xFFFFFFFF, 0xFF000000,
             WireViewPro2Device.THEME_BACKGROUND.Disabled, WireViewPro2Device.THEME_FAN.ThermalGrizzlyBlackWhite, true),
+        // The Noctua Edition's firmware defaults (20260902_0741): Thermal Grizzly's
+        // Dark artwork with Noctua colors. Any Pro II can show it.
+        UiThemePreset.ThemeNoctua => new(0xFFD1D3D5, 0xFFE7CEB4, 0xFF653025, 0xFF000000,
+            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark, WireViewPro2Device.THEME_FAN.ThermalGrizzlyDark, false),
         _ => new(0xFF969696, 0xFF505050, 0xFFFFFFFF, 0xFF000000,
             WireViewPro2Device.THEME_BACKGROUND.Disabled, WireViewPro2Device.THEME_FAN.ThermalGrizzlyBlackWhite, false),
     };

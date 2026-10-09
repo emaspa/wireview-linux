@@ -161,51 +161,6 @@ internal class MessageBox : Window
         });
     }
 
-    /// <summary>A dialog with custom buttons. Returns the index of the button
-    /// pressed; <paramref name="defaultIndex"/> is focused and answers Enter,
-    /// <paramref name="cancelIndex"/> answers Escape and closing the window.</summary>
-    public static Task<int> ShowChoice(
-        Window? parent, string text, string title, string[] buttons, int defaultIndex, int cancelIndex)
-    {
-        return Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            Window owner = parent ?? GetOwnerWindowOrThrow();
-            var msgbox = new MessageBox { Title = title };
-            msgbox._text.Text = text;
-            msgbox._text.MaxWidth = 560;
-
-            int result = cancelIndex;
-            Button? focus = null;
-            for (int i = 0; i < buttons.Length; i++)
-            {
-                int index = i;
-                var btn = new Button
-                {
-                    Content = buttons[i],
-                    Margin = new Thickness(5),
-                    Padding = new Thickness(5),
-                    IsDefault = i == defaultIndex,
-                    IsCancel = i == cancelIndex,
-                };
-                if (i == defaultIndex)
-                {
-                    btn.FontWeight = FontWeight.SemiBold;
-                    focus = btn;
-                }
-                btn.Click += (_, _) =>
-                {
-                    result = index;
-                    msgbox.Close();
-                };
-                msgbox._buttons.Children.Add(btn);
-            }
-            msgbox.Opened += (_, _) => focus?.Focus();
-
-            await msgbox.ShowDialog(owner);
-            return result;
-        });
-    }
-
     private static Window GetOwnerWindowOrThrow()
     {
         if (Application.Current?.ApplicationLifetime
