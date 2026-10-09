@@ -335,6 +335,10 @@ sudo usermod -aG dialout $USER
 # Arch-based distros: sudo usermod -aG uucp $USER
 ```
 
+## Thanks
+
+Thanks to Thermal Grizzly for providing a WireView Pro II Noctua Edition unit for development.
+
 ## Disclaimer
 
 This software is an unofficial, community-made Linux port of the WireView Pro II application. It is **not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs**. All trademarks belong to their respective owners.

@@ -23,7 +23,7 @@ Requires `dotnet` (8.0 SDK) and `rpmbuild` (`sudo dnf install rpm-build`, or
 
 ```bash
 rpm/build-srpm.sh            # version is read from WireView2.csproj
-# or: rpm/build-srpm.sh 1.3.0.0
+# or: rpm/build-srpm.sh 1.3.1.0
 ```
 
 The resulting `.src.rpm` lands in `rpm/build/SRPMS/` (this directory is a build

@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.3.0.0
+Version:        1.3.1.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -90,6 +90,19 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Fri Oct 09 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.1.0-1
+- Theme editor: a Noctua preset, the WireView Pro II Noctua Edition's own
+  look, which works on any WireView Pro II. themes/Noctua-Edition.wv2t
+  carries it for the Windows app.
+- On a Noctua Edition, Restore defaults asks the same question as on the Pro
+  II. A real unit's artwork is the stock Thermal Grizzly image, so there is
+  nothing to back up first.
+- LAN viewers of a wireviewd host hide external probes that are not
+  connected. wireviewd 1.7.1 and older publish them as 0.0.
+- The Linux build no longer carries a beta label.
+- Noctua Edition support is verified on a real unit provided by Thermal
+  Grizzly.
+
 * Wed Sep 30 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.0.0-1
 - Port of the upstream WireView2 1.0.8 changes: WireView Pro II Noctua
   Edition support, Noctua Light/Dark themes and backgrounds, bundled
