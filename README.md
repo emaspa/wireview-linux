@@ -15,8 +15,8 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Desktop notifications** - Via `notify-send`
 - **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
 - **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
-- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview. Theme files (.wv2t) are compatible with the official Windows app
-- **Firmware updates** - Flash the bundled firmware (v05, build 20260902_0741) from the Device page over USB DFU. Requires the `dfu-util` package; compares the bundled and device firmware by version and build date, refuses an image made for another product, and warns before downgrades
+- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview. Theme files (.wv2t) are compatible with the official Windows app. The Noctua preset is the WireView Pro II Noctua Edition's own look: Thermal Grizzly's Dark background with Noctua colors. It works on any WireView Pro II and is also available as [themes/Noctua-Edition.wv2t](themes/Noctua-Edition.wv2t) for the Windows app
+- **Firmware updates** - Flash the bundled firmware (v05, build 20260902_0741) from the Device page over USB DFU. Requires the `dfu-util` package; compares the bundled and device firmware by version and build date, refuses an image made for another product, and warns before downgrades. The bundled image is byte for byte the firmware a Noctua Edition ships with, so flashing it again restores the factory firmware on either edition
 
 > **Warning:** firmware flashing restarts the device into its STM32 bootloader and rewrites its flash. It follows the same DFU procedure as the official Windows client (and refuses to start if `dfu-util` or the firmware image is missing), but a power loss or unplug mid-flash can leave the device unbootable until reflashed manually. This is unofficial software, not affiliated with or endorsed by Thermal Grizzly: flash at your own risk. The previous experimental `dfu-enabled` branch has been removed in favor of this built-in implementation.
 
@@ -75,7 +75,7 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 ## Requirements
 
 - Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
-- A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (Noctua Edition support is tested against simulated devices only; the WireView II and its Phanteks Edition are not supported yet)
+- A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (the Noctua Edition is tested on a real unit; the WireView II and its Phanteks Edition are not supported yet)
 - For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later
 - Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency)
 

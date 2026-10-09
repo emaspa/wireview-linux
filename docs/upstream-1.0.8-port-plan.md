@@ -521,6 +521,16 @@ No user-facing feature was removed.
    `ext_flash.bin` (TG artwork only, `DeviceViewModel.Theme.cs:1058`) overwrite Noctua artwork in SPI
    flash? Upstream 1.0.8 does not special-case either. Needs a config dump and an SPI read-back from a
    Noctua unit before enabling the theme editor on pid 6.
+   **Answered 2026-10-09 on a real unit** (uid 610069000B50464E45363720, build 20260902_0741): the
+   device stores no config (SPI sector 0 erased), so it runs the firmware defaults, which the
+   firmware picks by edition (literal pool at 0x08001AB8): primary `#D1D3D5`, secondary `#E7CEB4`,
+   highlight `#653025`, background black, background slot 2 (Dark), fan 117 (Dark), no inversion.
+   All values are known to our enums. The SPI artwork at 0x3000 is byte-identical to
+   `ext_flash.bin` (plus zero padding to 0x67E00), so there is no Noctua artwork and "Restore
+   defaults" writes the unit's factory bytes. The internal flash (128 KiB, RDP level 0, read via
+   DFU upload) is byte-identical to the bundled `TG-WV-PRO2-FW.hex`. SPI layout: 0x1000 and
+   0x2000 calibration (two identical 68-byte copies), 0x3000 theme assets, datalogger at the top.
+   The Noctua look shipped as the `ThemeNoctua` preset and `themes/Noctua-Edition.wv2t`.
 9. Port WireView II / Phanteks support now (dormant) or wait for hardware?
 10. Monitoring: adopt a throttled chart push (upstream-style graph tick) instead of per-sample updates,
     given `MonitoringUpdateIntervalMs` can go down to 50 ms?
