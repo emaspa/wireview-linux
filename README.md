@@ -169,6 +169,37 @@ sudo systemctl enable --now wireviewd
 
 From the next boot onward both come up automatically (the dkms package registers the module in `modules-load.d` and the service modprobes it on start).
 
+### NixOS (flake)
+
+The repository is a flake. Its NixOS module installs the app, built from source, and the udev rule. Add [wireview-hwmon](https://github.com/emaspa/wireview-hwmon)'s module for the hwmon + daemon mode:
+
+```nix
+{
+  inputs = {
+    wireview-linux.url = "github:emaspa/wireview-linux";
+    wireview-hwmon.url = "github:emaspa/wireview-hwmon";
+  };
+
+  outputs = { nixpkgs, wireview-linux, wireview-hwmon, ... }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ./configuration.nix
+        wireview-linux.nixosModules.default
+        wireview-hwmon.nixosModules.default
+        {
+          programs.wireview-linux.enable = true;
+          services.wireview-hwmon.enable = true;
+          users.users.alice.extraGroups = [ "wireview" ];
+        }
+      ];
+    };
+  };
+}
+```
+
+`nix run github:emaspa/wireview-linux` starts the app without installing it, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
+
 ### Serial access (package installs)
 
 The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
