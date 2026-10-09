@@ -99,7 +99,16 @@ namespace WireView2.Net
                 UpdateIdentity(dto.HwRev, dto.Name);
                 FirmwareVersion = dto.FwVer;
                 BuildString = dto.BuildString ?? "";
-                DataUpdated?.Invoke(this, dto.ToDeviceData());
+                var data = dto.ToDeviceData();
+                // wireviewd 1.7.1 and older publish an absent external probe as 0.0
+                // (newer ones send -100.0, already invalid); wireviewctl top reads
+                // 0.0 from wireviewd as absent too.
+                if (snap!.AppVersion.StartsWith("wireviewd", StringComparison.Ordinal))
+                {
+                    if (data.ExternalTemp1C == 0.0) data.ExternalTemp1C = double.NaN;
+                    if (data.ExternalTemp2C == 0.0) data.ExternalTemp2C = double.NaN;
+                }
+                DataUpdated?.Invoke(this, data);
                 return true;
             }
             catch
