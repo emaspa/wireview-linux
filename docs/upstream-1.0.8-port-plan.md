@@ -7,7 +7,7 @@ Analysis date: 2026-09-29. Source: decompiled `~/WireView2-SW_1.0.8` vs `~/WireV
 
 ## Maintainer decisions (2026-09-29)
 
-- Port everything except WireView II / Phanteks Edition (product ids 7 and 8): deferred, no hardware.
+- Port everything for the two Pro II editions.
 - Ship the Noctua logo and background images (downscaled, see below).
 - Theme editing stays enabled on the Noctua Edition (product id 6).
 - A daemon that reports no product is treated as a Pro II (EF05).
@@ -43,14 +43,13 @@ Analysis date: 2026-09-29. Source: decompiled `~/WireView2-SW_1.0.8` vs `~/WireV
 
 The application-side analysis follows.
 
-## 1. Device edition identification (product id aware device layer). Foundation for §2, §4, §10
+## 1. Device edition identification (product id aware device layer). Foundation for §2, §4
 
 **Upstream evidence**
 - `WireViewDeviceLib/.../DeviceAutoConnector.cs`: probes each port with the new
   `WireViewBasicDevice` (welcome prefix `"Thermal Grizzly WireView"` + `CMD_READ_VENDOR_DATA`),
   disconnects it, then instantiates by product id:
-  `case 5: new WireViewPro2Device(...)`, `case 6: new WireViewPro2NoctuaDevice(...)`,
-  `case 7: new WireView2Device(...)`, `case 8: new WireView2PhanteksDevice(...)` (vendor 239 = 0xEF).
+  `case 5: new WireViewPro2Device(...)`, `case 6: new WireViewPro2NoctuaDevice(...)` (vendor 239 = 0xEF).
   `_device` is now `IWireViewDevice?`.
 - `WireViewPro2Device` ctor gained `welcomeMessage, deviceName, vendorId, productId` parameters;
   `WelcomeMessage` and `DeviceName` became instance properties; `Connect()` compares
@@ -69,7 +68,7 @@ The application-side analysis follows.
   there is no probe step, and none is needed for the Noctua Edition because the welcome string is
   identical. Simplest port: let `WireViewPro2Device` accept product ids {5, 6}, set `DeviceName` from
   the product id, expose `ProductId` (or keep deriving it from `HardwareRevision`). Adopt the
-  `WireViewBasicDevice` two-step probe only if §10 (WireView II) is ported.
+  `WireViewBasicDevice` two-step probe only when another product needs it.
 - `HwmonDevice.cs:52-55`: `DeviceName` is hard-coded "WireView Pro II (hwmon + daemon)", and
   `HardwareRevision => string.Empty`. `TryConnectDaemon()` parses `WCMD_GET_DEVICE_INFO`
   (fw, cfgver, uid[12], build string) with no vendor/product id. wireviewd's `query_device_info`
@@ -419,29 +418,6 @@ connection like upstream, hide the Temperatures panel when all four are absent, 
 temperature series to off in Monitoring. **Effort** S. **Risk** low. **Verification**: any device
 with an external probe unplugged.
 
-## 10. Future WireView devices (WireView II pid 7, Phanteks Edition pid 8)
-
-**Upstream evidence**
-- New `WireView2Device` (647 lines, `IWireViewDevice`): welcome `"Thermal Grizzly WireView II"`, its
-  own `DeviceConfigStructV0` (friendly name, fault masks, thresholds, `Average`; no fan, display, UI or
-  theme fields), `ReadBuildString`, `EnterBootloader`, `NvmCmd`, `ClearFaults`; no SPI/logging.
-  `WireView2PhanteksDevice` is a name/pid subclass.
-- `DeviceViewModel`: `IsWireView2Device`; `IsFanSupported`, `IsDisplaySupported`,
-  `IsDeviceLoggingSupported` = `!IsWireView2Device`; `ApplyToEditor(DeviceConfigStructV0)`,
-  `BuildWireView2ConfigFromEditor()` (reads config, patches fields, writes, `NVM_CMD_STORE`),
-  `MapWireView2AverageToPro`/`MapProAverageToWireView2` (clamp 0..8), WireView2 branches in
-  `TryReloadConfig`, `ApplyConfig`, `StoreConfig`, `ResetConfig` (`NVM_CMD_RESET` + reload).
-  `AveragingOptions = AllAveragingOptions` for WireView II.
-- `DeviceView`: fan section, display settings, the fault-matrix "Display" column (9 bindings) and the
-  "Device Logging (s)" slider hidden via those flags; firmware panels hidden via
-  `IsFirmwareUpdateSupported` (the bundled pid-5 image does not match pid 7/8).
-
-**Linux mapping**: nothing exists. It would need a device-lib class, the probe step, wireviewd and
-hwmon driver support **[lead]**, DeviceView/LoggingView/theme-editor gating, and LAN DTO handling
-(config relay uses the Pro II struct today). **Recommendation**: defer until the hardware exists; do
-§1 and the product match in §4 so that an unknown pid is never flashed with the Pro II image and the
-add-on is cheap later. **Effort** L. **Risk** high and unverifiable without hardware.
-
 ## 11. Minor and unannounced items
 
 - Gauge track drawn only over the unfilled arc (§2). Cosmetic, S.
@@ -497,7 +473,6 @@ No user-facing feature was removed.
 5. **Edition identification** (§1) once the lead settles the wireviewd vid/pid report.
 6. **Edition theming and assets** (§2); forced Noctua modes can ship even before §1.
 7. §9 polish.
-8. §10 deferred.
 
 ## Open questions for the maintainer
 
@@ -531,6 +506,5 @@ No user-facing feature was removed.
    DFU upload) is byte-identical to the bundled `TG-WV-PRO2-FW.hex`. SPI layout: 0x1000 and
    0x2000 calibration (two identical 68-byte copies), 0x3000 theme assets, datalogger at the top.
    The Noctua look shipped as the `ThemeNoctua` preset and `themes/Noctua-Edition.wv2t`.
-9. Port WireView II / Phanteks support now (dormant) or wait for hardware?
-10. Monitoring: adopt a throttled chart push (upstream-style graph tick) instead of per-sample updates,
+9. Monitoring: adopt a throttled chart push (upstream-style graph tick) instead of per-sample updates,
     given `MonitoringUpdateIntervalMs` can go down to 50 ms?
