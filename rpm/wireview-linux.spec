@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.3.1.0
+Version:        1.3.1.1
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -90,6 +90,11 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Mon Oct 12 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.1.1-1
+- udev rule: the serial port keeps the distro's own serial group (dialout,
+  or uucp on Arch-based distros), so the rule works when installed
+  unchanged. The DFU bootloader's group is on a line of its own (#5).
+
 * Fri Oct 09 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.1.0-1
 - Theme editor: a Noctua preset, the WireView Pro II Noctua Edition's own
   look, which works on any WireView Pro II. themes/Noctua-Edition.wv2t

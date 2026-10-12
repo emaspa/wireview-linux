@@ -3,12 +3,13 @@
 # One-time setup for the precompiled WireView Pro II tarball: installs the udev
 # rule that grants access to the device's USB serial port and reloads udev.
 #
-# The rule (0660 root:dialout + a uaccess ACL for the local seat user) grants
-# desktop access without any group membership, so no logout is needed. Over SSH,
-# join the dialout group instead.
+# The rule (0660 in the serial group + a uaccess ACL for the local seat user)
+# grants desktop access without any group membership, so no logout is needed.
+# Over SSH, join the serial group instead.
 #
-# Arch-based distros have no dialout group, their serial group is uucp. udev
-# drops a rule line whose group it cannot resolve, so the rule is rewritten there.
+# Arch-based distros have no dialout group, their serial group is uucp. The
+# serial port gets it from the distro's default rules; the DFU bootloader's
+# line names dialout and is rewritten here.
 #
 set -e
 

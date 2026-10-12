@@ -54,7 +54,8 @@ getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-The rule makes the device node `0660 root:dialout` and gives the user at the
+The rule makes the device node `0660` in the distro's serial group (`dialout`,
+or `uucp` on Arch-based distros) and gives the user at the
 local seat a logind `uaccess` ACL, so no group membership is needed for a
 desktop session. Over SSH, join the serial group instead and log in again:
 

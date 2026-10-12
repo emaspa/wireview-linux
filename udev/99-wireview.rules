@@ -1,21 +1,24 @@
 # WireView Pro II udev rules
 #
-# Same access policy as wireview-hwmon's 99-wireview-hwmon.rules: the node is
-# 0660 root:dialout, and the user logged in at the local seat gets an ACL via
-# uaccess. systemd applies that tag on hotplug from 73-seat-late.rules, which
-# runs before this 99- file and so never sees it, so each rule also runs the
-# uaccess builtin itself. The tag is still needed: logind uses it to move the
-# ACL to the new active session on a user switch.
+# The serial port keeps the distro's own serial group from
+# 50-udev-default.rules (dialout on Debian, Ubuntu and Fedora, uucp on
+# Arch-based distros), so this file sets no group on it and installs
+# unchanged everywhere. The node is 0660, and the user logged in at the local
+# seat gets an ACL via uaccess. systemd applies that tag on hotplug from
+# 73-seat-late.rules, which runs before this 99- file and so never sees it, so
+# each rule also runs the uaccess builtin itself. The tag is still needed:
+# logind uses it to move the ACL to the new active session on a user switch.
 #
-# Arch-based distros have no dialout group (their serial group is uucp), and
-# udev drops a whole rule line whose GROUP it cannot resolve. The AUR package
-# and the install scripts replace dialout with uucp there. Do the same in the
-# two GROUP keys below when installing this file by hand.
+# The DFU bootloader is a USB device, which has no serial group by default.
+# Its GROUP sits on a line of its own because udev drops a whole rule line
+# whose group it cannot resolve: on a distro without dialout only that line
+# goes, and the seat ACL still works. The AUR package and the install scripts
+# replace dialout with uucp on Arch-based distros.
 
 ACTION=="remove", GOTO="wireview_end"
 
 # Normal operation (STM32 CDC/ACM virtual serial port)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess", SYMLINK+="wireview-pro2"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess", SYMLINK+="wireview-pro2"
 
 # Keep ModemManager away: it probes every new CDC-ACM port with AT and QCDM
 # commands for about half a minute, holding the port and sending the device
@@ -24,6 +27,7 @@ SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idPro
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", ENV{ID_MM_PORT_IGNORE}="1"
 
 # DFU bootloader mode (firmware update)
-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", GROUP="dialout", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", GROUP="dialout"
 
 LABEL="wireview_end"

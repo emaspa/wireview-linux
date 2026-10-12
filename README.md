@@ -204,11 +204,13 @@ The repository is a flake. Its NixOS module installs the app, built from source,
 
 The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
 the system reloads it automatically, so **serial access works out of the box**
-for the user logged in at the local seat - the rule makes the serial port and
-the DFU bootloader `0660 root:dialout` and gives the active session a logind
-`uaccess` ACL, so no group membership or logout is needed there. The rule
-matches the one shipped by `wireview-hwmon`. Arch-based distros have no
-`dialout` group, so the AUR package uses their serial group `uucp` instead.
+for the user logged in at the local seat - the rule makes the serial port
+`0660` in the distro's serial group (`dialout`, or `uucp` on Arch-based
+distros), the DFU bootloader `0660 root:dialout`, and gives the active session
+a logind `uaccess` ACL, so no group membership or logout is needed there. The
+rule installs unchanged on any distro. Arch-based distros have no `dialout`
+group, so the AUR package gives the DFU bootloader their serial group `uucp`
+instead.
 
 If access still fails in an unusual setup (for example over SSH, where the
 `uaccess` ACL doesn't apply), add yourself to the serial group and log back
@@ -250,9 +252,9 @@ cd wireview-linux
 ```
 
 Run it as your own user; it uses `sudo` where it needs root. The install script will:
-1. Install the udev rule (serial port and DFU bootloader `0660 root:dialout`, plus a
-   `uaccess` ACL for the user logged in at the local seat). On Arch-based distros,
-   which have no `dialout` group, it uses `uucp` instead
+1. Install the udev rule (serial port and DFU bootloader `0660` in the serial group,
+   plus a `uaccess` ACL for the user logged in at the local seat). The serial group
+   is `dialout`, or `uucp` on Arch-based distros
 2. Only when there is no local seat session (SSH, for example): add your user to that
    group, which needs a new login to take effect
 3. Build the application

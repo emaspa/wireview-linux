@@ -8,8 +8,9 @@ TARGET_USER="${SUDO_USER:-$USER}"
 echo "=== WireView Pro II Linux Installer ==="
 echo
 
-# Arch-based distros have no dialout group, their serial group is uucp. udev
-# drops a rule line whose group it cannot resolve, so the rule has to name it.
+# Arch-based distros have no dialout group, their serial group is uucp. The
+# serial port gets it from the distro's default rules; the DFU bootloader's
+# line names dialout, which udev drops where that group does not exist.
 SERIAL_GROUP=dialout
 if ! getent group dialout >/dev/null && getent group uucp >/dev/null; then
     SERIAL_GROUP=uucp

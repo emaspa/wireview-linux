@@ -1,3 +1,11 @@
+wireview-linux (1.3.1.1~resolute1) resolute; urgency=medium
+
+  * udev rule: the serial port keeps the distro's own serial group (dialout,
+    or uucp on Arch-based distros), so the rule works when installed
+    unchanged. The DFU bootloader's group is on a line of its own (#5).
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Mon, 12 Oct 2026 10:31:23 +0100
+
 wireview-linux (1.3.1.0~resolute1) resolute; urgency=medium
 
   * Theme editor: a Noctua preset, the WireView Pro II Noctua Edition's own
