@@ -153,7 +153,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 yay -S wireview-linux-bin
 ```
 
-[`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux), started by arakmar and now co-maintained here, builds the same release from source with the Arch .NET SDK. It is updated together with the binary package, so pick whichever you prefer:
+[`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux), started by [Arakmar](https://github.com/Arakmar) and now co-maintained here, builds the same release from source with the Arch .NET SDK. It is updated together with the binary package, so pick whichever you prefer:
 
 ```bash
 yay -S wireview-linux        # builds from source, takes a few minutes
