@@ -1,0 +1,226 @@
+# Memory and CPU footprint plan (wireview-linux and WireView Plus)
+
+Status: phase 1 (section 3) implemented 2026-10-13, measured below. Phases 2 and 3 are proposals.
+
+## 1. Where the resources go today
+
+Measured on the development machine (Intel Arrow Lake iGPU + RTX 5080, Mesa, XWayland), GUI 1.3.1.1
+from the PPA, running 85 hours, wireviewd 1.7.x alongside:
+
+| Process | RSS | PSS | Threads | Idle CPU |
+|---|---|---|---|---|
+| `WireView2` (Avalonia GUI) | 295 MB | 226 MB | 23 | 0.2 % of one core (1 tick / 5 s) |
+| `wireviewd` (C daemon) | 2.3 MB | 2.3 MB | 1 | 0 |
+
+GUI RSS by mapping (`/proc/<pid>/smaps`):
+
+| Mapping | RSS | What it is |
+|---|---|---|
+| anonymous | 94 MB | .NET GC heap, Skia surfaces, Mesa buffers |
+| `libLLVM.so.21` + `libgallium` | 53 MB | Mesa's shader compiler and GL driver. LLVM resident at this size means llvmpipe (software GL) is doing the rendering, i.e. GPU path overhead with none of the GPU benefit. To confirm: run with `AVALONIA_X11_RENDER_MODE=Software` and compare, or `glxinfo -B` inside the same session |
+| `/memfd:doublemapper` | 40 MB | .NET W^X double mapping of JIT code (`DOTNET_EnableWriteXorExecute`) |
+| `[heap]` | 23 MB | native malloc (Skia, HarfBuzz, X11) |
+| `System.Private.CoreLib.dll` | 11 MB | runtime |
+| `libicu*` | 8 MB | globalization data, unused by an English-only UI |
+| other managed DLLs (`WireView2`, Avalonia, `System.Net.Http`, crypto) | ~15 MB | mapped from `~/.cache/dotnet_bundle_extract` because the deb runs the single-file launcher |
+| window background JPG | up to 30 MB | 3840x1926 decoded at full size (`EditionThemeService.cs:258`, `App.axaml:42,61`), scaled every frame |
+
+Conclusions:
+
+- **CPU is not the problem.** After the 1.3.0.0 chart work (upstream 1.0.8 §6/§7: snapshot series,
+  decimation, pen caches, blocking serial reads) the GUI idles at 0.2 % of a core. A Rust GUI idles
+  at the same ~0. Only the Monitoring page at 50 ms polling still costs real CPU, and that is
+  rendering work any toolkit pays.
+- **Memory is the problem, and most of it is not "because C#".** Roughly 130 MB of the 295 MB is
+  the rendering stack, the JIT double mapping, ICU and a full-size background bitmap. All four go
+  away with configuration or small code changes inside the current codebase. The .NET GC heap for
+  this app is a few tens of MB.
+- **The headless layer already exists on Linux** and it is C: wireviewd + wireviewctl + the hwmon
+  module. It does polling, hwmon export, LAN publishing (HTTP + HMAC, Prometheus, mDNS), remote
+  control and serial handover, in 2.3 MB. It does not do fault alerts or shutdown-on-fault; those
+  live only in the GUI (`ConnectionStatusViewModel.cs:195-230`).
+
+## 2. The Rust port question
+
+A full port means rewriting ~17.5k lines of C# (11.3k GUI, 5.1k device library, 1.0k network),
+including the parts that took the longest to get right: serial handover with wireviewd, DFU flashing,
+SPI theme flash timing, the Windows driver installer (SetupAPI), tray icons with their SNI quirks,
+the theme editor with image codecs, and the custom charts. Realistic effort is several months for
+feature parity, then every distribution channel (PPA, COPR, AUR, Flatpak, Nix, Windows zip) rebuilt
+around a cargo toolchain with vendored crates (Launchpad builders have no network).
+
+The payoff: a Rust GUI (egui, iced or Slint) lands around 40 to 80 MB RSS, most of it GPU driver.
+A tuned Avalonia build (section 3) is expected around 120 to 160 MB. So the rewrite buys perhaps
+60 to 100 MB on a desktop that has at least 16 GB, at the price of months of work and one more
+thing the numbers above do not show: this project tracks the upstream Windows client release by
+release (docs/upstream-1.0.7-port-plan.md, docs/upstream-1.0.8-port-plan.md). Those ports are
+largely copy-and-adapt today because both sides are C#. With a Rust codebase every upstream change
+becomes a translation.
+
+**Recommendation: do not port the GUI.** Spend the effort on (a) shrinking the GUI where the memory
+actually is and (b) a headless agent so the GUI no longer needs to run all the time. Rust has a
+place in (b), as an optional later step with a small, well-defined scope.
+
+## 3. Phase 1: shrink the existing GUI (no rewrite)
+
+Target: 295 MB RSS to roughly 120 to 160 MB visible, less when hidden in the tray. Each item is
+measured separately before it is kept; the ones that do not pay for themselves are dropped.
+
+0. **Measurement script first.** `tools/footprint.sh <pid>` sampling RSS, PSS, thread count and CPU
+   ticks over 60 s, run in three states: Monitoring page visible at 50 ms polling, Overview visible,
+   window hidden in the tray. Windows equivalent with `Get-Process` and `Get-Counter`. Record the
+   results in this file.
+1. **Rendering mode.** Try `X11PlatformOptions.RenderingMode = [X11RenderingMode.Software]` in
+   `Program.cs`. Skia's CPU rasterizer is more than enough for gauges and a few line charts, it
+   removes Mesa and LLVM from the process (53 MB here), and it removes the GL-under-XWayland class
+   of problems (issue #3 flashing, the "X connection broken" deaths on this rig). Keep the GL path
+   available behind the existing `AVALONIA_X11_RENDER_MODE` environment variable. Decide the default
+   from the Monitoring-at-50-ms CPU numbers. Windows keeps its default (ANGLE/D3D) unless the same
+   test shows a win there.
+2. **Runtime knobs** in `runtimeconfig.template.json`: `System.GC.ConserveMemory` (5 to 7),
+   `System.GC.Concurrent=false` (drops the background GC thread, this app has no latency
+   requirement), `System.Runtime.TieredPGO=false` (no instrumentation buffers). Plus
+   `DOTNET_EnableWriteXorExecute=0`, which is environment-only: turn `/usr/bin/wireview-linux` from a
+   symlink into a two-line wrapper that exports it and point the `.desktop` file at the wrapper.
+   Expected: 30 to 50 MB.
+3. **`InvariantGlobalization=true`.** Drops ICU. The code already formats CSV and chart labels with
+   `InvariantCulture` (43 call sites); the 16 remaining culture-dependent `ToString("F")`/`"N"`
+   calls become dot-decimal, which is correct for this UI. Expected: ~8 MB plus faster startup.
+4. **Background bitmap.** Decode the window background with `Bitmap.DecodeToWidth` at the window's
+   real width (and re-decode on resize past a threshold) instead of holding 3840x1926 and scaling
+   it per frame. This is also upstream 1.0.8 §2's downscale note. Expected: 20 to 25 MB and less
+   per-frame work on software rendering.
+5. **Hidden-in-tray behaviour.** On window hide: drop the fan-preview frame cache and theme-editor
+   bitmaps, then one compacting `GC.Collect`. Monitoring history stays (users expect it on reopen).
+   Also fix the known second-launch-while-in-tray exit (wireview-hwmon README, follow-ups).
+6. **Ship loose files only.** The deb and rpm install the single-file launcher plus the loose DLLs
+   side by side (doubling the download, noted in the wireview-hwmon README). Shipping only the
+   loose layout avoids the per-user extraction to `~/.cache/dotnet_bundle_extract` and lets the
+   pages be shared between processes.
+7. **Trimming / NativeAOT, last.** Avalonia 12 supports both. NativeAOT removes the JIT, the double
+   mapping and tiered compilation memory, starts instantly and yields the single native binary that
+   is half of the Rust pitch. Risks: `System.Text.Json` DTOs in WireViewNet need a source-generated
+   `JsonSerializerContext`; the ColorPicker and any reflection binding must be checked (compiled
+   bindings are already on). Do it after the agent (section 4) has proven the toolchain on a
+   smaller surface. COPR and Nix builds compile from source, so the ILCompiler package must be
+   restorable there; the PPA repacks the release binary and is unaffected.
+
+Effort: about a week including measurements. Ships as 1.3.2.
+
+### Phase 1 results (2026-10-13)
+
+`tools/footprint.sh <pid> 30 --maps`, 45 s after launch, Overview page, 1 s polling, hwmon
+mode with a Noctua Edition, 1920x1080 screen, Intel iGPU + Mesa under XWayland. Self-contained
+linux-x64 publish of the same commit before and after. "Minimized" is the user's
+`StartMinimized` setting (window iconified, tray only); "visible" was run with a copy of the
+settings under `XDG_CONFIG_HOME`.
+
+| Build | State | RSS | PSS | Threads | Idle CPU |
+|---|---|---|---|---|---|
+| before | visible | 284 MB | 221 MB | 23 | 2.7 % |
+| before | minimized | 227 MB | 168 MB | 23 | 0.9 % |
+| after | visible | 149 MB | 138 MB | 17 | 2.3 % |
+| after, default palette | visible | 155 MB | 144 MB | 17 | 2.6 % |
+| after | minimized | 126 MB | 115 MB | 17 | 0.6 % |
+
+Single knobs on the "before" build, minimized (RSS / PSS):
+
+| Knob | Result | Kept |
+|---|---|---|
+| software rendering | 170 / 152 (from 227 / 168), 6 threads fewer, CPU unchanged | yes, Linux default; `WIREVIEW_RENDER_MODE` overrides |
+| `DOTNET_EnableWriteXorExecute=0` | 227 / 168, no change: the double mapping only double-counts in RSS | no |
+| ConserveMemory 7, non-concurrent GC, no tiered PGO | 165 / 148 (from 168 / 150) | yes, cheap |
+| InvariantGlobalization | 155 / 144 (from 165 / 148) | yes |
+| background decoded at screen width | 184 / 132 (from 227 / 168, with the GC knobs) | yes |
+
+Items dropped from the list above: 6 (loose-only layout) gives no memory back, the extracted
+bundle is memory-mapped like loose files would be; it stays a packaging decision. Item 7
+(trimming / NativeAOT) is deferred to after the agent, as planned. The remaining 37 MB of
+anonymous memory in the visible state is the GC heap plus Skia surfaces; the 33 MB
+`memfd:doublemapper` line is JIT code counted twice.
+
+Verification: `Bitmap.DecodeToWidth` produced 1920x963 for both the edition background and the
+default Dark dictionary brush, and the rendered frames were checked under Avalonia.Headless.
+CPU on the Monitoring page at 50 ms polling with software rendering still needs a look on a
+real session; at 1 s on Overview it is equal to GL.
+
+## 4. Phase 2: a headless agent, so the GUI runs only when wanted
+
+The always-on jobs (fault alerts, shutdown-on-fault, LAN publishing, remote-host monitoring, the
+tray power number) are what keep the GUI resident. Linux has wireviewd for publishing but not for
+alerts or shutdown; Windows has nothing. Proposal:
+
+### 4.1 Linux: extend wireviewd (C)
+
+- `shutdown-on-fault` as a daemon option (config key + `--shutdown-on-fault`). The daemon runs as
+  root under systemd, so `systemctl poweroff` is a natural fit and it works with nobody logged in,
+  which the GUI version cannot do. This is the stronger implementation for the eGPU use case the
+  README describes.
+- A fault event on the daemon socket (new `WATCH` command or a one-line event stream), so a user
+  session helper can show the desktop notification: `wireviewctl watch --notify` running as a user
+  systemd service calling `notify-send`. No new process type, no .NET.
+- The GUI keeps its own alert path for direct-serial mode and defers to the daemon when connected
+  through hwmon (one notification, not two).
+
+### 4.2 Windows: `WireViewAgent`, a .NET console app with no Avalonia
+
+New project `WireViewAgent/` referencing only `WireViewDeviceLib` and `WireViewNet`. Both are already
+free of Avalonia, and almost everything it needs exists:
+
+| Agent job | Already in the code |
+|---|---|
+| find and poll the device | `DeviceManager`, `WireViewPro2Device`, `WindowsSetupApi`, `WindowsDriverHelper` |
+| LAN publishing with HMAC | `SensorPublisher`, `HmacAuth`, `WireViewSensorDto` (carries `FaultStatus`/`FaultLog`) |
+| watch remote hosts | `NetworkDevice`, `RemoteDeviceProbe` |
+| fault edge detection, cooldown, text | `ConnectionStatusViewModel.cs:195-230`: move into a `FaultMonitor` class in WireViewNet shared by GUI and agent |
+| shutdown | `shutdown /s /t 0` (Windows), `systemctl poweroff` (Linux) |
+| settings | `AppSettings` moved to a shared library so the GUI configures and the agent follows the same `settings.json` |
+
+New code: a console host (~150 lines), Windows toast notifications
+(`Microsoft.Toolkit.Uwp.Notifications` works for unpackaged apps on the `net8.0-windows10.0.17763`
+target; `notify-send` on Linux), an `--install`/`--uninstall` pair that registers a logon task
+(extend `AutoStartService`), and a serial handover command mirroring wireviewd's `SUSPEND_SERIAL`
+so the GUI can still read logs, flash firmware and edit themes while the agent owns the COM port.
+
+**GUI integration, the key design point.** The GUI already speaks the LAN protocol to wireviewd and
+to other copies of itself. Add a probe for `localhost:9876` ahead of the serial probe in
+`DeviceManager`: when the agent is running the GUI connects through it, exactly like hwmon+daemon
+mode on Linux, with full remote control over HMAC (the local secret is read from the shared
+settings file, so nothing to type). When the agent is not running, direct serial as today. Both
+platforms then have the same shape: a small always-on process owns the device, the GUI is a
+viewer/editor you open when you want it.
+
+What stays GUI-only: the live power number in the tray. A tray icon needs a message loop and
+drawing; it is not worth putting in the agent. Users who want it keep the GUI resident, now at
+Phase 1 size.
+
+Expected footprint for the .NET agent, trimmed and invariant: 25 to 40 MB RSS on Windows, idle CPU
+~0. Effort: about a week for the agent, two to three days for the GUI probe, handover and
+packaging (one zip with both executables). The agent also runs on Linux as-is, which gives Flatpak
+and immutable-distro users headless alerts and shutdown without the DKMS module.
+
+## 5. Phase 3 (optional): the agent in Rust
+
+Only if the .NET agent's 25 to 40 MB is still judged too much. Scope is small and fully specified
+by then: the serial protocol (`serialport` crate), the `/sensors` JSON API with HMAC (`axum` or
+`tiny_http`, `hmac`, `sha2`), toasts (`tauri-winrt-notification`, `notify-rust`), shutdown, the
+logon task. Two reference implementations (wireviewd.c and the .NET agent) and the existing
+`tests/test_wireviewd.c` give a conformance target: same JSON, same HMAC, same handover. Result:
+one 2 to 3 MB executable, 3 to 6 MB RSS, no runtime. Roughly 3 to 4k lines, two to three weeks.
+
+Do not replace wireviewd with it on Linux. The C daemon is packaged, tested and 2.3 MB; a rewrite
+there has no user-visible benefit.
+
+## 6. Order of work
+
+1. Measurement script and baseline table (section 3, item 0). Half a day.
+2. Phase 1 items 1 to 6, each measured. One week. Release 1.3.2.
+3. `FaultMonitor` and `AppSettings` extraction into shared code, then `WireViewAgent` for Windows
+   with the localhost probe in the GUI. One to two weeks. Release 1.4.0 with the agent in the
+   Windows zip.
+4. wireviewd `shutdown-on-fault` and fault events, `wireviewctl watch --notify`. In the
+   wireview-hwmon repo, a few days.
+5. NativeAOT: agent first, GUI after. One week with the packaging checks.
+6. Rust agent, only on evidence from step 3.
+
+Steps 2, 3 and 4 are independent and can be interleaved; 5 and 6 depend on 3.
