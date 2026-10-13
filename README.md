@@ -150,7 +150,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 [`wireview-linux-bin`](https://aur.archlinux.org/packages/wireview-linux-bin) installs the pre-built release binary (no .NET SDK, no compile) and tracks the latest release:
 
 ```bash
-yay -S wireview-linux-bin    # or: paru -S wireview-linux-bin
+yay -S wireview-linux-bin
 ```
 
 [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux), started by arakmar and now co-maintained here, builds the same release from source with the Arch .NET SDK. It is updated together with the binary package, so pick whichever you prefer:
