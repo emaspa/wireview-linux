@@ -8,11 +8,14 @@ namespace WireView2.Net
     /// the JSON body with <see cref="ToJson"/> and signs those exact bytes; the
     /// server HMAC-verifies the received bytes and parses them with
     /// <see cref="Parse"/>. Mirrors the daemon's command schema (no bootloader).
+    /// Two more ops exist for the headless agent's serial handover
+    /// (<see cref="SuspendSerial"/>, <see cref="ResumeSerial"/>); the publisher
+    /// accepts those from this machine only (<see cref="LocalOnly"/>).
     /// </summary>
     public sealed record WireViewCommand
     {
         public string DeviceId { get; init; } = "";
-        public string Op { get; init; } = "";          // screen | nvm | clearFaults | writeConfig
+        public string Op { get; init; } = "";          // screen | nvm | clearFaults | writeConfig | suspendSerial | resumeSerial
         public int Cmd { get; init; }                   // screen / nvm
         /// <summary>clearFaults: KEEP-mask for the active faults (the firmware does
         /// <c>fault &amp;= mask</c>; 0 clears everything). Sent as "statusMask", the
@@ -23,6 +26,17 @@ namespace WireView2.Net
         public int LogMask { get; init; }
         public int ConfigVersion { get; init; }         // writeConfig
         public byte[]? ConfigData { get; init; }        // writeConfig (raw bytes)
+        /// <summary>suspendSerial: how long the port stays handed over before the
+        /// agent takes it back on its own (sent as "seconds"; 0 means the agent's
+        /// default). Re-sending extends the window, like wireviewd's SUSPEND_SERIAL.</summary>
+        public int Seconds { get; init; }
+
+        public const string SuspendSerialOp = "suspendSerial";
+        public const string ResumeSerialOp = "resumeSerial";
+
+        /// <summary>Ops that only make sense from this machine (the serial handover
+        /// to a local GUI); the publisher refuses them from any other address.</summary>
+        public bool LocalOnly => Op is SuspendSerialOp or ResumeSerialOp;
 
         public static WireViewCommand Screen(string deviceId, int cmd)
             => new() { DeviceId = deviceId, Op = "screen", Cmd = cmd };
@@ -34,6 +48,13 @@ namespace WireView2.Net
             => new() { DeviceId = deviceId, Op = "clearFaults", StatusMask = keepStatusMask, LogMask = keepLogMask };
         public static WireViewCommand WriteConfig(string deviceId, int version, byte[] data)
             => new() { DeviceId = deviceId, Op = "writeConfig", ConfigVersion = version, ConfigData = data };
+        /// <summary>Asks the agent to close its serial port(s) for
+        /// <paramref name="seconds"/> so a local client can use the port directly.</summary>
+        public static WireViewCommand SuspendSerial(string deviceId, int seconds)
+            => new() { DeviceId = deviceId, Op = SuspendSerialOp, Seconds = seconds };
+        /// <summary>Hands the port back to the agent before the window runs out.</summary>
+        public static WireViewCommand ResumeSerial(string deviceId)
+            => new() { DeviceId = deviceId, Op = ResumeSerialOp };
 
         /// <summary>Canonical JSON body the client signs and sends.</summary>
         public string ToJson()
@@ -52,6 +73,9 @@ namespace WireView2.Net
                 case "writeConfig":
                     sb.Append(",\"version\":").Append(ConfigVersion)
                       .Append(",\"data\":\"").Append(Convert.ToBase64String(ConfigData ?? Array.Empty<byte>())).Append('"');
+                    break;
+                case SuspendSerialOp:
+                    sb.Append(",\"seconds\":").Append(Seconds);
                     break;
             }
             sb.Append('}');
@@ -75,6 +99,7 @@ namespace WireView2.Net
                     StatusMask = r.TryGetProperty("statusMask", out var s) ? s.GetInt32() : 0,
                     LogMask = r.TryGetProperty("logMask", out var l) ? l.GetInt32() : 0,
                     ConfigVersion = r.TryGetProperty("version", out var v) ? v.GetInt32() : 0,
+                    Seconds = r.TryGetProperty("seconds", out var sec) ? sec.GetInt32() : 0,
                     ConfigData = r.TryGetProperty("data", out var da) && da.GetString() is string b64 && b64.Length > 0
                         ? Convert.FromBase64String(b64) : null,
                 };

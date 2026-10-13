@@ -6,6 +6,13 @@ using System.Text.Json.Serialization;
 
 namespace WireView2.Services;
 
+/// <summary>
+/// The user's settings, persisted as <c>settings.json</c> in the
+/// <c>PowerMonitor</c> folder under the user's application-data directory
+/// (<c>~/.config/PowerMonitor</c> on Linux, <c>%APPDATA%\PowerMonitor</c> on
+/// Windows). Shared by the GUI and the headless agent: the GUI edits and saves
+/// it, the agent only reads it and follows changes with <see cref="ReloadIfChanged"/>.
+/// </summary>
 public class AppSettings
 {
     public enum BackgroundColorMode
@@ -152,11 +159,16 @@ public class AppSettings
         return Path.Combine(dir, "settings.json");
     }
 
+    // Write time of the file the current values were read from (or last saved
+    // to); DateTime.MinValue when there was no file.
+    private static DateTime _loadedWriteTimeUtc = DateTime.MinValue;
+
     public static void Reload()
     {
         lock (Sync)
         {
             string path = GetSettingsPath();
+            _loadedWriteTimeUtc = WriteTimeUtc(path);
             if (!File.Exists(path))
             {
                 Current = new AppSettings();
@@ -174,6 +186,28 @@ public class AppSettings
             }
             Current.Normalize();
         }
+    }
+
+    /// <summary>Reloads <see cref="Current"/> when settings.json changed on disk
+    /// since it was last read or saved by this process (compares the file's last
+    /// write time). Cheap enough to call on every poll: one stat when nothing
+    /// changed. Returns true when the settings were reloaded.</summary>
+    public static bool ReloadIfChanged()
+    {
+        string path = GetSettingsPath();
+        DateTime stamp = WriteTimeUtc(path);
+        lock (Sync)
+        {
+            if (stamp == _loadedWriteTimeUtc) return false;
+        }
+        Reload();
+        return true;
+    }
+
+    private static DateTime WriteTimeUtc(string path)
+    {
+        try { return File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue; }
+        catch { return DateTime.MinValue; }
     }
 
     // Reading also accepts enum names ("NoctuaDark"); files are still written with
@@ -201,6 +235,7 @@ public class AppSettings
                 WriteIndented = true
             });
             WriteOwnerOnly(path, json);
+            _loadedWriteTimeUtc = WriteTimeUtc(path);
         }
         Saved?.Invoke(Current, EventArgs.Empty);
     }
@@ -210,7 +245,7 @@ public class AppSettings
     // old one, which also means a crash mid-write cannot leave a truncated file.
     private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite;
 
-    private static void WriteOwnerOnly(string path, string text)
+    internal static void WriteOwnerOnly(string path, string text)
     {
         string tmp = path + ".tmp";
         var options = new FileStreamOptions

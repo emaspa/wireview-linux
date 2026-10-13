@@ -31,6 +31,18 @@ namespace WireView2.Device
             DaemonResult.Unavailable  => "wireviewd is not reachable",
             _                         => "failed",
         };
+
+        /// <summary>Like <see cref="Describe"/> without naming wireviewd, for a
+        /// result relayed by another port owner (the headless agent).</summary>
+        public static string DescribeNeutral(this DaemonResult result) => result switch
+        {
+            DaemonResult.Ok           => "OK",
+            DaemonResult.Error        => "it reported an error",
+            DaemonResult.NotConnected => "it is not connected to the device",
+            DaemonResult.Denied       => "not permitted",
+            DaemonResult.Unavailable  => "it is not reachable",
+            _                         => "failed",
+        };
     }
 
     /// <summary>Thrown when wireviewd refuses a privileged command (status 3).

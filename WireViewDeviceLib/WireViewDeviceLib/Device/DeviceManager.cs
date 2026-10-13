@@ -63,6 +63,37 @@ namespace WireView2.Device
             _probes.Add(probe ?? DefaultProbe);
         }
 
+        // A local process that owns the hardware (the headless wireview-agent): its
+        // probe runs after hwmon and before serial, and while it reports the owner
+        // as present, serial ports are not offered (see SetLocalOwnerProbe).
+        private Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>? _ownerProbe;
+        private Func<bool>? _ownerPresent;
+
+        /// <summary>Registers the probe for a local process that owns the WireView's
+        /// serial port (the headless agent). It runs after hwmon and ahead of the
+        /// serial probe on every platform; while <paramref name="ownerPresent"/> is
+        /// true no serial port is opened, and serial entries already open are
+        /// retired, for the same reason as with a daemon-backed hwmon device: a
+        /// second reader on the port corrupts both sides' frames. Call before
+        /// <see cref="Start"/>.</summary>
+        public void SetLocalOwnerProbe(
+            Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>> probe,
+            Func<bool> ownerPresent)
+        {
+            lock (_gate)
+            {
+                _ownerProbe = probe;
+                _ownerPresent = ownerPresent;
+            }
+        }
+
+        private bool LocalOwnerPresent()
+        {
+            Func<bool>? present;
+            lock (_gate) present = _ownerPresent;
+            try { return present?.Invoke() ?? false; } catch { return false; }
+        }
+
         /// <summary>Add another device source (e.g. the remote/network probe).</summary>
         public void RegisterProbe(Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>> probe)
         {
@@ -84,6 +115,17 @@ namespace WireView2.Device
                 if (HasDaemonBackedHwmon())
                     yield break;
             }
+
+            Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>? ownerProbe;
+            lock (_gate) ownerProbe = _ownerProbe;
+            if (ownerProbe != null)
+            {
+                foreach (var found in ownerProbe(held))
+                    yield return found;
+                if (LocalOwnerPresent())
+                    yield break;
+            }
+
             var ports = Stm32PortFinder.FindMatchingComPorts();
             lock (_gate)
             {
@@ -167,10 +209,16 @@ namespace WireView2.Device
             _worker = Task.Run(() => LoopAsync(_cts.Token));
         }
 
-        public void Stop()
+        public void Stop() => Stop(TimeSpan.FromMilliseconds(500));
+
+        /// <summary>Stops discovery and closes every device, waiting up to
+        /// <paramref name="workerWait"/> for a discovery pass in flight (a serial
+        /// handshake can take longer than the default half second; the agent waits
+        /// for it before handing the port over).</summary>
+        public void Stop(TimeSpan workerWait)
         {
             _cts?.Cancel();
-            try { _worker?.Wait(500); } catch { /* ignore */ }
+            try { _worker?.Wait(workerWait); } catch { /* ignore */ }
             _worker = null;
             _cts = null;
             lock (_gate)
@@ -182,6 +230,9 @@ namespace WireView2.Device
                 _selectedId = null;
             }
         }
+
+        /// <summary>The poll interval applied to local devices, in ms.</summary>
+        public int PollIntervalMs => _pollMs;
 
         public void SetPollInterval(int ms)
         {
@@ -342,6 +393,11 @@ namespace WireView2.Device
                     dead.AddRange(_byId.Values.Where(m =>
                         m.Device is WireViewPro2Device && !dead.Contains(m)));
             }
+            // Same once the headless agent is up: it owns the port now.
+            if (LocalOwnerPresent())
+                lock (_gate)
+                    dead.AddRange(_byId.Values.Where(m =>
+                        m.Device is WireViewPro2Device && !dead.Contains(m)));
             if (dead.Count == 0) return;
             lock (_gate) { foreach (var md in dead) Drop(md); }
             DevicesChanged?.Invoke(this, EventArgs.Empty);

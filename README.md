@@ -30,12 +30,13 @@ The app supports two ways of communicating with the device:
 |------|-------------|----------|
 | **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
+| **Through the agent** | App reads and controls the device through [`wireview-agent`](#headless-agent) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
 
 The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands - configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
 
 Commands that change the device through the daemon (configuration writes, NVM store/reset, firmware flashing, and the serial handover used by log reads and the theme editor) need root or membership of the `wireview` group, which the wireview-hwmon packages create: `sudo usermod -aG wireview $USER`. Reading sensors needs no group. Without it the app reports the refused action with that hint, and the automatic theme preview is skipped. Use wireview-hwmon 1.7.0 or later: 1.6.0 refused `wireview` group members when wireviewd ran under systemd, and only 1.7.0 reports the product, so with an older daemon a Noctua Edition is shown as a WireView Pro II.
 
-If the kernel module is not loaded, the app falls back to direct serial communication automatically.
+If the kernel module is not loaded, the app looks for the [headless agent](#headless-agent) on this PC, then falls back to direct serial communication.
 
 ## LAN monitoring
 
@@ -57,7 +58,9 @@ another copy of this app with publishing enabled (Windows).
 **Settings → Publish this host on the LAN** opens a listener (default port
 `9876`, configurable) so other instances can read this machine's device. **Off
 by default.** On Linux the `wireviewd` daemon owns publishing, so the toggle is
-hidden there.
+hidden there. While the [headless agent](#headless-agent) runs, it publishes
+instead of the app, and this toggle decides whether it listens on the LAN or on
+this PC only.
 
 ### Remote control & configuration (authenticated)
 
@@ -71,6 +74,72 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 
 > Publishing is independent of reading - you can read remote hosts without
 > exposing your own. There is no TLS; this targets a trusted LAN.
+
+## Headless agent
+
+`wireview-agent` is a small program with no window that does the always-on
+jobs, so the app only needs to run when you want to look at it:
+
+- it owns the device (hwmon through wireviewd when that runs, otherwise the
+  serial port, the same choice the app makes),
+- it raises the fault notification (Windows toast, `notify-send` on Linux) for
+  this PC's device and for every host in **Remote hosts**,
+- it shuts the PC down on a fault of this PC's device when **Shutdown on fault**
+  is on (a remote host's fault never powers this PC off),
+- it publishes the device on port `9876` (the app's publish port): on the LAN
+  when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
+
+It reads the app's own `settings.json`, so everything is configured in the app,
+and changes apply without restarting the agent. It is meant for Windows and for
+Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it
+still gives alerts and shutdown, and leaves publishing to the daemon (it says so
+in its log when the port is taken).
+
+```bash
+wireview-agent              # run in the foreground (Ctrl+C to stop), logs to stderr
+wireview-agent --install    # start it at login
+wireview-agent --uninstall  # stop starting it at login
+wireview-agent --status     # connected device, fault state and agent version
+wireview-agent --version
+wireview-agent --help
+```
+
+`--install` writes `~/.config/autostart/wireview-agent.desktop` on Linux and the
+`WireView Agent` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+on Windows (no administrator rights needed). It logs to
+`wireview-agent-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`.
+`--status` exits with 0 when a device is connected with no active fault, 3 when
+the agent is not running, 4 when it runs without a connected device, and 5 on an
+active fault. A second copy says it is already running and exits with 1.
+
+On Windows the agent has no console window, so starting it at login shows
+nothing. Its options still print in a terminal; to wait for the output and get
+the exit code, use `start /wait wireview-agent --status` in cmd, or
+`wireview-agent --status | Out-Host` in PowerShell.
+
+**How the app uses it.** At startup the app asks `http://127.0.0.1:9876/sensors`
+before it opens the serial port (after hwmon on Linux). When the agent answers,
+the app connects through it, shown as `agent` in the device picker and
+*Connected via agent* in the status bar, and does not open the port itself:
+two programs on one serial port corrupt each other's data. The app signs its
+commands to the agent with a key the agent keeps next to `settings.json`
+(`agent.key`), so writes work with no network secret set. The app does not show
+a second fault notification while the agent runs.
+
+**Serial handover.** Firmware flashing, reading the device log and the theme
+editor need the serial port itself. For those the app asks the agent to let go
+of the port, does the transfer and hands the port back, like the handover with
+wireviewd. Meanwhile the agent keeps publishing the last reading, marked not
+connected. If the app never hands the port back (it crashed), the agent takes it
+back on its own after at most 10 minutes. The handover is accepted only from
+this PC.
+
+Build it from source with:
+
+```bash
+dotnet publish WireViewAgent -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish WireViewAgent -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+```
 
 ## Requirements
 

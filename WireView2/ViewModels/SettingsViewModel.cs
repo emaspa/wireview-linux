@@ -195,8 +195,16 @@ public class SettingsViewModel : ViewModelBase
     }
 
     /// <summary>The in-app publisher only runs on Windows/macOS; on Linux the wireviewd
-    /// daemon owns publishing, so the toggle is hidden there.</summary>
-    public bool ShowPublishToggle => !OperatingSystem.IsLinux();
+    /// daemon owns publishing, so the toggle is hidden there, unless wireview-agent
+    /// runs (it follows the toggle on every platform).</summary>
+    public bool ShowPublishToggle => !OperatingSystem.IsLinux() || IsAgentRunning;
+
+    /// <summary>True while wireview-agent answers on this machine's publish port.</summary>
+    public bool IsAgentRunning => WireViewDiscoveryService.Shared.AgentPresent;
+
+    /// <summary>Shown under the publish toggle while the agent runs.</summary>
+    public string AgentPublishHint =>
+        "The WireView agent is running and publishes this PC's device. On: on the LAN. Off: for this PC only.";
 
     /// <summary>Whether this host opens the LAN listener — publishing GET /sensors and,
     /// with a secret, accepting authenticated POST /command writes. OFF by default;
@@ -335,6 +343,13 @@ public class SettingsViewModel : ViewModelBase
 
     public SettingsViewModel()
     {
+        // The agent appears and goes away with the device list (its probe).
+        WireView2.Device.DeviceManager.Shared.DevicesChanged += (_, _) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                OnPropertyChanged(nameof(IsAgentRunning));
+                OnPropertyChanged(nameof(ShowPublishToggle));
+            });
         _autoStart = AppSettings.Current.AutoStart;
         _startMinimized = AppSettings.Current.StartMinimized;
         _gpuRendering = AppSettings.Current.GpuRendering;

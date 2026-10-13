@@ -222,6 +222,55 @@ Expected footprint for the .NET agent, trimmed and invariant: 25 to 40 MB RSS on
 packaging (one zip with both executables). The agent also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 
+### Phase 2 status (2026-10-13): 4.2 implemented
+
+Done, in this repo:
+
+- `AppSettings` moved to `WireViewNet/Services/` (namespace unchanged, same path and JSON),
+  with `ReloadIfChanged()` (compares the file's write time) so the agent follows GUI edits.
+- `FaultMonitor` in `WireViewDeviceLib` (debounce, edge, 10 s cooldown, `FormatFaults`);
+  `ConnectionStatusViewModel` uses it with the same behaviour. `SystemPower.Shutdown()`,
+  `IToastNotifier`, `LinuxToastNotifier`, `NullToastNotifier`, `XdgAutostart` and the remote
+  host filter (`RemoteHostList`) are shared too.
+- `LocalPublishHost` in `WireViewNet`: the snapshot, `/config` and command relay that
+  `WireViewPublishService` had, now used by both the GUI and the agent. `SensorPublisher`
+  takes a bind address, a local-only second secret, refuses local-only ops from other
+  addresses, and asks for exclusive use of the port on Windows.
+- `WireViewAgent/` (`wireview-agent`): `net8.0` plus `net8.0-windows10.0.17763.0` (WinExe,
+  WinRT toasts through Microsoft.Toolkit.Uwp.Notifications, `AttachConsole` for the CLI). Runs
+  the local `DeviceManager` (hwmon first, then serial), a second one for the remote hosts,
+  publishes always (all interfaces with LAN publishing on, loopback otherwise), alerts, shuts
+  down on a local fault, `--install`/`--uninstall` (XDG autostart, HKCU Run key),
+  `--status`, `--version`, `--help`, named-mutex single instance, clean exit on
+  SIGINT/SIGTERM.
+- Serial handover: `suspendSerial`/`resumeSerial` commands (loopback only, signed with the
+  agent's `agent.key` or the network secret). The agent closes the port, keeps publishing the
+  last readings with `connected: false` and `serialSuspended: true`, and takes the port back on
+  resume or when the window (at most 600 s) runs out.
+- GUI: the localhost probe (`LocalAgentProbe`, registered with
+  `DeviceManager.SetLocalOwnerProbe`) runs after hwmon and before serial on every platform;
+  while the agent answers, serial is not opened and open serial entries are retired. Through
+  the agent: firmware flashing, device log read, theme transfers (via `DirectSerialSession`,
+  now on `ISerialPortOwner`), fault clearing, config and screen commands. No GUI fault toast
+  while the agent runs; the GUI publisher steps aside when the agent holds the port.
+
+Measured on Linux (self-contained single file, not trimmed, hwmon device, 1 s poll, one
+unreachable remote host): RSS 51 to 69 MB, PSS 45 to 58 MB, anonymous 10 to 17 MB, 15 threads,
+0.8 % of one core. About 29 MB of that is the mapped single-file bundle and 9 MB the JIT's
+double mapping, so trimming and NativeAOT (step 5) are where the rest of the gap to the 25 to
+40 MB estimate is.
+
+Left:
+
+- 4.1 (wireviewd `shutdown-on-fault`, fault events, `wireviewctl watch --notify`) lives in the
+  wireview-hwmon repo and is not part of this change.
+- Packaging: the agent is in no package or zip yet.
+- Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
+  through the handover. Built and published for win-x64 from Linux only.
+- After a flash through the agent the Device page shows the old firmware version until the
+  device is selected again (the agent's device never disconnects from the GUI's side).
+- Trimming or NativeAOT for the agent.
+
 ## 5. Phase 3 (optional): the agent in Rust
 
 Only if the .NET agent's 25 to 40 MB is still judged too much. Scope is small and fully specified

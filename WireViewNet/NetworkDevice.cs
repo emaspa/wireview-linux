@@ -9,9 +9,12 @@ namespace WireView2.Net
     /// A WireView on another host, read over the LAN via its <c>GET /sensors</c>
     /// endpoint. Implements <see cref="IWireViewDevice"/> so it lives in the same
     /// <c>DeviceManager</c> collection as local devices — the rest of the app
-    /// treats it identically. Read-only: it has no command surface.
+    /// treats it identically. Writes go through <see cref="SendCommandAsync"/>.
+    /// The headless agent on this machine is reached the same way
+    /// (<see cref="IsLocalAgent"/>); for it, the device also lends out the serial
+    /// port (<see cref="ISerialPortOwner"/>).
     /// </summary>
-    public sealed class NetworkDevice : IWireViewDevice, IDisposable
+    public sealed class NetworkDevice : IWireViewDevice, ISerialPortOwner, IDisposable
     {
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(4) };
 
@@ -38,6 +41,18 @@ namespace WireView2.Net
         public string BuildString { get; private set; } = "";
         public string UniqueId { get; }
         public int PollIntervalMs { get; set; } = 1000;
+
+        /// <summary>True for the headless wireview-agent on this machine: the device
+        /// is local hardware that the agent owns, reached over localhost.</summary>
+        public bool IsLocalAgent { get; init; }
+
+        /// <summary>When set, read before every poll instead of <see cref="PollIntervalMs"/>
+        /// (the agent's device follows the GUI's local poll rate).</summary>
+        public Func<int>? PollIntervalProvider { get; init; }
+
+        /// <summary>True while the agent has handed its serial port to a local
+        /// client (from the last snapshot).</summary>
+        public bool SerialSuspended { get; private set; }
 
         /// <summary>The host:port this device is read from (for UI display).</summary>
         public string Endpoint => _baseUrl;
@@ -76,7 +91,8 @@ namespace WireView2.Net
         {
             while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(PollIntervalMs, ct).ConfigureAwait(false);
+                int interval = PollIntervalProvider?.Invoke() ?? PollIntervalMs;
+                await Task.Delay(Math.Clamp(interval, 50, 5000), ct).ConfigureAwait(false);
                 bool ok = PollOnce();
                 SetConnected(ok);
                 if (!ok) return; // device gone from remote -> drop; manager prunes & may re-add
@@ -93,8 +109,12 @@ namespace WireView2.Net
                 if (dto == null) return false;
 
                 if (!string.IsNullOrWhiteSpace(snap!.Host)) HostName = snap.Host;
+                SerialSuspended = snap.SerialSuspended;
 
                 DeviceName = string.IsNullOrWhiteSpace(dto.Name) ? DeviceName : dto.Name;
+                // Same convention as HwmonDevice's "(hwmon + daemon)" suffix.
+                if (IsLocalAgent && !DeviceName.EndsWith(AgentSuffix, StringComparison.Ordinal))
+                    DeviceName += AgentSuffix;
                 HardwareRevision = dto.HwRev;
                 UpdateIdentity(dto.HwRev, dto.Name);
                 FirmwareVersion = dto.FwVer;
@@ -237,6 +257,40 @@ namespace WireView2.Net
                 return (version, Convert.FromBase64String(b64));
             }
             catch { return null; }
+        }
+
+        private const string AgentSuffix = " (agent)";
+
+        // ---- Serial handover (local agent only) ----
+
+        /// <inheritdoc/>
+        public string SerialOwnerName => "the WireView agent";
+
+        /// <inheritdoc/>
+        public DaemonResult RequestSuspendSerial(int seconds)
+            => IsLocalAgent ? SendSync(WireViewCommand.SuspendSerial(UniqueId, seconds)) : DaemonResult.Unavailable;
+
+        /// <inheritdoc/>
+        public DaemonResult ResumeSerial()
+            => IsLocalAgent ? SendSync(WireViewCommand.ResumeSerial(UniqueId)) : DaemonResult.Unavailable;
+
+        // The agent keeps serving its last reading while suspended, so the
+        // device stays connected; nothing to mark.
+        void ISerialPortOwner.BeginSerialSession() { }
+        void ISerialPortOwner.EndSerialSession() { }
+
+        /// <summary>Sends a command and blocks for the answer (the handover API is
+        /// synchronous, like wireviewd's socket). Call it off the UI thread.</summary>
+        private DaemonResult SendSync(WireViewCommand cmd)
+        {
+            var r = SendCommandAsync(cmd).GetAwaiter().GetResult();
+            return r.Outcome switch
+            {
+                CommandOutcome.Ok => DaemonResult.Ok,
+                CommandOutcome.Unreachable => DaemonResult.Unavailable,
+                CommandOutcome.HttpError when r.StatusCode == 503 => DaemonResult.NotConnected,
+                _ => DaemonResult.Error,
+            };
         }
 
         public void Dispose() => Disconnect();

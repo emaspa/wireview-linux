@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- wireview-agent: the headless always-on process (docs/footprint-plan.md
+       section 4.2). Owns the device, publishes it on the LAN (loopback only while
+       LAN publishing is off), raises fault alerts and optionally shuts the PC down
+       on a fault. References only the two Avalonia-free libraries, never Avalonia.
+
+       Two targets: net8.0 (Linux, macOS) and net8.0-windows10.0.17763.0 (Windows:
+       WinRT toast notifications, and a windowless WinExe so the logon start shows
+       no console; CLI flags attach to the parent console). A -r/RuntimeIdentifier
+       picks the matching one, so `dotnet publish -r linux-x64` and
+       `dotnet publish -r win-x64` need no -f. -->
+  <!-- No runtime identifier (solution build): both targets. With one, only the
+       matching target, as a single TargetFramework (publish refuses a
+       TargetFrameworks list, even a one-item list, without -f). -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == ''">
+    <TargetFrameworks>net8.0;net8.0-windows10.0.17763.0</TargetFrameworks>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <TargetFramework Condition="$(RuntimeIdentifier.StartsWith('win'))">net8.0-windows10.0.17763.0</TargetFramework>
+    <TargetFramework Condition="!$(RuntimeIdentifier.StartsWith('win'))">net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Lets the Windows target build (and restore its targeting pack) on Linux. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <OutputType>Exe</OutputType>
+    <OutputType Condition="$(TargetFramework.Contains('-windows'))">WinExe</OutputType>
+    <AssemblyName>wireview-agent</AssemblyName>
+    <RootNamespace>WireView2.Agent</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <!-- Footprint, as in WireView2.csproj. System.GC.ConserveMemory lives in
+         runtimeconfig.template.json (no MSBuild property). -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <AssemblyTitle>WireView Agent</AssemblyTitle>
+    <Version>1.3.2.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WireViewDeviceLib\WireViewDeviceLib\WireViewDeviceLib.csproj" />
+    <ProjectReference Include="..\WireViewNet\WireViewNet.csproj" />
+  </ItemGroup>
+</Project>

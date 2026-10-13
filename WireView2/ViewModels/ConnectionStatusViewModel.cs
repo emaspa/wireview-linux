@@ -1,9 +1,8 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
+using WireView2.Net;
 using WireView2.Services;
 
 namespace WireView2.ViewModels;
@@ -19,11 +18,8 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     private string _faultIcon = "?";
     private ushort _lastFaultStatus;
     private ushort _lastFaultLog;
-    private DateTime _lastToastUtc = DateTime.MinValue;
-    private bool _prevRawFaultAny;
-    private ushort _lastShownFaultStatus;
-
-    private static readonly TimeSpan ToastCooldown = TimeSpan.FromSeconds(10.0);
+    // Debounce, edge detection and toast cooldown (shared with wireview-agent).
+    private readonly FaultMonitor _faultMonitor = new();
 
     // --------------- Connection state ---------------
 
@@ -37,8 +33,13 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         }
     }
 
-    public string ConnectionText => IsConnected ? "Connected" : "Disconnected";
-    public string StatusText => IsConnected ? "Connected" : "Disconnected";
+    public string ConnectionText => IsConnected ? ConnectedText : "Disconnected";
+    public string StatusText => IsConnected ? ConnectedText : "Disconnected";
+
+    /// <summary>"Connected", or "Connected via agent" when the selected device is
+    /// reached through wireview-agent on this machine.</summary>
+    private string ConnectedText =>
+        _connector.Device is NetworkDevice { IsLocalAgent: true } ? "Connected via agent" : "Connected";
 
     // --------------- Fault state ---------------
 
@@ -151,6 +152,11 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
+        else if (_connector.Device is NetworkDevice { IsLocalAgent: true } agent)
+        {
+            // The agent owns the port: relay the clear through it.
+            _ = ClearFaultsViaAgentAsync(agent, keepNoActive, keepWholeLog);
+        }
 
         if (Dispatcher.UIThread.CheckAccess())
         {
@@ -160,6 +166,20 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         {
             Dispatcher.UIThread.Post(() => HasFault = false, DispatcherPriority.Background);
         }
+    }
+
+    /// <summary>Clears faults on a device the local agent owns (keep-masks as for
+    /// the direct paths), then refreshes its screen. A failure is reported with
+    /// the same notification as a wireviewd failure.</summary>
+    public async System.Threading.Tasks.Task ClearFaultsViaAgentAsync(NetworkDevice agent, int keepStatusMask, int keepLogMask)
+    {
+        var r = await agent.SendCommandAsync(WireViewCommand.Faults(agent.UniqueId, keepStatusMask, keepLogMask));
+        if (!r.Ok)
+        {
+            _toast.Show("WireView", r.FailureText("Clearing the fault"));
+            return;
+        }
+        await agent.SendCommandAsync(WireViewCommand.Screen(agent.UniqueId, (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
     }
 
     // --------------- Event handlers ---------------
@@ -187,45 +207,29 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         // reply, after the connect event; SetEdition ignores an unchanged edition.
         ApplyEditionFromCurrentDevice();
 
-        // Debounce: the serial protocol has no framing/CRC, so a desynced
-        // read can pulse garbage into the fault fields for a single poll.
-        // Real faults persist until cleared (the device latches them in the
-        // fault log), so only honor fault bits seen on two consecutive polls.
-        ushort rawStatus = data.FaultStatus;
-        ushort rawLog = data.FaultLog;
-        bool prevRawAny = _prevRawFaultAny;
-        _prevRawFaultAny = (rawStatus | rawLog) != 0;
-        if ((rawStatus | rawLog) != 0 && !prevRawAny)
-        {
-            rawStatus = 0;
-            rawLog = 0;
-        }
+        // Debounce (a fault must be seen on two consecutive polls), edge
+        // detection and cooldown: see FaultMonitor.
+        var fault = _faultMonitor.Observe(data);
+        SetFault(fault.Status, fault.Log);
 
-        ushort prevShown = _lastShownFaultStatus;
-        _lastShownFaultStatus = rawStatus;
-        SetFault(rawStatus, rawLog);
-
-        if (prevShown == 0 && rawStatus != 0
-            && DateTime.UtcNow - _lastToastUtc > ToastCooldown)
+        if (fault.Raised)
         {
-            _lastToastUtc = DateTime.UtcNow;
+            // wireview-agent raises its own alert for every device it watches
+            // (this machine's and the remote hosts') and shuts down for this
+            // machine's device: one notification, one shutdown. A remote device
+            // selected here keeps the GUI's own shutdown, as before.
+            bool agentRunning = _connector.Device is NetworkDevice { IsLocalAgent: true }
+                || WireViewDiscoveryService.Shared.AgentPresent
+                || AgentInstance.IsRunning();
+            bool localDevice = _connector.Device is not NetworkDevice { IsLocalAgent: false };
+
             // Format from the data directly: the FaultText property is set
             // via a UI-thread post and may not be updated yet on this thread.
-            string message = FormatFaults(rawStatus);
-            _toast.Show("WireView Fault", message);
+            if (!agentRunning)
+                _toast.Show("WireView Fault", fault.Text);
 
-            if (AppSettings.Current.SoftwareShutdownOnFault)
-            {
-                try
-                {
-                    Process.Start("systemctl", "poweroff");
-                }
-                catch
-                {
-                    // Fallback if systemctl is not available
-                    try { Process.Start("shutdown", "-h now"); } catch { }
-                }
-            }
+            if (AppSettings.Current.SoftwareShutdownOnFault && !(agentRunning && localDevice))
+                SystemPower.Shutdown();
         }
     }
 
@@ -247,6 +251,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         if (Dispatcher.UIThread.CheckAccess())
         {
             IsConnected = connected;
+            OnPropertyChanged(nameof(ConnectionText));
             OnPropertyChanged(nameof(StatusText));
         }
         else
@@ -254,6 +259,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             Dispatcher.UIThread.Post(() =>
             {
                 IsConnected = connected;
+                OnPropertyChanged(nameof(ConnectionText));
                 OnPropertyChanged(nameof(StatusText));
             }, DispatcherPriority.Background);
         }
@@ -306,33 +312,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         OnPropertyChanged(nameof(LogCurrentImbalance));
     }
 
-    private static string FormatFaults(ushort faultStatus)
-    {
-        if (faultStatus == 0xFFFF)
-            return "FAULT (details unavailable via hwmon)";
-
-        var parts = new List<string>();
-        foreach (var fault in Enum.GetValues<WireViewPro2Device.FAULT>())
-        {
-            int bit = 1 << (int)fault;
-            if ((faultStatus & bit) != 0)
-                parts.Add(FriendlyFaultName(fault));
-        }
-        return parts.Count > 0
-            ? "FAULT: " + string.Join(", ", parts)
-            : "FAULT";
-    }
-
-    private static string FriendlyFaultName(WireViewPro2Device.FAULT f) => f switch
-    {
-        WireViewPro2Device.FAULT.FAULT_OTP_TCHIP      => "Chip Temperature",
-        WireViewPro2Device.FAULT.FAULT_OTP_TS          => "Connector Temperature",
-        WireViewPro2Device.FAULT.FAULT_OCP             => "Over-Current",
-        WireViewPro2Device.FAULT.FAULT_WIRE_OCP        => "Wire Over-Current",
-        WireViewPro2Device.FAULT.FAULT_OPP             => "Over-Power",
-        WireViewPro2Device.FAULT.FAULT_CURRENT_IMBALANCE => "Current Imbalance",
-        _ => f.ToString(),
-    };
+    private static string FormatFaults(ushort faultStatus) => FaultMonitor.FormatFaults(faultStatus);
 
     public void Dispose()
     {

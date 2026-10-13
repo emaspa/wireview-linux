@@ -57,20 +57,28 @@ namespace WireView2.Net
             FwVer = d.FirmwareVersion,
             BuildString = dev.BuildString,
             Timestamp = d.Timestamp,
-            PinVoltage = (double[])d.PinVoltage.Clone(),
-            PinCurrent = (double[])d.PinCurrent.Clone(),
-            TempInC = d.OnboardTempInC,
-            TempOutC = d.OnboardTempOutC,
-            Ext1C = d.ExternalTemp1C,
-            Ext2C = d.ExternalTemp2C,
+            PinVoltage = d.PinVoltage.Select(v => Finite(v, 0.0)).ToArray(),
+            PinCurrent = d.PinCurrent.Select(v => Finite(v, 0.0)).ToArray(),
+            TempInC = Finite(d.OnboardTempInC, AbsentTempC),
+            TempOutC = Finite(d.OnboardTempOutC, AbsentTempC),
+            Ext1C = Finite(d.ExternalTemp1C, AbsentTempC),
+            Ext2C = Finite(d.ExternalTemp2C, AbsentTempC),
             PsuCapW = d.PsuCapabilityW,
             FaultStatus = d.FaultStatus,
             FaultLog = d.FaultLog,
             Fan = d.FanDuty,
-            EnergyJ = d.EnergyJ,
-            SumCurrentA = d.SumCurrentA,
-            SumPowerW = d.SumPowerW,
+            EnergyJ = d.EnergyJ is { } e && double.IsFinite(e) ? e : null,
+            SumCurrentA = Finite(d.SumCurrentA, 0.0),
+            SumPowerW = Finite(d.SumPowerW, 0.0),
         };
+
+        /// <summary>How an absent temperature probe goes on the wire: wireviewd's
+        /// convention, which readers already treat as "no probe".</summary>
+        public const double AbsentTempC = -100.0;
+
+        // JSON has no NaN or infinity (System.Text.Json refuses to write them);
+        // hwmon reports an absent probe as NaN.
+        private static double Finite(double value, double absent) => double.IsFinite(value) ? value : absent;
 
         /// <summary>Reconstruct a <see cref="DeviceData"/> from this DTO (used by NetworkDevice in Phase 3).</summary>
         public DeviceData ToDeviceData() => new()
@@ -99,6 +107,18 @@ namespace WireView2.Net
         public string Host { get; set; } = "";
         public string AppVersion { get; set; } = "";
         public List<WireViewSensorDto> Devices { get; set; } = new();
+
+        /// <summary>The headless agent's version when the publisher is wireview-agent;
+        /// absent for the GUI and wireviewd. The GUI's localhost probe uses it to tell
+        /// the agent from any other publisher on the port.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Agent { get; set; }
+
+        /// <summary>wireview-agent only: true while the agent has handed its serial
+        /// port to a local client (the devices are then its last readings, with
+        /// <c>connected</c> false).</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool SerialSuspended { get; set; }
     }
 
     /// <summary>Shared JSON options for the publish/consume contract (camelCase).

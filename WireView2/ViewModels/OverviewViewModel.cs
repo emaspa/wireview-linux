@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia.Media;
 using WireView2.Controls;
 using WireView2.Device;
+using WireView2.Net;
 using WireView2.Services;
 
 namespace WireView2.ViewModels;
@@ -483,6 +484,10 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
                 return;
             }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
+        }
+        else if (_connector.Device is NetworkDevice { IsLocalAgent: true } agent)
+        {
+            _ = ConnectionStatus.ClearFaultsViaAgentAsync(agent, keep, keep);
         }
     }
 }

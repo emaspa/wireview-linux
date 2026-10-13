@@ -99,7 +99,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Picker label: "&lt;name&gt; -&lt;transport&gt; · &lt;id&gt;", transport being serial / hwmon / lan@host.</summary>
+    /// <summary>Picker label: "&lt;name&gt; -&lt;transport&gt; · &lt;id&gt;", transport being serial / hwmon / agent / lan@host.</summary>
     private static string DisplayFor(ManagedDevice md)
     {
         string name = md.Device.DeviceName;
@@ -110,6 +110,8 @@ public partial class MainWindowViewModel : ViewModelBase
         string uid = md.Device.UniqueId;
         string shortId = uid.Length >= 6 ? uid[^6..] : uid;
 
+        if (md.Device is NetworkDevice { IsLocalAgent: true })
+            return $"{name} - agent · {shortId}";
         if (md.Device is NetworkDevice nd)
             return $"\U0001F310 {name} - lan @ {nd.Endpoint.Replace("http://", string.Empty)} · {shortId}";
 

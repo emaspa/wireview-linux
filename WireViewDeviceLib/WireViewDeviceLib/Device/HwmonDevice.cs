@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace WireView2.Device
 {
-    public class HwmonDevice : IWireViewDevice, IDisposable
+    public class HwmonDevice : IWireViewDevice, ISerialPortOwner, IDisposable
     {
         private const string DaemonSocketPath = "/run/wireviewd.sock";
 
@@ -512,6 +512,9 @@ namespace WireView2.Device
         /// daemon stops feeding the kernel module during the handover, so sysfs goes
         /// stale (ENODATA) — that must not be treated as a lost device.</summary>
         private volatile bool _serialSessionActive;
+
+        /// <inheritdoc/>
+        public string SerialOwnerName => "wireviewd";
 
         public void BeginSerialSession() => _serialSessionActive = true;
         public void EndSerialSession() => _serialSessionActive = false;

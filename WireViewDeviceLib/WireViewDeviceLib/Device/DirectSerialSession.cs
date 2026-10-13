@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 namespace WireView2.Device
 {
     /// <summary>
-    /// Borrows the serial port from wireviewd for one bulk operation. The daemon
+    /// Borrows the serial port from wireviewd (or the headless agent, any
+    /// <see cref="ISerialPortOwner"/>) for one bulk operation. The daemon
     /// owns the port while it is attached (concurrent I/O corrupts both sides), but
     /// SPI-flash transfers — log readback, theme assets — only exist on the direct
     /// serial protocol. This asks the daemon to go quiet, runs the operation on a
@@ -31,7 +32,7 @@ namespace WireView2.Device
         // harness shortens it.
         private static int s_heartbeatIntervalMs = HeartbeatIntervalMs;
 
-        public static Task<T> RunAsync<T>(HwmonDevice daemonDevice,
+        public static Task<T> RunAsync<T>(ISerialPortOwner daemonDevice,
             Func<WireViewPro2Device, Task<T>> operation)
             => RunAsync(daemonDevice, (device, _) => operation(device), CancellationToken.None);
 
@@ -39,7 +40,7 @@ namespace WireView2.Device
         /// wireviewd. Its token is cancelled when <paramref name="cancellationToken"/>
         /// is, or when the daemon's suspension cannot be re-armed; in the latter case
         /// the call throws <see cref="SerialHandoverLostException"/>.</summary>
-        public static Task<T> RunAsync<T>(HwmonDevice daemonDevice,
+        public static Task<T> RunAsync<T>(ISerialPortOwner daemonDevice,
             Func<WireViewPro2Device, CancellationToken, Task<T>> operation,
             CancellationToken cancellationToken)
         {
@@ -70,16 +71,17 @@ namespace WireView2.Device
 
         /// <summary>The handover protocol around <paramref name="body"/>: suspend,
         /// heartbeat, abort on a failed re-arm, resume.</summary>
-        internal static async Task<T> RunWithHandoverAsync<T>(HwmonDevice daemonDevice,
+        internal static async Task<T> RunWithHandoverAsync<T>(ISerialPortOwner daemonDevice,
             Func<CancellationToken, Task<T>> body, CancellationToken cancellationToken)
         {
             var suspend = daemonDevice.RequestSuspendSerial(SuspendWindowSeconds);
             if (suspend == DaemonResult.Denied)
                 throw new DaemonDeniedException();
             if (suspend != DaemonResult.Ok)
-                throw new InvalidOperationException(
-                    "The hwmon daemon did not hand over the serial port (wireviewd too old? " +
-                    "Suspend needs wireviewd with WCMD_SUSPEND_SERIAL support).");
+                throw new InvalidOperationException(daemonDevice is HwmonDevice
+                    ? "The hwmon daemon did not hand over the serial port (wireviewd too old? " +
+                      "Suspend needs wireviewd with WCMD_SUSPEND_SERIAL support)."
+                    : $"{Capitalized(daemonDevice.SerialOwnerName)} did not hand over the serial port ({suspend.DescribeNeutral()}).");
 
             daemonDevice.BeginSerialSession();
             using var session = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -110,12 +112,12 @@ namespace WireView2.Device
                 }
                 catch (Exception ex) when (Volatile.Read(ref lost) >= 0)
                 {
-                    throw new SerialHandoverLostException((DaemonResult)Volatile.Read(ref lost), ex);
+                    throw new SerialHandoverLostException((DaemonResult)Volatile.Read(ref lost), ex, daemonDevice.SerialOwnerName);
                 }
                 // The operation may have ignored the token and returned after the
                 // device was disconnected under it; its result is not trustworthy.
                 if (Volatile.Read(ref lost) >= 0)
-                    throw new SerialHandoverLostException((DaemonResult)Volatile.Read(ref lost), null);
+                    throw new SerialHandoverLostException((DaemonResult)Volatile.Read(ref lost), null, daemonDevice.SerialOwnerName);
                 return result;
             }
             finally
@@ -126,6 +128,9 @@ namespace WireView2.Device
                 try { daemonDevice.ResumeSerial(); } catch { }
             }
         }
+
+        private static string Capitalized(string s) =>
+            s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
     }
 
     /// <summary>Thrown when a <see cref="DirectSerialSession"/> is aborted because
@@ -136,10 +141,20 @@ namespace WireView2.Device
         public DaemonResult Reason { get; }
 
         public SerialHandoverLostException(DaemonResult reason, Exception? inner)
-            : base(MessageFor(reason), inner)
+            : this(reason, inner, "wireviewd")
+        {
+        }
+
+        /// <param name="owner">The process that lent the port (<see cref="ISerialPortOwner.SerialOwnerName"/>).</param>
+        public SerialHandoverLostException(DaemonResult reason, Exception? inner, string owner)
+            : base(owner == "wireviewd" ? MessageFor(reason) : OwnerMessageFor(reason, owner), inner)
         {
             Reason = reason;
         }
+
+        private static string OwnerMessageFor(DaemonResult reason, string owner) =>
+            $"The transfer was stopped because {owner} could not keep the serial port " +
+            $"handed over ({reason.DescribeNeutral()}). Try again.";
 
         private static string MessageFor(DaemonResult reason) => reason switch
         {

@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewDeviceLib", "WireVi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewNet", "WireViewNet\WireViewNet.csproj", "{A38621C7-58F1-4E79-9CB6-E70B8336852B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewAgent", "WireViewAgent\WireViewAgent.csproj", "{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -25,5 +27,9 @@ Global
 		{A38621C7-58F1-4E79-9CB6-E70B8336852B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A38621C7-58F1-4E79-9CB6-E70B8336852B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A38621C7-58F1-4E79-9CB6-E70B8336852B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

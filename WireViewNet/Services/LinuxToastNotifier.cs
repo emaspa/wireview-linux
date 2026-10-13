@@ -2,6 +2,8 @@ using System.Diagnostics;
 
 namespace WireView2.Services;
 
+/// <summary>Desktop notifications on Linux through <c>notify-send</c>
+/// (libnotify). Best-effort: a missing notify-send is ignored.</summary>
 public sealed class LinuxToastNotifier : IToastNotifier
 {
     public void Show(string title, string message)

@@ -80,10 +80,12 @@ public class App : Application
                 AppSettings.SaveCurrent();
             }
             ApplyTheme(AppSettings.Current.ThemePreference);
+            // Before the tray starts the device manager: the probe for
+            // wireview-agent must be in place before the first serial probe.
+            WireViewDiscoveryService.Shared.Start();
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;
             WireViewPublishService.Shared.Start();
-            WireViewDiscoveryService.Shared.Start();
             StartActivationListener(desktop);
             if (!AppSettings.Current.StartMinimized)
             {

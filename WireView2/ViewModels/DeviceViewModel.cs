@@ -253,10 +253,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Flashing needs the device on this host's USB — remote (LAN) devices
-    /// can't be flashed from here.</summary>
+    /// can't be flashed from here. A device reached through wireview-agent on this
+    /// machine is on this host's USB: the agent hands the port over for the flash.</summary>
     public bool CanStartFirmwareUpdate =>
         !IsFirmwareUpdating && IsConnected && IsFirmwareUpdateSupported
-        && _device is WireViewPro2Device or HwmonDevice;
+        && _device is WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalAgent: true };
 
     public bool IsAveragingSupported
     {
@@ -558,7 +559,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             FirmwareUpdateStatus = "Not connected.";
             return;
         }
-        if (_device is not (WireViewPro2Device or HwmonDevice))
+        if (_device is not (WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalAgent: true }))
         {
             FirmwareUpdateStatus = "Remote devices can only be flashed from the host they are plugged into.";
             return;
@@ -662,6 +663,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         // it can be restored once the device is back.
         string? selectionToRestore = DeviceManager.Shared.SelectedId;
         string binPath = Path.Combine(Path.GetTempPath(), $"wireview2-fw-{Guid.NewGuid():N}.bin");
+        // Set once wireview-agent has closed its port for the flash; handed back
+        // in the finally below (the agent also takes it back on its own).
+        NetworkDevice? agentHandover = null;
         try
         {
             FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
@@ -682,6 +686,17 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                     if (boot is DaemonResult.Error or DaemonResult.NotConnected)
                     {
                         FirmwareUpdateStatus = $"Could not restart the device into its bootloader: {boot.Describe()}.";
+                        return;
+                    }
+                    break;
+                case NetworkDevice { IsLocalAgent: true } agent:
+                    // The agent owns the port: have it close the port, then send the
+                    // bootloader command over a direct connection of our own.
+                    string? bootError = await Task.Run(() => EnterBootloaderViaAgent(agent));
+                    agentHandover = agent;
+                    if (bootError != null)
+                    {
+                        FirmwareUpdateStatus = bootError;
                         return;
                     }
                     break;
@@ -728,9 +743,45 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         finally
         {
             try { File.Delete(binPath); } catch { }
+            if (agentHandover != null)
+            {
+                var handback = agentHandover;
+                _ = Task.Run(() => { try { handback.ResumeSerial(); } catch { } });
+            }
             IsFirmwareUpdating = false;
             if (selectionToRestore != null)
                 _ = RestoreDeviceSelectionAsync(selectionToRestore);
+        }
+    }
+
+    /// <summary>How long wireview-agent keeps its port closed for a firmware flash
+    /// before it takes the port back on its own (the flash hands it back sooner).</summary>
+    private const int AgentFlashHandoverSeconds = 600;
+
+    /// <summary>Asks wireview-agent to close its serial port and restarts the
+    /// device into its DFU bootloader over a direct connection. Returns null on
+    /// success, else the status line. Blocking: run it off the UI thread.</summary>
+    private static string? EnterBootloaderViaAgent(NetworkDevice agent)
+    {
+        var suspend = agent.RequestSuspendSerial(AgentFlashHandoverSeconds);
+        if (suspend != DaemonResult.Ok)
+            return $"The WireView agent did not hand over the serial port ({suspend.DescribeNeutral()}).";
+
+        string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
+        if (port == null)
+            return "No WireView serial port found.";
+        var direct = new WireViewPro2Device(port);
+        try
+        {
+            direct.Connect();
+            if (!direct.Connected)
+                return $"Could not open {port}.";
+            direct.EnterBootloader();
+            return null;
+        }
+        finally
+        {
+            try { direct.Disconnect(); } catch { }
         }
     }
 
@@ -874,7 +925,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
         else if (_device != null)
         {
-            DeviceName = _device is NetworkDevice nd
+            DeviceName = _device is NetworkDevice { IsLocalAgent: false } nd
                 ? $"{_device.DeviceName}  ·  remote @ {nd.Endpoint.Replace("http://", string.Empty)}"
                 : _device.DeviceName;
             DeviceEdition = _device.Edition;

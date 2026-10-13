@@ -13,11 +13,17 @@ namespace WireView2.Net
     /// Windows). Serves read-only <c>GET /sensors</c> (open) and, when a secret +
     /// command sink are supplied, authenticated <c>POST /command</c> (HMAC-signed,
     /// see <see cref="HmacAuth"/>). Flood-protected: a concurrency cap, a request
-    /// size cap (413), and a per-IP rate limit (429).
+    /// size cap (413), and a per-IP rate limit (429). Binds all interfaces unless
+    /// a bind address is given (the headless agent binds loopback only while LAN
+    /// publishing is off). Commands from this machine may also be signed with a
+    /// local-only secret (the agent's key file), and <see cref="WireViewCommand.LocalOnly"/>
+    /// ops are refused from any other address.
     /// </summary>
     public sealed class SensorPublisher : IDisposable
     {
         private readonly int _port;
+        private readonly IPAddress _bindAddress;
+        private readonly Func<string?>? _localSecretProvider;
         private readonly Func<WireViewHostSnapshot> _snapshotProvider;
         private readonly Func<string?>? _secretProvider;
         private readonly Func<WireViewCommand, DaemonResult>? _commandSink;
@@ -39,9 +45,13 @@ namespace WireView2.Net
             Func<string?, ConfigSnapshot?>? configReader = null,
             int maxConnections = 8,
             int maxRequestBytes = 8192,
-            int rateLimitPerMinute = 120)
+            int rateLimitPerMinute = 120,
+            IPAddress? bindAddress = null,
+            Func<string?>? localSecretProvider = null)
         {
             _port = port;
+            _bindAddress = bindAddress ?? IPAddress.Any;
+            _localSecretProvider = localSecretProvider;
             _snapshotProvider = snapshotProvider;
             _secretProvider = secretProvider;
             _commandSink = commandSink;
@@ -53,10 +63,21 @@ namespace WireView2.Net
 
         public bool IsRunning { get; private set; }
 
+        /// <summary>The port this publisher listens on.</summary>
+        public int Port => _port;
+
+        /// <summary>The address it binds (<see cref="IPAddress.Any"/> unless set).</summary>
+        public IPAddress BindAddress => _bindAddress;
+
         public void Start()
         {
             if (IsRunning) return;
-            _listener = new TcpListener(IPAddress.Any, _port); // all interfaces; no ACL needed
+            _listener = new TcpListener(_bindAddress, _port); // no ACL needed
+            // Windows lets a wildcard bind share a port with a specific-address
+            // bind (and vice versa) unless one side asks for exclusive use, which
+            // would let two publishers answer on one port at the same time.
+            if (OperatingSystem.IsWindows())
+                _listener.ExclusiveAddressUse = true;
             _listener.Start();
             _cts = new CancellationTokenSource();
             _loop = Task.Run(() => AcceptLoopAsync(_cts.Token));
@@ -88,7 +109,9 @@ namespace WireView2.Net
                     gotSlot = _slots.Wait(0);
                     if (!gotSlot) { await WriteJson(stream, 503, "Service Unavailable", "").ConfigureAwait(false); return; }
 
-                    string ip = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.ToString() ?? "?";
+                    var peer = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
+                    string ip = peer?.ToString() ?? "?";
+                    bool loopback = peer != null && IPAddress.IsLoopback(peer);
                     if (RateLimited(ip)) { await WriteJson(stream, 429, "Too Many Requests", "").ConfigureAwait(false); return; }
 
                     using var readCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -110,7 +133,17 @@ namespace WireView2.Net
 
                     if (method == "GET" && path == "/sensors")
                     {
-                        var json = JsonSerializer.Serialize(_snapshotProvider(), WireViewJson.Options);
+                        string json;
+                        try
+                        {
+                            json = JsonSerializer.Serialize(_snapshotProvider(), WireViewJson.Options);
+                        }
+                        catch (Exception ex)
+                        {
+                            FileLog.Warn($"/sensors snapshot failed: {ex.Message}");
+                            await WriteJson(stream, 500, "Internal Server Error", "{\"error\":\"snapshot\"}").ConfigureAwait(false);
+                            return;
+                        }
                         await WriteJson(stream, 200, "OK", json, cors: true).ConfigureAwait(false);
                         return;
                     }
@@ -149,7 +182,7 @@ namespace WireView2.Net
                         }
                         int bodyLen = Math.Min(want, total - bodyStart);
                         string body = bodyLen > 0 ? Encoding.UTF8.GetString(buf, bodyStart, bodyLen) : "";
-                        await HandleCommand(stream, headers, body, ip).ConfigureAwait(false);
+                        await HandleCommand(stream, headers, body, ip, loopback).ConfigureAwait(false);
                         return;
                     }
 
@@ -166,19 +199,27 @@ namespace WireView2.Net
             }
         }
 
-        private async Task HandleCommand(NetworkStream stream, string headers, string body, string ip)
+        private async Task HandleCommand(NetworkStream stream, string headers, string body, string ip, bool loopback)
         {
             string? secret = _secretProvider?.Invoke();
-            if (string.IsNullOrEmpty(secret) || _commandSink == null)
+            // The local secret is only honoured for connections from this machine.
+            string? localSecret = loopback ? _localSecretProvider?.Invoke() : null;
+            if ((string.IsNullOrEmpty(secret) && string.IsNullOrEmpty(localSecret)) || _commandSink == null)
             {
                 FileLog.Warn($"command from {ip} rejected: writes disabled");
                 await WriteJson(stream, 403, "Forbidden", "{\"error\":\"writes disabled\"}").ConfigureAwait(false);
                 return;
             }
 
-            if (!HmacAuth.Verify(secret, Header(headers, HmacAuth.TsHeader),
-                                 Header(headers, HmacAuth.NonceHeader),
-                                 Header(headers, HmacAuth.SigHeader), body))
+            string? ts = Header(headers, HmacAuth.TsHeader);
+            string? nonce = Header(headers, HmacAuth.NonceHeader);
+            string? sig = Header(headers, HmacAuth.SigHeader);
+            // A failed check records nothing, so trying the second secret after
+            // the first is safe for replay protection.
+            bool authentic =
+                (!string.IsNullOrEmpty(localSecret) && HmacAuth.Verify(localSecret, ts, nonce, sig, body)) ||
+                (!string.IsNullOrEmpty(secret) && HmacAuth.Verify(secret, ts, nonce, sig, body));
+            if (!authentic)
             {
                 FileLog.Warn($"command from {ip} rejected: bad/expired signature");
                 await WriteJson(stream, 401, "Unauthorized", "{\"error\":\"auth\"}").ConfigureAwait(false);
@@ -190,6 +231,13 @@ namespace WireView2.Net
             {
                 FileLog.Warn($"command from {ip} rejected: bad command body");
                 await WriteJson(stream, 400, "Bad Request", "{\"error\":\"bad command\"}").ConfigureAwait(false);
+                return;
+            }
+
+            if (cmd.LocalOnly && !loopback)
+            {
+                FileLog.Warn($"command from {ip} rejected: op={cmd.Op} is local only");
+                await WriteJson(stream, 403, "Forbidden", "{\"error\":\"local only\"}").ConfigureAwait(false);
                 return;
             }
 
