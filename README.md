@@ -150,19 +150,19 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 [`wireview-linux-bin`](https://aur.archlinux.org/packages/wireview-linux-bin) installs the pre-built release binary (no .NET SDK, no compile) and tracks the latest release:
 
 ```bash
-paru -S wireview-linux-bin   # or: yay -S wireview-linux-bin
+yay -S wireview-linux-bin    # or: paru -S wireview-linux-bin
 ```
 
 [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux), started by arakmar and now co-maintained here, builds the same release from source with the Arch .NET SDK. It is updated together with the binary package, so pick whichever you prefer:
 
 ```bash
-paru -S wireview-linux       # builds from source, takes a few minutes
+yay -S wireview-linux        # builds from source, takes a few minutes
 ```
 
 To also install the hwmon kernel module and daemon for system-wide sensor integration, load the module and enable the daemon after installing:
 
 ```bash
-paru -S wireview-hwmon wireview-hwmon-dkms
+yay -S wireview-hwmon wireview-hwmon-dkms
 sudo modprobe wireview_hwmon
 sudo systemctl enable --now wireviewd
 ```
