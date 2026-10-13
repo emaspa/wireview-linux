@@ -107,10 +107,24 @@ internal static class EditionThemeService
     private static bool _paletteApplied;
     private static ResourceOverrides? _appliedOverrides;
 
-    // Only the background in use is kept decoded (a 3840 px photo is ~30 MB of
-    // RGBA); switching drops the reference and the GC frees it.
+    // Only the background in use is kept decoded; switching drops the reference
+    // and the GC frees it. The photos are 3840 px wide (~30 MB of RGBA at full
+    // size), so they are decoded at the widest screen's pixel width instead,
+    // which App reports through SetBackgroundTargetWidth once a window exists.
+    // Until then no background is decoded: there is nothing to draw it on.
     private static string? _backgroundUri;
     private static Bitmap? _background;
+    private static int _backgroundWidth;
+    private const int BackgroundSourceWidth = 3840;
+
+    /// <summary>Default (non-edition) backgrounds per theme variant. App.axaml
+    /// declares the brushes without a Source; RefreshBackground fills in the one
+    /// for the active variant and clears the other.</summary>
+    private static readonly (ThemeVariant Variant, string Uri)[] DefaultBackgroundUris =
+    {
+        (ThemeVariant.Light, "avares://WireView2/Assets/Backgrounds/CPU_WELLE_inv.jpg"),
+        (ThemeVariant.Dark, "avares://WireView2/Assets/Backgrounds/CPU_WELLE.jpg"),
+    };
 
     public static WireViewDeviceTheme ActiveEdition => _activeEdition;
 
@@ -223,7 +237,7 @@ internal static class EditionThemeService
                 app.Resources["SideNavHoverBrush"] = new SolidColorBrush(o.SideNavHover);
                 app.Resources["SideNavPressedBrush"] = new SolidColorBrush(o.SideNavPressed);
                 app.Resources["OverlayPanelBrush"] = new SolidColorBrush(o.OverlayPanel);
-                app.Resources[AppBackgroundBrushKey] = new ImageBrush(LoadBackground(o.BackgroundUri))
+                app.Resources[AppBackgroundBrushKey] = new ImageBrush
                 {
                     Stretch = Stretch.UniformToFill,
                     AlignmentX = AlignmentX.Center,
@@ -246,8 +260,46 @@ internal static class EditionThemeService
             }
             _appliedOverrides = o;
         }
+        RefreshBackground(app, palette);
         ApplyBackgroundOpacity(AppSettings.Current.BackgroundOpacity);
         ApplyBackgroundColor(AppSettings.Current.BackgroundColorPreference);
+    }
+
+    /// <summary>Tells the service how wide the background will be drawn at most
+    /// (the widest screen, in pixels). Called by App when the main window is
+    /// created. Growing re-decodes; a smaller width keeps the larger bitmap.</summary>
+    public static void SetBackgroundTargetWidth(int pixels)
+    {
+        if (pixels <= 0 || pixels <= _backgroundWidth) return;
+        _backgroundWidth = pixels;
+        _background = null;
+        _backgroundUri = null;
+        if (Application.Current is { } app) RefreshBackground(app, _activePalette);
+    }
+
+    /// <summary>Points the background brush in effect at the decoded bitmap: the
+    /// edition override brush in app.Resources, or the active variant's brush in
+    /// the theme dictionaries (the other variant's brush is cleared so only one
+    /// background stays decoded). No-op until the target width is known.</summary>
+    private static void RefreshBackground(Application app, ThemePalette palette)
+    {
+        if (_backgroundWidth == 0) return;
+        if (palette.Overrides is { } o)
+        {
+            if (app.Resources.TryGetValue(AppBackgroundBrushKey, out object? r) && r is ImageBrush brush)
+                brush.Source = LoadBackground(o.BackgroundUri);
+            return;
+        }
+        var active = app.ActualThemeVariant == ThemeVariant.Light ? ThemeVariant.Light : ThemeVariant.Dark;
+        foreach (var (variant, uri) in DefaultBackgroundUris)
+        {
+            if (app.Resources.ThemeDictionaries.TryGetValue(variant, out var provider)
+                && provider is ResourceDictionary dict
+                && dict.TryGetValue(AppBackgroundBrushKey, out object? r) && r is ImageBrush brush)
+            {
+                brush.Source = variant == active ? LoadBackground(uri) : null;
+            }
+        }
     }
 
     private static Bitmap LoadBackground(string uri)
@@ -255,7 +307,8 @@ internal static class EditionThemeService
         if (_background == null || _backgroundUri != uri)
         {
             using var stream = AssetLoader.Open(new Uri(uri));
-            _background = new Bitmap(stream);
+            int width = Math.Min(_backgroundWidth, BackgroundSourceWidth);
+            _background = Bitmap.DecodeToWidth(stream, width, BitmapInterpolationMode.HighQuality);
             _backgroundUri = uri;
         }
         return _background;

@@ -586,6 +586,10 @@ public class App : Application
                         args.Cancel = true;
                         window.Hide();
                         MainWindowVisibilityChanged?.Invoke(this, false);
+                        // Hidden in the tray the app may sit for days: give back
+                        // what the views just released (chart snapshots, render
+                        // caches) instead of waiting for the next natural GC.
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: false, compacting: true);
                     }
                 };
                 if (startMinimized)
@@ -597,6 +601,9 @@ public class App : Application
                 };
                 desktop.MainWindow = window;
                 EditionThemeService.ApplyBackgroundColor(AppSettings.Current.BackgroundColorPreference);
+                // The background photo is decoded at the widest screen's width.
+                try { EditionThemeService.SetBackgroundTargetWidth(window.Screens.All.Max(s => s.Bounds.Width)); }
+                catch (InvalidOperationException) { EditionThemeService.SetBackgroundTargetWidth(1920); }
                 window.Show();
                 MainWindowVisibilityChanged?.Invoke(this, !startMinimized);
                 if (!startMinimized) window.Activate();

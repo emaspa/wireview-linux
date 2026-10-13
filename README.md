@@ -350,6 +350,21 @@ wireview-linux/
    Arch-based distros)
 4. If using a VM, ensure USB passthrough is configured for the VID/PID pair
 
+### Rendering backend
+
+On Linux the app draws with Avalonia's software renderer. On this UI it is as
+fast as OpenGL, it keeps Mesa and its shader compiler out of the process (about
+55 MB less resident memory), and it avoids the GL-under-XWayland glitches some
+Nvidia setups showed. To try the GPU path instead, set `WIREVIEW_RENDER_MODE`
+to a comma-separated preference list before launching:
+
+```bash
+WIREVIEW_RENDER_MODE=egl,software wireview-linux   # Linux: software, egl, glx, vulkan
+set WIREVIEW_RENDER_MODE=software                   # Windows: software, angle, wgl, vulkan
+```
+
+Windows keeps Avalonia's default (ANGLE on Direct3D) unless the variable is set.
+
 ### Permission denied on /dev/ttyACM0
 
 ```bash
