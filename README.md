@@ -100,6 +100,7 @@ wireview-agent              # run in the foreground (Ctrl+C to stop), logs to st
 wireview-agent --install    # start it at login
 wireview-agent --uninstall  # stop starting it at login
 wireview-agent --status     # connected device, fault state and agent version
+wireview-agent --no-tray    # run without the tray icon
 wireview-agent --version
 wireview-agent --help
 ```
@@ -111,6 +112,21 @@ on Windows (no administrator rights needed). It logs to
 `--status` exits with 0 when a device is connected with no active fault, 3 when
 the agent is not running, 4 when it runs without a connected device, and 5 on an
 active fault. A second copy says it is already running and exits with 1.
+
+**Tray icon.** The agent puts the WireView icon in the notification area. Its
+menu shows the live state on top (`WireView Pro II: 123.4 W`, the fault while one
+is active, *Serial port lent to the app* during a handover, or *No device*),
+then **Open WireView** (starts the app, or on Windows brings the running app's
+window forward), the **Publish on the LAN**, **Shutdown on fault** and **Start at
+login** checkboxes, and **Quit**. The tooltip carries the same live line. The
+two settings checkboxes write `settings.json` and apply at once, like the same
+switches in the app; *Start at login* is `--install`/`--uninstall`. If the app is
+open at the same time, its next settings save writes back its own copy of those
+two switches, so change them in one place while both run. On Linux the icon is a
+StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it out of the box, GNOME
+needs the AppIndicator/KStatusNotifierItem extension. On a desktop without a tray
+(or with no session bus) the agent logs one line, keeps running without the
+icon and adds it when a tray shows up later. `--no-tray` turns it off.
 
 On Windows the agent has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get

@@ -43,6 +43,24 @@
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
   </ItemGroup>
 
+  <!-- Tray icon (TrayIcon.cs). Linux: StatusNotifierItem plus com.canonical.dbusmenu
+       over the session bus, written against the low-level D-Bus protocol library
+       (no code generation, no UI framework). Windows: Shell_NotifyIcon through
+       P/Invoke, no package. -->
+  <ItemGroup Condition="!$(TargetFramework.Contains('-windows'))">
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
+  </ItemGroup>
+
+  <!-- The GUI's icon: the tray image on both platforms (Windows uses an entry of
+       the .ico as is, Linux converts the 32-bit entries to SNI pixmaps), and the
+       Windows executable's icon. -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <ApplicationIcon>..\WireView2\Assets\Icons\bear.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\WireView2\Assets\Icons\bear.ico" LogicalName="wireview-agent.ico" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\WireViewDeviceLib\WireViewDeviceLib\WireViewDeviceLib.csproj" />
     <ProjectReference Include="..\WireViewNet\WireViewNet.csproj" />

@@ -22,20 +22,44 @@ internal static class AgentInstaller
         "WireView Agent",
         "WireView Pro II headless agent: fault alerts, shutdown on fault, LAN publishing");
 
-    public static int Install()
+    /// <summary>Whether the login entry exists (the tray's "Start at login").</summary>
+    public static bool IsInstalled()
     {
         try
         {
             if (OperatingSystem.IsWindows())
             {
-                string where = InstallRunKey();
-                Console.WriteLine($"Installed: wireview-agent starts at login ({where}).");
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath);
+                return key?.GetValue(RunValueName) != null;
             }
-            else
-            {
-                Xdg.Set(true);
-                Console.WriteLine($"Installed: wireview-agent starts at login ({Xdg.DesktopFilePath}).");
-            }
+            return Xdg.IsEnabled;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Writes or removes the login entry; returns where it lives.
+    /// Throws on failure.</summary>
+    public static string SetInstalled(bool installed)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            if (installed) return InstallRunKey();
+            UninstallRunKey();
+            return $@"HKCU\{RunKeyPath}";
+        }
+        Xdg.Set(installed);
+        return Xdg.DesktopFilePath;
+    }
+
+    public static int Install()
+    {
+        try
+        {
+            string where = SetInstalled(true);
+            Console.WriteLine($"Installed: wireview-agent starts at login ({where}).");
             Console.WriteLine("Run wireview-agent now to start it without logging out.");
             return Program.ExitOk;
         }

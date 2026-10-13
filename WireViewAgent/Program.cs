@@ -25,7 +25,8 @@ internal static class Program
         "\n" +
         "Headless WireView Pro II agent: owns the device, publishes it on the LAN,\n" +
         "raises fault alerts and, when set in the app, shuts the PC down on a fault.\n" +
-        "The WireView app connects through it while it runs.\n" +
+        "The WireView app connects through it while it runs. Its tray icon shows the\n" +
+        "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
         "\n" +
         "  (no option)    run in the foreground until Ctrl+C or SIGTERM\n" +
         "  --install      start the agent at login (Linux: XDG autostart entry,\n" +
@@ -33,6 +34,7 @@ internal static class Program
         "  --uninstall    remove that login entry\n" +
         "  --status       ask the running agent and print device and fault state\n" +
         "  --no-shutdown  run, but never power off (for testing shutdown on fault)\n" +
+        "  --no-tray      run without the tray icon (combines with --no-shutdown)\n" +
         "  --version      print the version\n" +
         "  --help         this text\n" +
         "\n" +
@@ -50,15 +52,15 @@ internal static class Program
         // the output of the CLI flags and of a foreground run.
         WindowsConsole.AttachToParent();
 #endif
+        // A foreground run takes any mix of its two flags; the other options
+        // come alone.
+        if (args.All(a => a is "--no-shutdown" or "--no-tray"))
+            return Run(noShutdown: args.Contains("--no-shutdown"), noTray: args.Contains("--no-tray"));
         if (args.Length > 1)
             return UsageError($"one option at a time, got: {string.Join(' ', args)}");
 
-        switch (args.Length == 0 ? "" : args[0])
+        switch (args[0])
         {
-            case "":
-                return Run(noShutdown: false);
-            case "--no-shutdown":
-                return Run(noShutdown: true);
             case "--status":
                 return StatusCommand.Run();
             case "--install":
@@ -85,7 +87,7 @@ internal static class Program
         return ExitUsage;
     }
 
-    private static int Run(bool noShutdown)
+    private static int Run(bool noShutdown, bool noTray)
     {
         using var instance = AgentInstance.TryAcquire();
         if (instance == null)
@@ -115,7 +117,13 @@ internal static class Program
 
         try
         {
-            using var service = new AgentService(Version, CreateNotifier(), noShutdown);
+            var notifier = CreateNotifier();
+            using var service = new AgentService(Version, notifier, noShutdown);
+            // The tray's Quit takes the same way out as a signal.
+            using var tray = noTray ? null : TrayController.Start(service, notifier, () =>
+            {
+                try { stop.Cancel(); } catch (ObjectDisposedException) { }
+            });
             service.Run(stop.Token);
             FileLog.Info("stopped");
             return ExitOk;

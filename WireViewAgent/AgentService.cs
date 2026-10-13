@@ -5,6 +5,13 @@ using WireView2.Services;
 
 namespace WireView2.Agent;
 
+/// <summary>What the tray shows about this PC's device.</summary>
+/// <param name="DeviceName">The connected device, null when none.</param>
+/// <param name="PowerW">Its latest total power.</param>
+/// <param name="FaultText">Its active fault (<see cref="FaultMonitor.FormatFaults"/>), null when clear.</param>
+/// <param name="Handover">The serial port is lent to a local client (the GUI).</param>
+internal readonly record struct AgentStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover);
+
 /// <summary>
 /// The agent's always-on work: owns this machine's WireView through its own
 /// <see cref="DeviceManager"/> (hwmon when wireviewd runs, otherwise the serial
@@ -14,7 +21,8 @@ namespace WireView2.Agent;
 /// off, because the GUI reaches the device through it), raises fault alerts with
 /// <see cref="FaultMonitor"/>, shuts the PC down on a local fault when the
 /// setting asks for it, and lends the serial port to the GUI on request.
-/// Settings changes made in the GUI are picked up every tick.
+/// Settings changes made in the GUI are picked up every tick, and so are the
+/// tray's (<see cref="RequestSettingsChange"/>).
 /// </summary>
 internal sealed class AgentService : IDisposable
 {
@@ -42,11 +50,21 @@ internal sealed class AgentService : IDisposable
     private readonly Dictionary<string, FaultMonitor> _monitors = new();
     private DateTime? _handoverUntil;     // set while the port is lent out
     private DateTime? _unfreezeBy;        // after a handover: stop showing the frozen readings by then
+    private volatile bool _handoverActive; // _handoverUntil != null, readable without _gate
+
+    // Last shown fault status per local device id (guarded by _monitors).
+    private readonly Dictionary<string, ushort> _localFault = new();
+    // Settings edits from the tray, applied on the next tick (guarded by itself).
+    private readonly List<(string What, Action<AppSettings> Change)> _settingsChanges = new();
 
     private (int Port, bool Lan)? _publishWanted;
     private (int Port, bool Lan)? _publishFailed;
     private DateTime _nextBindAttempt = DateTime.MinValue;
     private int _pollMs = -1;
+
+    /// <summary>Raised after every tick and on every reading of this PC's
+    /// device, on the tick or the device thread. The tray rate-limits.</summary>
+    public event Action? StatusChanged;
 
     public AgentService(string version, IToastNotifier toast, bool noShutdown)
     {
@@ -99,6 +117,7 @@ internal sealed class AgentService : IDisposable
             ApplySettings();
         }
 
+        ApplyRequestedSettings();
         EnsurePublisher();
 
         lock (_gate)
@@ -115,6 +134,64 @@ internal sealed class AgentService : IDisposable
                 _publish.Unfreeze();
             }
         }
+        RaiseStatusChanged();
+    }
+
+    // ---- Tray ----
+
+    /// <summary>This PC's device as the tray shows it. Never blocks on the
+    /// handover lock, so it is safe from the device thread.</summary>
+    public AgentStatus GetStatus()
+    {
+        if (_handoverActive) return new AgentStatus(null, null, null, Handover: true);
+        foreach (var d in _local.Devices)
+        {
+            if (!d.Device.Connected || d.Latest is not { } data) continue;
+            ushort fault;
+            lock (_monitors) _localFault.TryGetValue(d.Id, out fault);
+            return new AgentStatus(d.Device.DeviceName, data.SumPowerW,
+                fault != 0 ? FaultMonitor.FormatFaults(fault) : null, Handover: false);
+        }
+        return default;
+    }
+
+    /// <summary>Queues a settings edit (the tray's checkboxes). The next tick
+    /// applies it on top of a fresh read of settings.json, saves the file and
+    /// applies the settings, the same path a GUI edit takes. The save records the
+    /// file's new write time, so <see cref="AppSettings.ReloadIfChanged"/> does not
+    /// see the agent's own write as a change.</summary>
+    public void RequestSettingsChange(string what, Action<AppSettings> change)
+    {
+        lock (_settingsChanges) _settingsChanges.Add((what, change));
+    }
+
+    private void ApplyRequestedSettings()
+    {
+        (string What, Action<AppSettings> Change)[] pending;
+        lock (_settingsChanges)
+        {
+            if (_settingsChanges.Count == 0) return;
+            pending = _settingsChanges.ToArray();
+            _settingsChanges.Clear();
+        }
+        foreach (var (_, change) in pending) change(AppSettings.Current);
+        string what = string.Join(", ", pending.Select(p => p.What));
+        try
+        {
+            AppSettings.SaveCurrent();
+            FileLog.Info($"tray: {what}; saved to settings.json");
+        }
+        catch (Exception ex)
+        {
+            FileLog.Warn($"tray: {what}, but settings.json could not be saved: {ex.Message}");
+        }
+        ApplySettings();
+    }
+
+    private void RaiseStatusChanged()
+    {
+        try { StatusChanged?.Invoke(); }
+        catch (Exception ex) { FileLog.Warn($"tray update failed: {ex.Message}"); }
     }
 
     private void ApplySettings()
@@ -206,6 +283,7 @@ internal sealed class AgentService : IDisposable
         {
             bool rearm = _handoverUntil != null;
             _handoverUntil = DateTime.UtcNow.AddSeconds(window);
+            _handoverActive = true;
             if (rearm) return;
 
             _unfreezeBy = null;
@@ -228,6 +306,7 @@ internal sealed class AgentService : IDisposable
     private void ResumeLocked()
     {
         _handoverUntil = null;
+        _handoverActive = false;
         _unfreezeBy = DateTime.UtcNow + UnfreezeGrace;
         _local.SetPollInterval(_pollMs);
         _local.Start();
@@ -246,6 +325,11 @@ internal sealed class AgentService : IDisposable
 
         FaultEvent fault;
         lock (monitor) fault = monitor.Observe(data);
+        if (local)
+        {
+            lock (_monitors) _localFault[id] = fault.Status;
+            RaiseStatusChanged();
+        }
         if (!fault.Raised) return;
 
         var device = mgr.Devices.FirstOrDefault(d => d.Id == id)?.Device;

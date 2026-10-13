@@ -213,9 +213,10 @@ settings file, so nothing to type). When the agent is not running, direct serial
 platforms then have the same shape: a small always-on process owns the device, the GUI is a
 viewer/editor you open when you want it.
 
-What stays GUI-only: the live power number in the tray. A tray icon needs a message loop and
-drawing; it is not worth putting in the agent. Users who want it keep the GUI resident, now at
-Phase 1 size.
+What stays GUI-only: the live power number drawn as the tray icon itself. The agent has a plain
+tray icon (the app's icon) with a small menu, and shows the live power in its tooltip and in the
+menu's first line; drawing a power glyph into the icon needs a rasteriser the agent does not
+carry. Users who want the glyph keep the GUI resident, now at Phase 1 size.
 
 Expected footprint for the .NET agent, trimmed and invariant: 25 to 40 MB RSS on Windows, idle CPU
 ~0. Effort: about a week for the agent, two to three days for the GUI probe, handover and
@@ -243,6 +244,15 @@ Done, in this repo:
   down on a local fault, `--install`/`--uninstall` (XDG autostart, HKCU Run key),
   `--status`, `--version`, `--help`, named-mutex single instance, clean exit on
   SIGINT/SIGTERM.
+- Tray icon with no UI framework: Win32 `Shell_NotifyIcon` through P/Invoke on Windows, a
+  StatusNotifierItem plus `com.canonical.dbusmenu` over the session bus on Linux
+  (`Tmds.DBus.Protocol`, the low-level library, no code generation). Menu: live state line
+  (device and power, fault, handover or no device), Open WireView, the *Publish on the LAN* and
+  *Shutdown on fault* switches (saved to `settings.json`, applied on the next tick like a GUI
+  edit), *Start at login* (`--install`/`--uninstall`), Quit. The power is also in the tooltip.
+  No tray on the desktop: one log line, the agent runs on and registers when a watcher
+  appears. `--no-tray` turns it off. Cost on Linux: about +5 MB RSS, +4.5 MB PSS, +1.5 MB
+  anonymous; +0.4 MB on the Linux single file, +0.25 MB on the Windows one.
 - Serial handover: `suspendSerial`/`resumeSerial` commands (loopback only, signed with the
   agent's `agent.key` or the network secret). The agent closes the port, keeps publishing the
   last readings with `connected: false` and `serialSuspended: true`, and takes the port back on
@@ -266,7 +276,7 @@ Left:
   wireview-hwmon repo and is not part of this change.
 - Packaging: the agent is in no package or zip yet.
 - Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
-  through the handover. Built and published for win-x64 from Linux only.
+  through the handover, the tray icon and its menu. Built and published for win-x64 from Linux only.
 - After a flash through the agent the Device page shows the old firmware version until the
   device is selected again (the agent's device never disconnects from the GUI's side).
 - Trimming or NativeAOT for the agent.
