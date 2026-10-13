@@ -8,7 +8,6 @@
   dfu-util,
   fontconfig,
   freetype,
-  icu,
   libGL,
   libICE,
   libSM,
@@ -39,7 +38,6 @@ buildDotnetModule {
   runtimeDeps = [
     fontconfig
     freetype
-    icu
     libGL
     libICE
     libSM

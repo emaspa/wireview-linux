@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.3.1.1
+Version:        1.3.2.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -28,7 +28,6 @@ AutoReqProv:    no
 Requires:       fontconfig
 Requires:       freetype
 Requires:       libX11
-Requires:       libicu
 # Optional: hwmon kernel module + daemon for system-wide sensor integration.
 Recommends:     wireview-hwmon
 # Optional: in-app firmware flashing (DFU download to the STM32 bootloader).
@@ -90,6 +89,15 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Tue Oct 13 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.2.0-1
+- Software rendering by default on Linux, about half the resident memory;
+  Settings, Startup, GPU rendering switches back at the next start, and
+  WIREVIEW_RENDER_MODE overrides both.
+- The background photo is decoded at the screen's width, ICU is dropped,
+  the GC runs non-concurrent with ConserveMemory, and a compacting
+  collection runs when the window hides to the tray.
+- wireview-linux --page monitoring opens on a given page.
+
 * Mon Oct 12 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.1.1-1
 - udev rule: the serial port keeps the distro's own serial group (dialout,
   or uucp on Arch-based distros), so the rule works when installed

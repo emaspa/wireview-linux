@@ -43,6 +43,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.3.2.0" date="2026-10-13">
+      <description>
+        <p>Software rendering by default on Linux, about half the resident memory, with a setting to switch back to the GPU. The background photo is decoded at the screen's width.</p>
+      </description>
+    </release>
     <release version="1.3.1.1" date="2026-10-12">
       <description>
         <p>The udev rule keeps each distro's own serial group for the serial port, so it works when installed unchanged on Arch-based distros too.</p>
