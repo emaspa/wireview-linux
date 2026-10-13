@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Net;
+using System.Security.Cryptography;
 using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
@@ -11,6 +13,17 @@ namespace WireView2.Agent;
 /// <param name="FaultText">Its active fault (<see cref="FaultMonitor.FormatFaults"/>), null when clear.</param>
 /// <param name="Handover">The serial port is lent to a local client (the GUI).</param>
 internal readonly record struct AgentStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover);
+
+/// <summary>One remote device (or an unreachable host) as the tray and the
+/// control panel show it.</summary>
+/// <param name="Host">The entry from the settings ("host" or "host:port").</param>
+/// <param name="Endpoint">Its normalised URL.</param>
+/// <param name="Online">A device answers there.</param>
+/// <param name="HostName">The machine name it publishes.</param>
+/// <param name="Readings">Its latest readings, null while offline.</param>
+/// <param name="FaultText">Its active fault, null when clear.</param>
+internal readonly record struct RemoteHostStatus(
+    string Host, string Endpoint, bool Online, string? HostName, WireViewSensorDto? Readings, string? FaultText);
 
 /// <summary>
 /// The agent's always-on work: owns this machine's WireView through its own
@@ -45,6 +58,8 @@ internal sealed class AgentService : IDisposable
     private readonly DeviceManager _local = new();
     private readonly DeviceManager _remote;
     private readonly LocalPublishHost _publish;
+    private readonly ControlPanel _panel;
+    private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
     private readonly object _gate = new();
     private readonly Dictionary<string, FaultMonitor> _monitors = new();
@@ -54,12 +69,19 @@ internal sealed class AgentService : IDisposable
 
     // Last shown fault status per local device id (guarded by _monitors).
     private readonly Dictionary<string, ushort> _localFault = new();
-    // Settings edits from the tray, applied on the next tick (guarded by itself).
-    private readonly List<(string What, Action<AppSettings> Change)> _settingsChanges = new();
+    // Settings edits from the tray and the control panel, applied on the next
+    // tick (guarded by itself); Done is set once they are applied.
+    private readonly List<(string Source, string What, Action<AppSettings> Change, ManualResetEventSlim? Done)> _settingsChanges = new();
+    private readonly List<ManualResetEventSlim> _settingsApplied = new();
 
     private (int Port, bool Lan)? _publishWanted;
     private (int Port, bool Lan)? _publishFailed;
     private DateTime _nextBindAttempt = DateTime.MinValue;
+    private volatile string? _publishError;
+    private volatile Tuple<int, bool>? _wantedView; // _publishWanted, readable from any thread
+    private volatile bool _onFallback;     // listening on the loopback fallback port
+    private string? _portHolder;           // who serves the wanted port, when known
+    private int _lastFallbackPort;
     private int _pollMs = -1;
 
     /// <summary>Raised after every tick and on every reading of this PC's
@@ -72,6 +94,8 @@ internal sealed class AgentService : IDisposable
         _toast = toast;
         _noShutdown = noShutdown;
         _localKey = AgentKey.LoadOrCreate();
+        PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        _panel = new ControlPanel(this);
 
         _remote = new DeviceManager(
             new RemoteDeviceProbe(RemoteHostList.Endpoints, () => AppSettings.Current.NetworkSecret).Probe);
@@ -80,6 +104,7 @@ internal sealed class AgentService : IDisposable
             AgentVersion = version,
             CommandHook = HandleAgentCommand,
             LocalSecretProvider = () => _localKey,
+            ExtraRoutes = _panel.Handle,
         };
 
         _local.DataUpdated += (_, e) => OnData(_local, e.Id, e.Data, local: true);
@@ -96,6 +121,7 @@ internal sealed class AgentService : IDisposable
         _local.Start();
         _remote.Start();
         FileLog.Info($"wireview-agent {_version} started on {Environment.MachineName} ({Os})");
+        WritePanelFile(); // again with the port once the listener is up
 
         while (!stop.IsCancellationRequested)
         {
@@ -119,6 +145,7 @@ internal sealed class AgentService : IDisposable
 
         ApplyRequestedSettings();
         EnsurePublisher();
+        SignalSettingsApplied();
 
         lock (_gate)
         {
@@ -137,7 +164,91 @@ internal sealed class AgentService : IDisposable
         RaiseStatusChanged();
     }
 
-    // ---- Tray ----
+    // ---- Tray and control panel ----
+
+    public string Version => _version;
+
+    /// <summary>Started with --no-shutdown: shutdown on fault only logs.</summary>
+    public bool NoShutdown => _noShutdown;
+
+    /// <summary>The control panel's API token: random, minted once per run.</summary>
+    public string PanelToken { get; }
+
+    public TimeSpan Uptime => _uptime.Elapsed;
+
+    internal LocalPublishHost Publisher => _publish;
+    internal DeviceManager LocalDevices => _local;
+
+    /// <summary>The serial port is lent to a local client.</summary>
+    public bool HandoverActive => _handoverActive;
+
+    /// <summary>Why the publisher is not on the wanted port (the bind error, and
+    /// the fallback port while one is used), null while it is.</summary>
+    public string? PublishError => _onFallback || _publish.Endpoint == null ? _publishError : null;
+
+    /// <summary>The wanted port is taken and the loopback fallback serves instead.</summary>
+    public bool OnFallback => _onFallback;
+
+    /// <summary>The port and LAN mode the settings ask for.</summary>
+    public (int Port, bool Lan)? PublishWanted => _wantedView is { } w ? (w.Item1, w.Item2) : null;
+
+    /// <summary>The control panel's address, with the token in the fragment, or
+    /// null while the agent is not listening.</summary>
+    public string? PanelUrl => _publish.Endpoint is { } ep ? $"http://127.0.0.1:{ep.Port}/#t={PanelToken}" : null;
+
+    /// <summary>The debounced fault text for a local device id, null when clear.</summary>
+    public string? LocalFaultText(string id)
+    {
+        ushort fault;
+        lock (_monitors) _localFault.TryGetValue(id, out fault);
+        return fault != 0 ? FaultMonitor.FormatFaults(fault) : null;
+    }
+
+    /// <summary>Every remote host in the settings with its devices: one entry per
+    /// device that answers, one offline entry for a host with none.</summary>
+    public IReadOnlyList<RemoteHostStatus> GetRemoteHosts()
+    {
+        var list = new List<RemoteHostStatus>();
+        var devices = _remote.Devices;
+        foreach (var host in RemoteHostList.Endpoints().Select(h => h.Trim()).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string url = RemoteDeviceProbe.Normalize(host);
+            bool any = false;
+            foreach (var md in devices)
+            {
+                if (md.Device is not NetworkDevice nd || nd.Endpoint != url || !nd.Connected || md.Latest is not { } data)
+                    continue;
+                any = true;
+                list.Add(new RemoteHostStatus(host, url, true,
+                    string.IsNullOrWhiteSpace(nd.HostName) ? null : nd.HostName,
+                    WireViewSensorDto.FromDevice(nd, data),
+                    data.FaultStatus != 0 ? FaultMonitor.FormatFaults(data.FaultStatus) : null));
+            }
+            if (!any) list.Add(new RemoteHostStatus(host, url, false, null, null, null));
+        }
+        return list;
+    }
+
+    /// <summary>Runs a device command on this PC's device through the same relay
+    /// as a LAN command (direct serial, or hwmon through wireviewd).</summary>
+    public DaemonResult RunLocalCommand(WireViewCommand cmd) =>
+        _handoverActive ? DaemonResult.NotConnected : _publish.ExecuteCommand(cmd);
+
+    /// <summary>Clears the active faults like the app's fault banner: every active
+    /// fault (keep-mask 0), the fault log kept (keep-mask 0xFFFF), then a redraw of
+    /// the current screen.</summary>
+    public DaemonResult ClearLocalFaults()
+    {
+        var r = RunLocalCommand(WireViewCommand.Faults("", keepStatusMask: 0, keepLogMask: 0xFFFF));
+        if (r == DaemonResult.Ok)
+        {
+            RunLocalCommand(WireViewCommand.Screen("", (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
+            lock (_monitors)
+                foreach (var id in _localFault.Keys.ToList()) _localFault[id] = 0;
+            FileLog.Info("faults cleared on this PC's device");
+        }
+        return r;
+    }
 
     /// <summary>This PC's device as the tray shows it. Never blocks on the
     /// handover lock, so it is safe from the device thread.</summary>
@@ -155,37 +266,57 @@ internal sealed class AgentService : IDisposable
         return default;
     }
 
-    /// <summary>Queues a settings edit (the tray's checkboxes). The next tick
-    /// applies it on top of a fresh read of settings.json, saves the file and
-    /// applies the settings, the same path a GUI edit takes. The save records the
-    /// file's new write time, so <see cref="AppSettings.ReloadIfChanged"/> does not
-    /// see the agent's own write as a change.</summary>
-    public void RequestSettingsChange(string what, Action<AppSettings> change)
+    /// <summary>Queues a settings edit (the tray's checkboxes, the control panel).
+    /// The next tick applies it on top of a fresh read of settings.json, saves the
+    /// file and applies the settings (and rebinds the publisher), the same path a
+    /// GUI edit takes. The save records the file's new write time, so
+    /// <see cref="AppSettings.ReloadIfChanged"/> does not see the agent's own write
+    /// as a change. Returns once applied when <paramref name="wait"/> is set
+    /// (true), or false when the tick did not get to it in that time.</summary>
+    public bool RequestSettingsChange(string what, Action<AppSettings> change, string source = "tray", TimeSpan? wait = null)
     {
-        lock (_settingsChanges) _settingsChanges.Add((what, change));
+        using var done = wait != null ? new ManualResetEventSlim() : null;
+        lock (_settingsChanges) _settingsChanges.Add((source, what, change, done));
+        return done?.Wait(wait!.Value) ?? true;
     }
 
     private void ApplyRequestedSettings()
     {
-        (string What, Action<AppSettings> Change)[] pending;
+        (string Source, string What, Action<AppSettings> Change, ManualResetEventSlim? Done)[] pending;
         lock (_settingsChanges)
         {
             if (_settingsChanges.Count == 0) return;
             pending = _settingsChanges.ToArray();
             _settingsChanges.Clear();
         }
-        foreach (var (_, change) in pending) change(AppSettings.Current);
-        string what = string.Join(", ", pending.Select(p => p.What));
-        try
+        foreach (var p in pending) p.Change(AppSettings.Current);
+        foreach (var group in pending.GroupBy(p => p.Source))
         {
-            AppSettings.SaveCurrent();
-            FileLog.Info($"tray: {what}; saved to settings.json");
-        }
-        catch (Exception ex)
-        {
-            FileLog.Warn($"tray: {what}, but settings.json could not be saved: {ex.Message}");
+            string what = string.Join(", ", group.Select(p => p.What));
+            try
+            {
+                AppSettings.SaveCurrent();
+                FileLog.Info($"{group.Key}: {what}; saved to settings.json");
+            }
+            catch (Exception ex)
+            {
+                FileLog.Warn($"{group.Key}: {what}, but settings.json could not be saved: {ex.Message}");
+            }
         }
         ApplySettings();
+        lock (_settingsApplied)
+            foreach (var p in pending)
+                if (p.Done != null) _settingsApplied.Add(p.Done);
+    }
+
+    private void SignalSettingsApplied()
+    {
+        lock (_settingsApplied)
+        {
+            foreach (var done in _settingsApplied)
+                try { done.Set(); } catch (ObjectDisposedException) { } // the waiter gave up
+            _settingsApplied.Clear();
+        }
     }
 
     private void RaiseStatusChanged()
@@ -204,28 +335,49 @@ internal sealed class AgentService : IDisposable
             _local.SetPollInterval(poll);
         }
         _publishWanted = (s.PublishPort, s.PublishEnabled);
+        _wantedView = Tuple.Create(s.PublishPort, s.PublishEnabled);
     }
 
     // ---- Publishing ----
 
+    /// <summary>Binds the publisher to the wanted port (all interfaces with LAN
+    /// publishing on, loopback otherwise). When that port is taken (wireviewd holds
+    /// 9876 on Linux), a loopback-only fallback listener serves the same routes on
+    /// the next free port of PublishPort+1 to +10, else an ephemeral one, so the
+    /// control panel, --open and --status keep working; the wanted port is retried
+    /// every 30 s and the listener moves there once it is free. The port in use is
+    /// written next to the panel token for --open and --status.</summary>
     private void EnsurePublisher()
     {
         if (_publishWanted is not { } want) return;
         var current = _publish.Endpoint;
         bool lan = current is { } c && !IPAddress.IsLoopback(c.Address);
-        if (current is { } cur && cur.Port == want.Port && lan == want.Lan) return;
+        if (!_onFallback && current is { } cur && cur.Port == want.Port && lan == want.Lan) return;
 
         if (_publishFailed == want && DateTime.UtcNow < _nextBindAttempt) return;
-
-        if (current != null) _publish.Stop();
         var address = want.Lan ? IPAddress.Any : IPAddress.Loopback;
+
+        // On the fallback, move only once the wanted port is free, so the panel
+        // stays reachable meanwhile.
+        if (_onFallback && current != null && _publishFailed == want && ControlPanel.PortProblem(want.Port, want.Lan) != null)
+        {
+            _nextBindAttempt = DateTime.UtcNow + BindRetry;
+            return;
+        }
+
+        bool wasFallback = _onFallback;
+        if (current != null) _publish.Stop();
+        _onFallback = false;
         try
         {
             _publish.Start(want.Port, address);
             _publishFailed = null;
+            _publishError = null;
+            if (wasFallback) FileLog.Info($"port {want.Port} is free again: the fallback listener is closed");
             FileLog.Info(want.Lan
                 ? $"publishing on port {want.Port}, all interfaces (LAN publishing on)"
                 : $"publishing on 127.0.0.1:{want.Port} only (LAN publishing off)");
+            WritePanelFile();
         }
         catch (Exception ex)
         {
@@ -235,13 +387,45 @@ internal sealed class AgentService : IDisposable
             if (firstFailure)
             {
                 // Name the holder when it is a WireView publisher (wireviewd on Linux).
-                string holder = LocalAgentProbe.TryFetch(want.Port, TimeSpan.FromSeconds(1)) is { } snap
-                    ? $" (it is served by {(string.IsNullOrEmpty(snap.AppVersion) ? "another WireView publisher" : snap.AppVersion)})"
-                    : "";
-                FileLog.Warn($"cannot listen on port {want.Port}{holder}: {ex.Message}. " +
-                             $"Not publishing; retrying every {BindRetry.TotalSeconds:0} s. Alerts and shutdown keep working.");
+                _portHolder = LocalAgentProbe.TryFetch(want.Port, TimeSpan.FromSeconds(1)) is { } snap
+                    ? (string.IsNullOrEmpty(snap.AppVersion) ? "another WireView publisher" : snap.AppVersion)
+                    : null;
+                FileLog.Warn($"cannot listen on port {want.Port}" +
+                             (_portHolder != null ? $" (it is served by {_portHolder})" : "") + $": {ex.Message}. " +
+                             $"Not publishing on it; retrying every {BindRetry.TotalSeconds:0} s. Alerts and shutdown keep working.");
             }
+            _publishError = $"cannot listen on port {want.Port}" +
+                            (_portHolder != null ? $" (served by {_portHolder})" : "") + $": {ex.Message}";
+            StartFallback(want.Port, logIt: firstFailure || wasFallback);
         }
+    }
+
+    private void StartFallback(int wanted, bool logIt)
+    {
+        var ports = Enumerable.Range(wanted + 1, 10).Where(p => p <= 65535).Append(0);
+        foreach (int port in ports)
+        {
+            try { _publish.Start(port, IPAddress.Loopback); }
+            catch (Exception) { continue; }
+            _onFallback = true;
+            int bound = _publish.Endpoint?.Port ?? port;
+            _publishError += $". The control panel and /sensors are on 127.0.0.1:{bound} (loopback only) " +
+                             $"until port {wanted} is free; retrying every {BindRetry.TotalSeconds:0} s";
+            if (logIt || bound != _lastFallbackPort)
+                FileLog.Info($"control panel on http://127.0.0.1:{bound} (port {wanted} is " +
+                             (_portHolder != null ? $"served by {_portHolder})" : "in use)"));
+            _lastFallbackPort = bound;
+            WritePanelFile();
+            return;
+        }
+        FileLog.Warn("no fallback port could be bound either: the control panel is unavailable until the next retry");
+    }
+
+    /// <summary>Writes the panel token and the port in use for --open and --status.</summary>
+    private void WritePanelFile()
+    {
+        try { AgentPanelToken.Write(PanelToken, _publish.Endpoint?.Port); }
+        catch (Exception ex) { FileLog.Warn($"cannot write {AgentPanelToken.FilePath} (wireview-agent --open needs it): {ex.Message}"); }
     }
 
     // ---- Serial handover ----
@@ -368,6 +552,7 @@ internal sealed class AgentService : IDisposable
 
     public void Dispose()
     {
+        AgentPanelToken.Delete();
         _publish.Stop();
         _local.Stop(TimeSpan.FromSeconds(3));
         _remote.Stop();

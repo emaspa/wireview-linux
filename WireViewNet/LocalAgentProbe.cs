@@ -87,6 +87,11 @@ namespace WireView2.Net
                     : "wireview-agent no longer answers: back to direct device access");
         }
 
+        /// <summary>The port the agent listens on: the one it recorded next to its
+        /// token (the publish port, or its loopback fallback while that port is
+        /// taken by another program), else the configured publish port.</summary>
+        public static int AgentPort() => AgentPanelToken.ReadPort() ?? AppSettings.Current.PublishPort;
+
         /// <summary>Signs commands to the agent: its local key, else the network secret.</summary>
         public static string? Secret() => AgentKey.Read() ?? AppSettings.Current.NetworkSecret;
 

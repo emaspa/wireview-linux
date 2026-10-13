@@ -17,7 +17,9 @@ namespace WireView2.Net
     /// a bind address is given (the headless agent binds loopback only while LAN
     /// publishing is off). Commands from this machine may also be signed with a
     /// local-only secret (the agent's key file), and <see cref="WireViewCommand.LocalOnly"/>
-    /// ops are refused from any other address.
+    /// ops are refused from any other address. An optional extra-routes hook
+    /// (the agent's control panel) answers any other method and path on the same
+    /// port, under the same connection, size and rate limits.
     /// </summary>
     public sealed class SensorPublisher : IDisposable
     {
@@ -28,6 +30,7 @@ namespace WireView2.Net
         private readonly Func<string?>? _secretProvider;
         private readonly Func<WireViewCommand, DaemonResult>? _commandSink;
         private readonly Func<string?, ConfigSnapshot?>? _configReader;
+        private readonly Func<HttpRequestInfo, HttpResponseInfo?>? _extraRoutes;
         private readonly int _maxRequestBytes;
         private readonly int _rateLimitPerMinute;
         private readonly SemaphoreSlim _slots;
@@ -47,8 +50,10 @@ namespace WireView2.Net
             int maxRequestBytes = 8192,
             int rateLimitPerMinute = 120,
             IPAddress? bindAddress = null,
-            Func<string?>? localSecretProvider = null)
+            Func<string?>? localSecretProvider = null,
+            Func<HttpRequestInfo, HttpResponseInfo?>? extraRoutes = null)
         {
+            _extraRoutes = extraRoutes;
             _port = port;
             _bindAddress = bindAddress ?? IPAddress.Any;
             _localSecretProvider = localSecretProvider;
@@ -63,8 +68,9 @@ namespace WireView2.Net
 
         public bool IsRunning { get; private set; }
 
-        /// <summary>The port this publisher listens on.</summary>
-        public int Port => _port;
+        /// <summary>The port this publisher listens on: the one bound, once started
+        /// (port 0 binds an ephemeral port), else the one asked for.</summary>
+        public int Port => (_listener?.LocalEndpoint as IPEndPoint)?.Port is int bound && bound != 0 ? bound : _port;
 
         /// <summary>The address it binds (<see cref="IPAddress.Any"/> unless set).</summary>
         public IPAddress BindAddress => _bindAddress;
@@ -167,23 +173,36 @@ namespace WireView2.Net
 
                     if (method == "POST" && path == "/command")
                     {
-                        int want = ContentLength(headers);
-                        if (want > _maxRequestBytes)
+                        string? body = await ReadBody(stream, buf, headers, headEnd, total, ct).ConfigureAwait(false);
+                        if (body == null)
                         {
                             await WriteJson(stream, 413, "Payload Too Large", "{\"error\":\"too large\"}").ConfigureAwait(false);
                             return;
                         }
-                        int bodyStart = headEnd + 4, have = total - bodyStart;
-                        while (have < want && total < buf.Length)
-                        {
-                            int n = await stream.ReadAsync(buf.AsMemory(total, buf.Length - total), ct).ConfigureAwait(false);
-                            if (n <= 0) break;
-                            total += n; have += n;
-                        }
-                        int bodyLen = Math.Min(want, total - bodyStart);
-                        string body = bodyLen > 0 ? Encoding.UTF8.GetString(buf, bodyStart, bodyLen) : "";
                         await HandleCommand(stream, headers, body, ip, loopback).ConfigureAwait(false);
                         return;
+                    }
+
+                    if (_extraRoutes != null)
+                    {
+                        string? body = await ReadBody(stream, buf, headers, headEnd, total, ct).ConfigureAwait(false);
+                        if (body == null)
+                        {
+                            await WriteJson(stream, 413, "Payload Too Large", "{\"error\":\"too large\"}").ConfigureAwait(false);
+                            return;
+                        }
+                        HttpResponseInfo? answer;
+                        try { answer = _extraRoutes(new HttpRequestInfo(method, path, headers, body, loopback, ip)); }
+                        catch (Exception ex)
+                        {
+                            FileLog.Warn($"{method} {path} from {ip} failed: {ex.Message}");
+                            answer = HttpResponseInfo.Json(500, "{\"error\":" + JsonSerializer.Serialize(ex.Message) + "}");
+                        }
+                        if (answer != null)
+                        {
+                            await WriteResponse(stream, answer).ConfigureAwait(false);
+                            return;
+                        }
                     }
 
                     await WriteJson(stream, 404, "Not Found", "").ConfigureAwait(false);
@@ -195,7 +214,9 @@ namespace WireView2.Net
             }
             finally
             {
-                if (gotSlot) _slots.Release();
+                // A rebind disposes the old publisher while a slow request (a
+                // control-panel settings change that moves the port) still runs.
+                if (gotSlot) try { _slots.Release(); } catch (ObjectDisposedException) { }
             }
         }
 
@@ -289,7 +310,49 @@ namespace WireView2.Net
             return (p.Length > 0 ? p[0] : "", p.Length > 1 ? p[1] : "");
         }
 
-        private static string? Header(string headers, string name)
+        /// <summary>The request body (up to Content-Length, at most the size cap), or
+        /// null when the declared length is over the cap.</summary>
+        private async Task<string?> ReadBody(NetworkStream stream, byte[] buf, string headers, int headEnd, int total, CancellationToken ct)
+        {
+            int want = ContentLength(headers);
+            if (want > _maxRequestBytes) return null;
+            int bodyStart = headEnd + 4, have = total - bodyStart;
+            while (have < want && total < buf.Length)
+            {
+                int n = await stream.ReadAsync(buf.AsMemory(total, buf.Length - total), ct).ConfigureAwait(false);
+                if (n <= 0) break;
+                total += n; have += n;
+            }
+            int bodyLen = Math.Max(0, Math.Min(want, total - bodyStart));
+            return bodyLen > 0 ? Encoding.UTF8.GetString(buf, bodyStart, bodyLen) : "";
+        }
+
+        private static async Task WriteResponse(NetworkStream s, HttpResponseInfo r)
+        {
+            var sb = new StringBuilder();
+            sb.Append("HTTP/1.1 ").Append(r.Status).Append(' ').Append(ReasonPhrase(r.Status)).Append("\r\n");
+            sb.Append("Content-Type: ").Append(r.ContentType).Append("\r\n");
+            foreach (var h in r.Headers) sb.Append(h.Key).Append(": ").Append(h.Value).Append("\r\n");
+            sb.Append("Connection: close\r\nContent-Length: ").Append(r.Body.Length).Append("\r\n\r\n");
+            await s.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString())).ConfigureAwait(false);
+            if (r.Body.Length > 0) await s.WriteAsync(r.Body).ConfigureAwait(false);
+        }
+
+        private static string ReasonPhrase(int status) => status switch
+        {
+            200 => "OK",
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            403 => "Forbidden",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            409 => "Conflict",
+            413 => "Payload Too Large",
+            503 => "Service Unavailable",
+            _ => status >= 500 ? "Internal Server Error" : "Error",
+        };
+
+        internal static string? Header(string headers, string name)
         {
             foreach (var line in headers.Split("\r\n"))
             {

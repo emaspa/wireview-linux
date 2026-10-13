@@ -12,8 +12,7 @@ internal static class StatusCommand
     public static int Run()
     {
         AppSettings.Reload();
-        int port = AppSettings.Current.PublishPort;
-        var snap = LocalAgentProbe.TryFetch(port, TimeSpan.FromSeconds(3));
+        var (port, snap) = FindAgent();
 
         if (snap?.Agent == null)
         {
@@ -32,6 +31,8 @@ internal static class StatusCommand
         }
 
         Console.WriteLine($"wireview-agent {snap.Agent} on {snap.Host}, port {port}");
+        if (port != AppSettings.Current.PublishPort)
+            Console.WriteLine($"publish port {AppSettings.Current.PublishPort} is taken: serving on the loopback fallback 127.0.0.1:{port} (not on the LAN)");
         if (snap.SerialSuspended)
             Console.WriteLine("serial port: handed over to a local client (last readings shown)");
 
@@ -58,6 +59,23 @@ internal static class StatusCommand
 
         if (anyFault) return Program.ExitFault;
         return anyConnected ? Program.ExitOk : Program.ExitNoDevice;
+    }
+
+    /// <summary>The running agent: the port it wrote next to its panel token (its
+    /// fallback port while the publish port is taken), else the publish port.
+    /// Returns the port asked and the snapshot (null when nothing answers there,
+    /// or a non-agent snapshot when another publisher holds the port).</summary>
+    internal static (int Port, WireViewHostSnapshot? Snapshot) FindAgent()
+    {
+        int settingsPort = AppSettings.Current.PublishPort;
+        WireViewHostSnapshot? first = null;
+        foreach (int port in new[] { AgentPanelToken.ReadPort() ?? settingsPort, settingsPort }.Distinct())
+        {
+            var snap = LocalAgentProbe.TryFetch(port, TimeSpan.FromSeconds(3));
+            if (snap?.Agent != null) return (port, snap);
+            if (port == settingsPort) first = snap;
+        }
+        return (settingsPort, first);
     }
 
     /// <summary>Latched fault-log bits as names, e.g. "Over-Current, Over-Power".</summary>

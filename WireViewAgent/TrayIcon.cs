@@ -11,25 +11,49 @@ internal enum TrayCommand
     ToggleShutdownOnFault = 5,
     ToggleStartAtLogin = 6,
     Quit = 8,
+    OpenPanel = 9,
+    ClearFaults = 11,
+    ScreenMain = 20,
+    ScreenSimple = 21,
+    ScreenCurrent = 22,
+    ScreenTemp = 23,
+    ScreenStatus = 24,
+    PauseUpdates = 26,
+    ResumeUpdates = 27,
 }
 
-internal enum TrayItemKind { Header, Action, Check, Separator }
+internal enum TrayItemKind { Header, Action, Check, Separator, Submenu }
 
-/// <summary>One menu line. <see cref="Id"/> is stable across updates.</summary>
-internal sealed record TrayItem(int Id, TrayItemKind Kind, string Label = "", bool Checked = false);
+/// <summary>One menu line. <see cref="Id"/> is stable across updates. A
+/// <see cref="TrayItemKind.Submenu"/> carries its lines in <see cref="Children"/>;
+/// a header line is shown disabled.</summary>
+internal sealed record TrayItem(int Id, TrayItemKind Kind, string Label = "", bool Checked = false,
+                                bool Enabled = true, IReadOnlyList<TrayItem>? Children = null)
+{
+    /// <summary>The line itself, children left out: equal lines draw the same.</summary>
+    public TrayItem Line => Children == null ? this : this with { Children = null };
+
+    public bool IsEnabled => Kind != TrayItemKind.Header && Enabled;
+}
 
 /// <summary>Everything a tray icon shows: the menu header line, the checkbox
-/// states and whether a fault is active. Equal states render identically, so
-/// implementations compare with the last one and send only what changed.</summary>
+/// states, whether a fault is active, whether the device takes commands and the
+/// remote host lines. Equal states render identically, so implementations compare
+/// with the last one and send only what changed.</summary>
 internal sealed record TrayState(
     string Header,
     bool Connected,
     bool Fault,
     bool PublishEnabled,
     bool ShutdownOnFault,
-    bool StartAtLogin)
+    bool StartAtLogin,
+    bool DeviceCommands = false,
+    string RemoteLines = "")
 {
     public const string AppTitle = "WireView agent";
+
+    /// <summary>First id of the remote host lines (one per host or device).</summary>
+    public const int RemoteLineIdBase = 100;
 
     public static TrayState Initial { get; } = new("No device", false, false, false, false, false);
 
@@ -43,17 +67,59 @@ internal sealed record TrayState(
     public string Title => DetailLine is { } d ? $"{AppTitle} - {d}" : AppTitle;
 
     /// <summary>The menu, top to bottom; same on both platforms.</summary>
-    public IReadOnlyList<TrayItem> Items =>
-    [
-        new(1, TrayItemKind.Header, Header),
-        new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Open WireView"),
-        new(3, TrayItemKind.Separator),
-        new((int)TrayCommand.TogglePublish, TrayItemKind.Check, "Publish on the LAN", PublishEnabled),
-        new((int)TrayCommand.ToggleShutdownOnFault, TrayItemKind.Check, "Shutdown on fault", ShutdownOnFault),
-        new((int)TrayCommand.ToggleStartAtLogin, TrayItemKind.Check, "Start at login", StartAtLogin),
-        new(7, TrayItemKind.Separator),
-        new((int)TrayCommand.Quit, TrayItemKind.Action, "Quit"),
-    ];
+    public IReadOnlyList<TrayItem> Items
+    {
+        get
+        {
+            var items = new List<TrayItem>
+            {
+                new(1, TrayItemKind.Header, Header),
+                new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Open WireView"),
+                new((int)TrayCommand.OpenPanel, TrayItemKind.Action, "Settings and controls..."),
+                new(3, TrayItemKind.Separator),
+                new(10, TrayItemKind.Submenu, "Screen", Enabled: DeviceCommands, Children:
+                [
+                    new((int)TrayCommand.ScreenMain, TrayItemKind.Action, "Main", Enabled: DeviceCommands),
+                    new((int)TrayCommand.ScreenSimple, TrayItemKind.Action, "Simple", Enabled: DeviceCommands),
+                    new((int)TrayCommand.ScreenCurrent, TrayItemKind.Action, "Current", Enabled: DeviceCommands),
+                    new((int)TrayCommand.ScreenTemp, TrayItemKind.Action, "Temperature", Enabled: DeviceCommands),
+                    new((int)TrayCommand.ScreenStatus, TrayItemKind.Action, "Status", Enabled: DeviceCommands),
+                    new(25, TrayItemKind.Separator),
+                    new((int)TrayCommand.PauseUpdates, TrayItemKind.Action, "Pause updates", Enabled: DeviceCommands),
+                    new((int)TrayCommand.ResumeUpdates, TrayItemKind.Action, "Resume updates", Enabled: DeviceCommands),
+                ]),
+                new((int)TrayCommand.ClearFaults, TrayItemKind.Action, "Clear faults", Enabled: Fault && DeviceCommands),
+            };
+            if (RemoteLines.Length > 0)
+            {
+                var lines = RemoteLines.Split('\n')
+                    .Select((line, i) => new TrayItem(RemoteLineIdBase + i, TrayItemKind.Header, line))
+                    .ToList();
+                items.Add(new TrayItem(12, TrayItemKind.Submenu, "Remote hosts", Children: lines));
+            }
+            items.AddRange(
+            [
+                new(7, TrayItemKind.Separator),
+                new((int)TrayCommand.TogglePublish, TrayItemKind.Check, "Publish on the LAN", PublishEnabled),
+                new((int)TrayCommand.ToggleShutdownOnFault, TrayItemKind.Check, "Shutdown on fault", ShutdownOnFault),
+                new((int)TrayCommand.ToggleStartAtLogin, TrayItemKind.Check, "Start at login", StartAtLogin),
+                new(13, TrayItemKind.Separator),
+                new((int)TrayCommand.Quit, TrayItemKind.Action, "Quit"),
+            ]);
+            return items;
+        }
+    }
+
+    /// <summary>Every line, submenu lines after their submenu, depth first.</summary>
+    public static IEnumerable<TrayItem> Flatten(IEnumerable<TrayItem> items)
+    {
+        foreach (var item in items)
+        {
+            yield return item;
+            if (item.Children != null)
+                foreach (var child in Flatten(item.Children)) yield return child;
+        }
+    }
 
     /// <summary>The header line for an agent status.</summary>
     public static string HeaderFor(AgentStatus status)
@@ -62,6 +128,25 @@ internal sealed record TrayState(
         if (status.DeviceName is not { } name) return "No device";
         if (status.FaultText is { } fault) return $"{name}: {fault}";
         return string.Create(CultureInfo.InvariantCulture, $"{name}: {status.PowerW ?? 0:0.0} W");
+    }
+
+    /// <summary>The Remote hosts submenu's lines: "host: 123.4 W", "host: FAULT: ...",
+    /// "host: offline"; a host with several devices gets one line per device.</summary>
+    public static string RemoteLinesFor(IReadOnlyList<RemoteHostStatus> hosts)
+    {
+        var lines = new List<string>();
+        foreach (var group in hosts.GroupBy(h => h.Host))
+        {
+            int n = 0, count = group.Count();
+            foreach (var h in group)
+            {
+                string who = count > 1 ? $"{h.Host} ({++n})" : h.Host;
+                lines.Add(!h.Online ? $"{who}: offline"
+                    : h.FaultText is { } f ? $"{who}: {f}"
+                    : string.Create(CultureInfo.InvariantCulture, $"{who}: {h.Readings?.SumPowerW ?? 0:0.0} W"));
+            }
+        }
+        return string.Join('\n', lines);
     }
 }
 

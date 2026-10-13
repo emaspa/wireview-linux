@@ -33,7 +33,7 @@ namespace WireView2.Services
             _started = true;
 
             _agentProbe = new LocalAgentProbe(
-                () => AppSettings.Current.PublishPort,
+                LocalAgentProbe.AgentPort,
                 () => DeviceManager.Shared.PollIntervalMs);
             DeviceManager.Shared.SetLocalOwnerProbe(_agentProbe.Probe, () => _agentProbe.AgentPresent);
 

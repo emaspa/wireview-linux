@@ -89,8 +89,20 @@ jobs, so the app only needs to run when you want to look at it:
 - it publishes the device on port `9876` (the app's publish port): on the LAN
   when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
 
-It reads the app's own `settings.json`, so everything is configured in the app,
-and changes apply without restarting the agent. It is meant for Windows and for
+The agent plus its control panel are a minimal client: everything except the
+graphs, firmware updates, themes and the device log, which stay in the app. With
+the tray menu and the control panel you can watch the device, switch its screen,
+clear faults, edit its configuration and alarms, and set up LAN monitoring and
+shutdown on fault without installing or opening the app.
+
+On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with
+no hwmon device it opens the WireView's serial port (`/dev/ttyACM*`) itself, like
+the app's direct serial mode. Your user needs access to the port, which the udev
+rule in `udev/99-wireview.rules` gives (the packages install it; see the Flatpak
+section below for installing it by hand).
+
+It reads the app's own `settings.json`, so the app and the control panel
+configure the same settings, and changes apply without restarting the agent. It is meant for Windows and for
 Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it
 still gives alerts and shutdown, and leaves publishing to the daemon (it says so
 in its log when the port is taken).
@@ -100,6 +112,7 @@ wireview-agent              # run in the foreground (Ctrl+C to stop), logs to st
 wireview-agent --install    # start it at login
 wireview-agent --uninstall  # stop starting it at login
 wireview-agent --status     # connected device, fault state and agent version
+wireview-agent --open       # print the control panel's address and open it in the browser
 wireview-agent --no-tray    # run without the tray icon
 wireview-agent --version
 wireview-agent --help
@@ -114,11 +127,24 @@ the agent is not running, 4 when it runs without a connected device, and 5 on an
 active fault. A second copy says it is already running and exits with 1.
 
 **Tray icon.** The agent puts the WireView icon in the notification area. Its
-menu shows the live state on top (`WireView Pro II: 123.4 W`, the fault while one
-is active, *Serial port lent to the app* during a handover, or *No device*),
-then **Open WireView** (starts the app, or on Windows brings the running app's
-window forward), the **Publish on the LAN**, **Shutdown on fault** and **Start at
-login** checkboxes, and **Quit**. The tooltip carries the same live line. The
+menu, top to bottom:
+
+- the live state (`WireView Pro II: 123.4 W`, the fault while one is active,
+  *Serial port lent to the app* during a handover, or *No device*),
+- **Open WireView** (starts the app, or on Windows brings the running app's
+  window forward),
+- **Settings and controls...**, which opens the control panel in the browser,
+- **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then
+  **Pause updates** and **Resume updates** (the device's display),
+- **Clear faults**, enabled while a fault is active (clears the active faults and
+  keeps the fault log, like the app's fault banner),
+- **Remote hosts**, a submenu shown when the settings list remote hosts, with
+  one line per host: `host: 123.4 W`, the host's fault, or `host: offline`,
+- the **Publish on the LAN**, **Shutdown on fault** and **Start at login**
+  checkboxes,
+- **Quit**.
+
+The tooltip carries the same live line. The
 two settings checkboxes write `settings.json` and apply at once, like the same
 switches in the app; *Start at login* is `--install`/`--uninstall`. If the app is
 open at the same time, its next settings save writes back its own copy of those
@@ -127,6 +153,48 @@ StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it out of the box, GNOME
 needs the AppIndicator/KStatusNotifierItem extension. On a desktop without a tray
 (or with no session bus) the agent logs one line, keeps running without the
 icon and adds it when a tray shows up later. `--no-tray` turns it off.
+
+**Control panel.** A single page served by the agent on its own port, opened in
+the default browser by the tray's **Settings and controls...** or by
+`wireview-agent --open` (which also prints the address, for desktops without a
+tray). It works offline and answers this PC only: from any other address it
+returns 403, even while the port is open on the LAN. Each run of the agent makes
+a new random access token; the tray and `--open` put it in the address (after
+`#t=`), and the page sends it with every request, so other web pages and other
+users cannot use it. When the publish port is taken (on Linux wireviewd holds
+`9876`), the agent serves the panel, `/sensors` and the app's connection on a
+loopback-only fallback port instead (the next free one of the publish port +1
+to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`,
+and moves back to the publish port once it is free (it retries every 30 s); the
+tray, `--open` and `--status` use whichever port it is on. The page shows,
+refreshed every second:
+
+- **Status**: device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`),
+  total power, current and voltage, each pin's voltage, current and power, the
+  temperatures, the fan duty, and the fault state with a **Clear faults** button,
+- **Remote hosts**: the same readings for each host in the settings, read only,
+- **Screen**: the five screens, pause and resume,
+- **Device configuration**, grouped like the app's Device page: General (friendly
+  name, backlight), Fan (mode, temperature source, duty and temperature limits),
+  Display (current and power scale, theme on older firmware, rotation, timeout
+  mode, cycle screens, cycle time, timeout, averaging, default screen), the
+  fault alarm table (display, buzzer, soft off, hard off per fault type) and the
+  fault thresholds. **Apply** writes only the fields you changed, the way the
+  app does; **Store to device memory** keeps them after a power cycle; **Reload
+  from device**, **Reload from device memory** and **Reset to defaults** (asks
+  first) are there too. Out-of-range values are refused with a message,
+- **Alerts and shutdown**: Shutdown on fault, Start at login (fault
+  notifications are always on),
+- **LAN monitoring**: Publish on the LAN, the port (the page follows the agent to
+  a new port), the remote hosts to watch, and the network secret,
+- **Tools**: Open WireView app (graphs, firmware updates, themes, device log) and
+  where the agent's log is.
+
+Settings changed on the page are saved to `settings.json` and applied at once,
+the same path as the tray's switches (and, as with those, an app that is open
+at the same time writes back its own copy on its next settings save). Device writes go to the device the same
+way as a command from the LAN, so they work over hwmon with wireviewd and over
+direct serial alike. `GET /sensors` on the same port is unchanged.
 
 On Windows the agent has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get

@@ -37,9 +37,10 @@ namespace WireView2.Services
             // The agent publishes this machine's device itself (on all interfaces
             // when publishing is on); a second listener on its port would fail or,
             // on Windows, could share the port with it.
-            if (LocalAgentProbe.IsAgentRunning(port))
+            int agentPort = LocalAgentProbe.AgentPort();
+            if (LocalAgentProbe.IsAgentRunning(agentPort))
             {
-                FileLog.Info($"LAN publishing left to wireview-agent, which already listens on port {port}");
+                FileLog.Info($"LAN publishing left to wireview-agent, which already listens on port {agentPort}");
                 return;
             }
             try

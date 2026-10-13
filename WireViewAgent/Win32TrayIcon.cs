@@ -33,7 +33,7 @@ internal sealed class Win32TrayIcon : ITrayIcon
     private const uint NIF_MESSAGE = 0x01, NIF_ICON = 0x02, NIF_TIP = 0x04, NIF_SHOWTIP = 0x80;
     private const uint NOTIFYICON_VERSION_4 = 4;
 
-    private const uint MF_STRING = 0x0000, MF_GRAYED = 0x0001, MF_CHECKED = 0x0008, MF_SEPARATOR = 0x0800;
+    private const uint MF_STRING = 0x0000, MF_GRAYED = 0x0001, MF_CHECKED = 0x0008, MF_POPUP = 0x0010, MF_SEPARATOR = 0x0800;
     private const uint TPM_RIGHTBUTTON = 0x0002, TPM_RETURNCMD = 0x0100, TPM_NONOTIFY = 0x0080;
 
     private const uint WS_POPUP = 0x80000000, WS_EX_TOOLWINDOW = 0x00000080;
@@ -212,24 +212,7 @@ internal sealed class Win32TrayIcon : ITrayIcon
         int command;
         try
         {
-            foreach (var item in state.Items)
-            {
-                switch (item.Kind)
-                {
-                    case TrayItemKind.Separator:
-                        AppendMenuW(menu, MF_SEPARATOR, UIntPtr.Zero, null);
-                        break;
-                    case TrayItemKind.Header:
-                        AppendMenuW(menu, MF_STRING | MF_GRAYED, (UIntPtr)item.Id, MenuText(item.Label));
-                        break;
-                    case TrayItemKind.Action:
-                        AppendMenuW(menu, MF_STRING, (UIntPtr)item.Id, MenuText(item.Label));
-                        break;
-                    case TrayItemKind.Check:
-                        AppendMenuW(menu, MF_STRING | (item.Checked ? MF_CHECKED : 0), (UIntPtr)item.Id, MenuText(item.Label));
-                        break;
-                }
-            }
+            AppendItems(menu, state.Items);
             // Without the foreground the menu does not close on an outside click.
             SetForegroundWindow(hwnd);
             command = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, x, y, hwnd, IntPtr.Zero);
@@ -240,10 +223,44 @@ internal sealed class Win32TrayIcon : ITrayIcon
             DestroyMenu(menu);
         }
 
-        if (command != 0 && Enum.IsDefined((TrayCommand)command))
+        if (command != 0 && Enum.IsDefined((TrayCommand)command) &&
+            TrayState.Flatten(state.Items).Any(i => i.Id == command && i.IsEnabled))
         {
             try { _onCommand((TrayCommand)command); }
             catch (Exception ex) { FileLog.Warn($"tray: {(TrayCommand)command} failed: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>Appends the lines to a menu; a submenu becomes a child popup menu,
+    /// which DestroyMenu on the parent destroys with it.</summary>
+    private static void AppendItems(IntPtr menu, IReadOnlyList<TrayItem> items)
+    {
+        foreach (var item in items)
+        {
+            uint grayed = item.IsEnabled ? 0 : MF_GRAYED;
+            switch (item.Kind)
+            {
+                case TrayItemKind.Separator:
+                    AppendMenuW(menu, MF_SEPARATOR, UIntPtr.Zero, null);
+                    break;
+                case TrayItemKind.Header:
+                case TrayItemKind.Action:
+                    AppendMenuW(menu, MF_STRING | grayed, (UIntPtr)item.Id, MenuText(item.Label));
+                    break;
+                case TrayItemKind.Check:
+                    AppendMenuW(menu, MF_STRING | grayed | (item.Checked ? MF_CHECKED : 0), (UIntPtr)item.Id, MenuText(item.Label));
+                    break;
+                case TrayItemKind.Submenu:
+                {
+                    IntPtr sub = CreatePopupMenu();
+                    if (sub == IntPtr.Zero) break;
+                    AppendItems(sub, item.Children ?? Array.Empty<TrayItem>());
+                    // MF_POPUP: the id argument is the submenu's handle.
+                    if (!AppendMenuW(menu, MF_STRING | MF_POPUP | grayed, (UIntPtr)(nuint)sub, MenuText(item.Label)))
+                        DestroyMenu(sub);
+                    break;
+                }
+            }
         }
     }
 

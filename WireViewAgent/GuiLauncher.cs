@@ -30,50 +30,96 @@ internal static class GuiLauncher
     private const string GuiMutexName = "WireView2_SingleInstance";
     private const string GuiActivationEventName = "WireView2_SingleInstance_ActivationEvent";
 
+    /// <summary>The tray's Open WireView: <see cref="Launch"/>, with a
+    /// notification when that did not open a window.</summary>
     public static void Open(IToastNotifier toast)
+    {
+        var (started, message) = Launch();
+        if (!started) toast.Show("WireView", message);
+    }
+
+    /// <summary>Starts the app or brings it forward. Returns whether that happened
+    /// and a sentence for the user (shown by the tray and the control panel).</summary>
+    public static (bool Started, string Message) Launch()
     {
         try
         {
             if (OperatingSystem.IsWindows())
             {
-                if (TryActivateRunningWindowsGui()) return;
+                if (TryActivateRunningWindowsGui()) return (true, "Asked the running WireView app to show its window.");
             }
             else if (IsLinuxGuiRunning())
             {
-                FileLog.Info("tray: Open WireView: the app is already running");
-                toast.Show("WireView", "WireView is already running. Open its window from its own tray icon.");
-                return;
+                FileLog.Info("Open WireView: the app is already running");
+                return (false, "WireView is already running. Open its window from its own tray icon.");
             }
 
             if (Resolve() is not { } start)
             {
-                FileLog.Warn("tray: Open WireView: the app was not found");
-                toast.Show("WireView", "The WireView app was not found. Install it, or put it next to wireview-agent.");
-                return;
+                FileLog.Warn("Open WireView: the app was not found");
+                return (false, "The WireView app was not found. Install it, or put it next to wireview-agent.");
             }
 
             var psi = new ProcessStartInfo(start.File) { UseShellExecute = false };
             foreach (var a in start.Args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);
-            FileLog.Info($"tray: Open WireView: started {start.File} {string.Join(' ', start.Args)}".TrimEnd());
+            FileLog.Info($"Open WireView: started {start.File} {string.Join(' ', start.Args)}".TrimEnd());
+            return (true, "Starting the WireView app.");
         }
         catch (Exception ex)
         {
-            FileLog.Warn($"tray: Open WireView failed: {ex.Message}");
-            toast.Show("WireView", $"Cannot start the WireView app: {ex.Message}");
+            FileLog.Warn($"Open WireView failed: {ex.Message}");
+            return (false, $"Cannot start the WireView app: {ex.Message}");
         }
     }
 
-    private readonly record struct Launch(string File, string[] Args);
+    /// <summary>What Open WireView would start (a path or command line), or null
+    /// when the app is not installed where the agent looks.</summary>
+    public static string? Locate()
+    {
+        try
+        {
+            if (Resolve() is not { } l) return null;
+            return l.Args.Length == 0 ? l.File : $"{l.File} {string.Join(' ', l.Args)}";
+        }
+        catch { return null; }
+    }
 
-    private static Launch? Resolve()
+    /// <summary>Opens a URL in the default browser (xdg-open on Linux, the shell on
+    /// Windows, open on macOS). Returns null, or the reason it failed.</summary>
+    public static string? OpenUrl(string url)
+    {
+        try
+        {
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsWindows()) psi = new ProcessStartInfo(url) { UseShellExecute = true };
+            else
+            {
+                string opener = OperatingSystem.IsMacOS() ? "open" : "xdg-open";
+                if (!OperatingSystem.IsMacOS() && FindOnPath(opener) == null)
+                    return "xdg-open was not found; open the address in a browser yourself";
+                psi = new ProcessStartInfo(opener) { UseShellExecute = false };
+                psi.ArgumentList.Add(url);
+            }
+            using var p = Process.Start(psi);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private readonly record struct LaunchCommand(string File, string[] Args);
+
+    private static LaunchCommand? Resolve()
     {
         string? here = Path.GetDirectoryName(Environment.ProcessPath);
         if (OperatingSystem.IsWindows())
         {
             foreach (var name in new[] { "wireview2-plus.exe", "WireView2.exe" })
                 if (here != null && File.Exists(Path.Combine(here, name)))
-                    return new Launch(Path.Combine(here, name), []);
+                    return new LaunchCommand(Path.Combine(here, name), []);
             return null;
         }
 
@@ -81,14 +127,14 @@ internal static class GuiLauncher
         if (here != null) candidates.Add(Path.Combine(here, "WireView2"));
         candidates.Add("/usr/lib/wireview-linux/WireView2");
         foreach (var c in candidates)
-            if (IsExecutable(c)) return new Launch(c, []);
-        if (FindOnPath("wireview-linux") is { } launcher) return new Launch(launcher, []);
+            if (IsExecutable(c)) return new LaunchCommand(c, []);
+        if (FindOnPath("wireview-linux") is { } launcher) return new LaunchCommand(launcher, []);
 
         bool inSandbox = File.Exists("/.flatpak-info");
         if (inSandbox && FindOnPath("flatpak-spawn") is { } spawn)
-            return new Launch(spawn, ["--host", "flatpak", "run", FlatpakAppId]);
+            return new LaunchCommand(spawn, ["--host", "flatpak", "run", FlatpakAppId]);
         if (!inSandbox && FindOnPath("flatpak") is { } flatpak && FlatpakInstalled())
-            return new Launch(flatpak, ["run", FlatpakAppId]);
+            return new LaunchCommand(flatpak, ["run", FlatpakAppId]);
         return null;
     }
 
@@ -156,11 +202,11 @@ internal static class GuiLauncher
                 try { AllowSetForegroundWindow(AsfwAny); } catch { }
                 activate.Set();
             }
-            FileLog.Info("tray: Open WireView: asked the running app to show its window");
+            FileLog.Info("Open WireView: asked the running app to show its window");
         }
         else
         {
-            FileLog.Info("tray: Open WireView: the app is running but did not answer");
+            FileLog.Info("Open WireView: the app is running but did not answer");
         }
         return true;
     }

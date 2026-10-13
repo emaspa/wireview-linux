@@ -43,6 +43,16 @@ namespace WireView2.Net
             Prune();
         }
 
+        /// <summary>Today's log file, or null before <see cref="Init"/>.</summary>
+        public static string? CurrentPath
+        {
+            get
+            {
+                lock (_gate)
+                    return _dir == null ? null : Path.Combine(_dir, $"{_prefix}{DateTime.Now:yyyy-MM-dd}.log");
+            }
+        }
+
         public static void Info(string message) => Write("INFO", message);
         public static void Warn(string message) => Write("WARN", message);
 

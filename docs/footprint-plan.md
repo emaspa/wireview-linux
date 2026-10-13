@@ -253,6 +253,31 @@ Done, in this repo:
   No tray on the desktop: one log line, the agent runs on and registers when a watcher
   appears. `--no-tray` turns it off. Cost on Linux: about +5 MB RSS, +4.5 MB PSS, +1.5 MB
   anonymous; +0.4 MB on the Linux single file, +0.25 MB on the Windows one.
+- The agent as a mini client (everything but the graphs, firmware updates, themes and the
+  device log). Tray menu: *Settings and controls...*, a *Screen* submenu (the five screens,
+  pause, resume), *Clear faults* (enabled during a fault; clears the active faults, keeps the
+  log, like the app's banner), a *Remote hosts* submenu (one line per host: power, fault or
+  offline). Submenus in the shared menu model and both backends (Win32 `MF_POPUP`, dbusmenu
+  `children-display`).
+- Control panel: one embedded page (`WireViewAgent/ControlPanel.html`, inline CSS and JS)
+  and a JSON API under `/api/` (status, config read and write, screen/NVM/clear-faults
+  commands, agent settings, open the app), served on the publish port through a new
+  extra-routes hook in `SensorPublisher` (same connection, size and rate limits). Loopback
+  peers only (403 otherwise, also with LAN publishing on); `/api/` needs the per-run random
+  token in `X-Agent-Token` (401 otherwise); no CORS. Opened by the tray or `--open`, which
+  reads the token from the owner-only `agent-panel.token` the agent writes at start.
+  When the publish port is taken (wireviewd's 9876), a loopback-only fallback listener on
+  PublishPort+1 to +10, else an ephemeral port, serves the same routes; its port is the
+  token file's second line (read by `--open` and `--status`), and the agent moves back to the
+  publish port when the 30 s retry finds it free.
+- `DeviceConfigModel` in `WireViewDeviceLib`: the config decoded in the Device page's units,
+  layouts V1, V2 and V3, with an encode that writes only the edited fields onto the device's
+  current bytes (`MergeConfigChanges`), so a round trip is byte-identical. The page's
+  edit logic (`ConfigEditorValues`, `ApplyChanges`, the device-string helpers) moved from
+  `DeviceViewModel` to `DeviceConfigEditor` in the same library; the view model calls it.
+- Cost: page never opened, the same idle as before (RSS 64 to 68 MB, PSS 53 to 57 MB,
+  anonymous 15 to 18 MB, 15 threads, about 1 % of one core); after the page has been used and
+  closed, about +17 MB RSS (flat afterwards). +0.15 MB on each single file.
 - Serial handover: `suspendSerial`/`resumeSerial` commands (loopback only, signed with the
   agent's `agent.key` or the network secret). The agent closes the port, keeps publishing the
   last readings with `connected: false` and `serialSuspended: true`, and takes the port back on
@@ -276,7 +301,11 @@ Left:
   wireview-hwmon repo and is not part of this change.
 - Packaging: the agent is in no package or zip yet.
 - Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
-  through the handover, the tray icon and its menu. Built and published for win-x64 from Linux only.
+  through the handover, the tray icon and its menu (including the submenus) and the control
+  panel's browser launch. Built and published for win-x64 from Linux only.
+- The agent's direct serial mode on Linux (no hwmon) is not tested on hardware yet.
+- The control panel's memory after use: source-generated JSON and a collection once the page
+  closes could take back most of the +17 MB.
 - After a flash through the agent the Device page shows the old firmware version until the
   device is selected again (the agent's device never disconnects from the GUI's side).
 - Trimming or NativeAOT for the agent.

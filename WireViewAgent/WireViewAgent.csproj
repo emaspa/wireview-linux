@@ -59,6 +59,8 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\WireView2\Assets\Icons\bear.ico" LogicalName="wireview-agent.ico" />
+    <!-- The control panel page (ControlPanel.cs): one file, inline CSS and JS. -->
+    <EmbeddedResource Include="ControlPanel.html" LogicalName="wireview-agent.ControlPanel.html" />
   </ItemGroup>
 
   <ItemGroup>

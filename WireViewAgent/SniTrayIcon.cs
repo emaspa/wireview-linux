@@ -72,8 +72,20 @@ internal sealed class SniTrayIcon : ITrayIcon
                 EmitSignal(c, ItemPath, ItemInterface, "NewStatus", "s", (ref MessageWriter w) => w.WriteString(status));
             }
 
-            var oldItems = old.Items;
-            var changed = state.Items.Where((item, i) => item != oldItems[i]).ToList();
+            var oldItems = TrayState.Flatten(old.Items).ToList();
+            var newItems = TrayState.Flatten(state.Items).ToList();
+            // Lines added or removed (the Remote hosts submenu): a new layout.
+            if (!Structure(old.Items).SequenceEqual(Structure(state.Items)))
+            {
+                uint layoutRev = ++_revision;
+                EmitSignal(c, MenuPath, MenuInterface, "LayoutUpdated", "ui", (ref MessageWriter w) =>
+                {
+                    w.WriteUInt32(layoutRev);
+                    w.WriteInt32(0);
+                });
+                return;
+            }
+            var changed = newItems.Where((item, i) => item.Line != oldItems[i].Line).Select(i => i.Line).ToList();
             if (changed.Count == 0) return;
             _revision++;
             EmitSignal(c, MenuPath, MenuInterface, "ItemsPropertiesUpdated", "a(ia{sv})a(ias)", (ref MessageWriter w) =>
@@ -89,10 +101,11 @@ internal sealed class SniTrayIcon : ITrayIcon
                 var removed = w.WriteArrayStart(DBusType.Struct);
                 w.WriteArrayEnd(removed);
             });
-            // A checkbox flip (a user action, rare) also resets the layout, for
-            // hosts that only follow LayoutUpdated. The header line, which changes
-            // every second, goes through ItemsPropertiesUpdated only.
-            if (changed.Any(i => i.Kind == TrayItemKind.Check))
+            // A checkbox flip or an item enabled or disabled (rare) also resets the
+            // layout, for hosts that only follow LayoutUpdated. The header and remote
+            // host lines, which change every second, go through
+            // ItemsPropertiesUpdated only.
+            if (changed.Any(i => i.Kind != TrayItemKind.Header))
             {
                 uint rev = _revision;
                 EmitSignal(c, MenuPath, MenuInterface, "LayoutUpdated", "ui", (ref MessageWriter w) =>
@@ -105,6 +118,17 @@ internal sealed class SniTrayIcon : ITrayIcon
     }
 
     private static string StatusOf(TrayState s) => s.Fault ? "NeedsAttention" : "Active";
+
+    /// <summary>The menu's shape: each line's parent, id and kind, in order.</summary>
+    private static IEnumerable<(int Parent, int Id, TrayItemKind Kind)> Structure(IReadOnlyList<TrayItem> items, int parent = 0)
+    {
+        foreach (var item in items)
+        {
+            yield return (parent, item.Id, item.Kind);
+            if (item.Children != null)
+                foreach (var child in Structure(item.Children, item.Id)) yield return child;
+        }
+    }
 
     // ---- Connection and registration ----
 
@@ -345,6 +369,7 @@ internal sealed class SniTrayIcon : ITrayIcon
             revision = _revision;
         }
         var items = state.Items;
+        var all = TrayState.Flatten(items).ToList();
         var reader = request.GetBodyReader();
         switch (request.MemberAsString)
         {
@@ -353,7 +378,7 @@ internal sealed class SniTrayIcon : ITrayIcon
                 int parentId = reader.ReadInt32();
                 int depth = reader.ReadInt32();
                 string[] names = reader.ReadArrayOfString();
-                var parent = parentId == 0 ? null : items.FirstOrDefault(i => i.Id == parentId);
+                var parent = parentId == 0 ? null : all.FirstOrDefault(i => i.Id == parentId);
                 if (parentId != 0 && parent == null)
                 {
                     context.ReplyError("org.freedesktop.DBus.Error.InvalidArgs", $"no menu item {parentId}");
@@ -379,7 +404,7 @@ internal sealed class SniTrayIcon : ITrayIcon
                     var array = w.WriteArrayStart(DBusType.Struct);
                     foreach (int id in ids)
                     {
-                        var item = id == 0 ? null : items.FirstOrDefault(i => i.Id == id);
+                        var item = id == 0 ? null : all.FirstOrDefault(i => i.Id == id);
                         if (id != 0 && item == null) continue;
                         w.WriteStructureStart();
                         w.WriteInt32(id);
@@ -395,7 +420,7 @@ internal sealed class SniTrayIcon : ITrayIcon
             {
                 int id = reader.ReadInt32();
                 string name = reader.ReadString();
-                var item = id == 0 ? null : items.FirstOrDefault(i => i.Id == id);
+                var item = id == 0 ? null : all.FirstOrDefault(i => i.Id == id);
                 var value = ItemProperties(item, [name]).Select(p => (VariantValue?)p.Value).FirstOrDefault();
                 if ((id != 0 && item == null) || value is not { } v)
                 {
@@ -416,7 +441,7 @@ internal sealed class SniTrayIcon : ITrayIcon
                 int id = reader.ReadInt32();
                 string eventId = reader.ReadString();
                 ReplyEmpty(context);
-                OnEvent(items, id, eventId);
+                OnEvent(all, id, eventId);
                 break;
             }
             case "EventGroup":
@@ -435,11 +460,11 @@ internal sealed class SniTrayIcon : ITrayIcon
                 var w = context.CreateReplyWriter("ai");
                 try
                 {
-                    w.WriteArray(events.Select(e => e.Item1).Where(id => items.All(i => i.Id != id)).ToArray());
+                    w.WriteArray(events.Select(e => e.Item1).Where(id => all.All(i => i.Id != id)).ToArray());
                     context.Reply(w.CreateMessage());
                 }
                 finally { w.Dispose(); }
-                foreach (var (id, eventId) in events) OnEvent(items, id, eventId);
+                foreach (var (id, eventId) in events) OnEvent(all, id, eventId);
                 break;
             }
             case "AboutToShow":
@@ -475,7 +500,7 @@ internal sealed class SniTrayIcon : ITrayIcon
     {
         if (eventId != "clicked") return;
         var item = items.FirstOrDefault(i => i.Id == id);
-        if (item is { Kind: TrayItemKind.Action or TrayItemKind.Check } && Enum.IsDefined((TrayCommand)id))
+        if (item is { Kind: TrayItemKind.Action or TrayItemKind.Check, IsEnabled: true } && Enum.IsDefined((TrayCommand)id))
             Dispatch((TrayCommand)id);
     }
 
@@ -501,7 +526,8 @@ internal sealed class SniTrayIcon : ITrayIcon
     // ---- dbusmenu layout ----
 
     /// <summary>One (ia{sv}av) node: the root (null, id 0) with the items as
-    /// children, or a leaf item.</summary>
+    /// children, a submenu with its lines, or a leaf item. A negative depth is
+    /// unlimited.</summary>
     private static void WriteLayout(ref MessageWriter w, TrayItem? item, IReadOnlyList<TrayItem> items,
                                     int depth, string[] names)
     {
@@ -509,9 +535,10 @@ internal sealed class SniTrayIcon : ITrayIcon
         w.WriteInt32(item?.Id ?? 0);
         w.WriteDictionary(ItemProperties(item, names));
         var children = w.WriteArrayStart(DBusType.Variant);
-        if (item == null && depth != 0)
+        var lines = item == null ? items : item.Children;
+        if (lines != null && depth != 0)
         {
-            foreach (var child in items)
+            foreach (var child in lines)
             {
                 w.WriteSignature(LayoutSignature); // a variant: its signature, then the value
                 WriteLayout(ref w, child, items, depth - 1, names);
@@ -542,8 +569,10 @@ internal sealed class SniTrayIcon : ITrayIcon
             return props;
         }
         Add("label", VariantValue.String(item.Label));
-        Add("enabled", VariantValue.Bool(item.Kind != TrayItemKind.Header));
+        Add("enabled", VariantValue.Bool(item.IsEnabled));
         Add("visible", VariantValue.Bool(true));
+        if (item.Kind == TrayItemKind.Submenu)
+            Add("children-display", VariantValue.String("submenu"));
         if (item.Kind == TrayItemKind.Check)
         {
             Add("toggle-type", VariantValue.String("checkmark"));

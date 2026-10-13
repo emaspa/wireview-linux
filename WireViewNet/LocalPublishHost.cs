@@ -42,6 +42,10 @@ namespace WireView2.Net
         /// (see <see cref="SensorPublisher"/>).</summary>
         public Func<string?>? LocalSecretProvider { get; init; }
 
+        /// <summary>Answers requests the publisher's own routes do not (the agent's
+        /// control panel), on the same port; null passes them on (404).</summary>
+        public Func<HttpRequestInfo, HttpResponseInfo?>? ExtraRoutes { get; init; }
+
         public bool IsRunning
         {
             get { lock (_gate) return _publisher?.IsRunning == true; }
@@ -71,7 +75,8 @@ namespace WireView2.Net
                     maxRequestBytes: s.MaxRequestBytes,
                     rateLimitPerMinute: s.RateLimitPerMinute,
                     bindAddress: bindAddress,
-                    localSecretProvider: LocalSecretProvider);
+                    localSecretProvider: LocalSecretProvider,
+                    extraRoutes: ExtraRoutes);
                 try
                 {
                     publisher.Start();

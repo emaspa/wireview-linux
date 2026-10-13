@@ -1,3 +1,4 @@
+using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
 
@@ -69,7 +70,9 @@ internal sealed class TrayController : IDisposable
             Fault: status.FaultText != null,
             PublishEnabled: settings.PublishEnabled,
             ShutdownOnFault: settings.SoftwareShutdownOnFault,
-            StartAtLogin: AgentInstaller.IsInstalled());
+            StartAtLogin: AgentInstaller.IsInstalled(),
+            DeviceCommands: status.DeviceName != null && !status.Handover,
+            RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()));
     }
 
     /// <summary>A menu click, on the tray's thread.</summary>
@@ -84,6 +87,46 @@ internal sealed class TrayController : IDisposable
                 case TrayCommand.OpenApp:
                     GuiLauncher.Open(_toast);
                     break;
+
+                case TrayCommand.OpenPanel:
+                    OpenPanel();
+                    break;
+
+                case TrayCommand.ScreenMain:
+                case TrayCommand.ScreenSimple:
+                case TrayCommand.ScreenCurrent:
+                case TrayCommand.ScreenTemp:
+                case TrayCommand.ScreenStatus:
+                case TrayCommand.PauseUpdates:
+                case TrayCommand.ResumeUpdates:
+                {
+                    int cmd = (int)(command switch
+                    {
+                        TrayCommand.ScreenSimple => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SIMPLE,
+                        TrayCommand.ScreenCurrent => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_CURRENT,
+                        TrayCommand.ScreenTemp => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_TEMP,
+                        TrayCommand.ScreenStatus => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS,
+                        TrayCommand.PauseUpdates => WireViewPro2Device.SCREEN_CMD.SCREEN_PAUSE_UPDATES,
+                        TrayCommand.ResumeUpdates => WireViewPro2Device.SCREEN_CMD.SCREEN_RESUME_UPDATES,
+                        _ => WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN,
+                    });
+                    var r = _service.RunLocalCommand(WireViewCommand.Screen("", cmd));
+                    string text = ControlPanel.ScreenText(cmd);
+                    FileLog.Write(r == DaemonResult.Ok ? "INFO" : "WARN", $"tray: {text.TrimEnd('.')} -> {r}");
+                    if (r != DaemonResult.Ok) _toast.Show("WireView agent", CommandFailure("The screen change", r));
+                    break;
+                }
+
+                case TrayCommand.ClearFaults:
+                {
+                    var r = _service.ClearLocalFaults();
+                    if (r != DaemonResult.Ok)
+                    {
+                        FileLog.Warn($"tray: Clear faults -> {r}");
+                        _toast.Show("WireView agent", CommandFailure("Clearing the faults", r));
+                    }
+                    break;
+                }
 
                 case TrayCommand.TogglePublish:
                 {
@@ -128,6 +171,31 @@ internal sealed class TrayController : IDisposable
         lock (_lock) _forceNext = true;
         if (command == TrayCommand.ToggleStartAtLogin) Refresh(); // not tick-driven
     }
+
+    private void OpenPanel()
+    {
+        if (_service.PanelUrl is not { } url)
+        {
+            string why = _service.PublishError ?? "the agent is not listening on its port";
+            FileLog.Warn($"tray: Settings and controls: no listener ({why})");
+            _toast.Show("WireView agent", $"The control panel is not available: {why}.");
+            return;
+        }
+        if (GuiLauncher.OpenUrl(url) is { } error)
+        {
+            FileLog.Warn($"tray: Settings and controls: cannot open the browser: {error}");
+            _toast.Show("WireView agent", $"Cannot open the browser ({error}). Run wireview-agent --open for the address.");
+            return;
+        }
+        FileLog.Info("tray: Settings and controls: opened the control panel in the browser");
+    }
+
+    private static string CommandFailure(string action, DaemonResult r) => r switch
+    {
+        DaemonResult.NotConnected => $"{action} did not work: no device connected.",
+        DaemonResult.Denied => $"{action} was refused by wireviewd. Add your user to the 'wireview' group.",
+        _ => $"{action} did not work: the device did not take the command.",
+    };
 
     public void Dispose()
     {

@@ -27,12 +27,16 @@ internal static class Program
         "raises fault alerts and, when set in the app, shuts the PC down on a fault.\n" +
         "The WireView app connects through it while it runs. Its tray icon shows the\n" +
         "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
+        "Its control panel, a local web page, edits the device configuration, alarms\n" +
+        "and LAN monitoring: open it from the tray or with --open.\n" +
         "\n" +
         "  (no option)    run in the foreground until Ctrl+C or SIGTERM\n" +
         "  --install      start the agent at login (Linux: XDG autostart entry,\n" +
         "                 Windows: HKCU Run key)\n" +
         "  --uninstall    remove that login entry\n" +
         "  --status       ask the running agent and print device and fault state\n" +
+        "  --open         print the running agent's control panel address and open it\n" +
+        "                 in the browser\n" +
         "  --no-shutdown  run, but never power off (for testing shutdown on fault)\n" +
         "  --no-tray      run without the tray icon (combines with --no-shutdown)\n" +
         "  --version      print the version\n" +
@@ -43,7 +47,8 @@ internal static class Program
         "interfaces. Off: 127.0.0.1 only.\n" +
         "\n" +
         "Exit codes: 0 ok, 1 error or already running, 2 bad usage,\n" +
-        "--status only: 3 not running, 4 no device connected, 5 active fault.";
+        "--status only: 3 not running, 4 no device connected, 5 active fault.\n" +
+        "--open: 3 when no agent is running.";
 
     public static int Main(string[] args)
     {
@@ -63,6 +68,8 @@ internal static class Program
         {
             case "--status":
                 return StatusCommand.Run();
+            case "--open":
+                return OpenPanel();
             case "--install":
                 return AgentInstaller.Install();
             case "--uninstall":
@@ -78,6 +85,28 @@ internal static class Program
             default:
                 return UsageError($"unknown option {args[0]}");
         }
+    }
+
+    /// <summary><c>--open</c>: the running agent's control panel. The token and the
+    /// port it listens on (the publish port, or its loopback fallback while that is
+    /// taken) are in the owner-only file the agent writes.</summary>
+    private static int OpenPanel()
+    {
+        AppSettings.Reload();
+        var (port, snap) = StatusCommand.FindAgent();
+        string? token = AgentPanelToken.Read();
+        if (snap?.Agent == null || token == null)
+        {
+            Console.Error.WriteLine(AgentInstance.IsRunning()
+                ? $"wireview-agent is running but its control panel does not answer on 127.0.0.1:{port}; see its log."
+                : "wireview-agent is not running. Start it first (wireview-agent, or --install to start it at login).");
+            return ExitNotRunning;
+        }
+        string url = $"http://127.0.0.1:{port}/#t={token}";
+        Console.WriteLine(url);
+        if (GuiLauncher.OpenUrl(url) is { } error)
+            Console.Error.WriteLine($"wireview-agent: cannot open the browser ({error}); open the address above.");
+        return ExitOk;
     }
 
     private static int UsageError(string message)

@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>WireView Control Panel</title>
+<style>
+:root {
+  --bg: #121212;
+  --panel: #1e1e1e;
+  --panel-2: #262626;
+  --line: #333333;
+  --text: #e9e9ee;
+  --muted: #9a9a9f;
+  --accent: #e02a25;
+  --accent-hover: #f0443f;
+  --ok: #4caf50;
+  --warn: #ffb300;
+  --bad: #ff5252;
+  --power: #9370db;
+  --current: #00ced1;
+  --voltage: #ffd700;
+  --temp-in: #1e90ff;
+  --temp-out: #3cb371;
+  --ext1: #ffa500;
+  --ext2: #cd5c5c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif; }
+header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px; background: #181818; border-bottom: 2px solid var(--accent);
+}
+header .brand { font-weight: 700; font-size: 16px; letter-spacing: .2px; }
+header .brand span { color: var(--accent); }
+header .ver { color: var(--muted); font-size: 12px; }
+header .spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--line); }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.ok::before { background: var(--ok); }
+.pill.warn::before { background: var(--warn); }
+.pill.bad::before { background: var(--bad); }
+main { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+section > h2 { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 10px; }
+section > h2 .sub { color: var(--muted); font-weight: 400; font-size: 12px; }
+h3 { margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 650; }
+.banner { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--bad); background: #2a1515; }
+.banner.info { border-color: var(--line); background: var(--panel); }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12.5px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.big { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
+.big div { background: var(--panel-2); border-radius: 6px; padding: 8px 12px; border-left: 3px solid var(--line); }
+.big b { display: block; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.big small { color: var(--muted); font-size: 12px; }
+.big .p { border-left-color: var(--power); }
+.big .c { border-left-color: var(--current); }
+.big .v { border-left-color: var(--voltage); }
+.big .f { border-left-color: var(--muted); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.temps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; }
+.temps span { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 3px 0; }
+.temps i { font-style: normal; color: var(--muted); }
+.swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.fault { margin-top: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+         padding: 8px 12px; border-radius: 6px; background: var(--panel-2); }
+.fault.active { background: #3a1414; border: 1px solid var(--bad); }
+.fault .state { font-weight: 650; }
+.fault.active .state { color: var(--bad); }
+button {
+  font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid #444;
+  border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: #777; background: #2e2e2e; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+button.danger { border-color: #7a2a2a; }
+button:disabled { opacity: .45; cursor: default; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.result { font-size: 12.5px; min-height: 1em; }
+.result.ok { color: var(--ok); }
+.result.err { color: var(--bad); }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 24px; }
+.field { display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 8px; padding: 3px 0; }
+.field label { color: var(--muted); }
+.field.edited label { color: var(--warn); }
+input[type=text], input[type=number], input[type=password], select {
+  font: inherit; color: var(--text); background: #141414; border: 1px solid #444; border-radius: 5px;
+  padding: 4px 8px; width: 100%; min-width: 0;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+input:invalid { border-color: var(--bad); }
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.checks label { color: var(--text); display: inline-flex; align-items: center; gap: 4px; }
+.alarms th, .alarms td { text-align: center; }
+.alarms th:first-child, .alarms td:first-child { text-align: left; }
+.alarms td.edited { background: #33290f; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px;
+           padding-top: 12px; border-top: 1px solid var(--line); }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0;
+          border-bottom: 1px solid var(--line); }
+.switch:last-child { border-bottom: 0; }
+.switch .what small { display: block; color: var(--muted); font-size: 12px; }
+.hosts li { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.hosts { list-style: none; margin: 6px 0; padding: 0; }
+.hosts li span { flex: 1; }
+.remote { display: grid; gap: 8px; }
+.remote .h { display: grid; grid-template-columns: minmax(140px, 1.2fr) repeat(4, minmax(70px, .6fr)) minmax(160px, 1.5fr);
+             gap: 8px; align-items: center; padding: 6px 10px; background: var(--panel-2); border-radius: 6px;
+             font-variant-numeric: tabular-nums; }
+.remote .h.off { opacity: .6; }
+.remote .h .bad { color: var(--bad); font-weight: 600; }
+@media (max-width: 760px) { .remote .h { grid-template-columns: 1fr 1fr; } .field { grid-template-columns: 1fr; } }
+.screens { display: flex; gap: 8px; flex-wrap: wrap; }
+.note { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span>WireView</span> agent</div>
+  <div class="ver" id="ver"></div>
+  <div class="spacer"></div>
+  <div class="pill" id="state">Connecting</div>
+</header>
+
+<main>
+  <div class="banner hidden" id="noToken">
+    This page needs the agent's access token. Open it from the tray menu (<b>Settings and controls...</b>)
+    or run <span class="mono">wireview-agent --open</span>.
+  </div>
+  <div class="banner hidden" id="offline">The agent does not answer. It may have stopped, or its port changed. Retrying.</div>
+
+  <section id="status">
+    <h2>Status <span class="sub" id="devSource"></span></h2>
+    <div id="noDevice" class="muted hidden">No device connected.</div>
+    <div id="devBody" class="hidden">
+      <dl class="kv">
+        <dt>Device</dt><dd id="devName"></dd>
+        <dt>Firmware</dt><dd id="devFw"></dd>
+        <dt>Unique ID</dt><dd class="mono" id="devId"></dd>
+      </dl>
+      <div class="big">
+        <div class="p"><small>Total power</small><b id="pw">-</b></div>
+        <div class="c"><small>Total current</small><b id="cur">-</b></div>
+        <div class="v"><small>Voltage (average)</small><b id="volt">-</b></div>
+        <div class="f"><small>Fan duty</small><b id="fan">-</b></div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Connector pins</h3>
+          <table>
+            <thead><tr><th>Pin</th><th>Voltage</th><th>Current</th><th>Power</th></tr></thead>
+            <tbody id="pins"></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Temperatures</h3>
+          <div class="temps" id="temps"></div>
+          <p class="note" id="psu"></p>
+        </div>
+      </div>
+      <div class="fault" id="faultBox">
+        <span class="state" id="faultState">No active fault</span>
+        <span class="muted" id="faultLog"></span>
+        <span class="spacer" style="flex:1"></span>
+        <button id="clearFaults" disabled>Clear faults</button>
+        <span class="result" id="clearResult"></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="remoteSection" class="hidden">
+    <h2>Remote hosts <span class="sub">read only, from the LAN</span></h2>
+    <div class="remote" id="remote"></div>
+  </section>
+
+  <section>
+    <h2>Screen <span class="sub">what the device's display shows</span></h2>
+    <div class="screens" id="screens"></div>
+    <div class="row" style="margin-top:8px">
+      <button data-screen="240">Pause updates</button>
+      <button data-screen="241">Resume updates</button>
+      <span class="result" id="screenResult"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Device configuration <span class="sub" id="cfgInfo"></span></h2>
+    <div id="cfgMissing" class="muted">Loading the configuration...</div>
+    <form id="cfg" class="hidden" autocomplete="off" onsubmit="return false">
+      <div class="cols">
+        <div>
+          <h3>General</h3>
+          <div id="gGeneral"></div>
+          <h3>Fan</h3>
+          <div id="gFan"></div>
+        </div>
+        <div>
+          <h3>Display</h3>
+          <div id="gDisplay"></div>
+        </div>
+      </div>
+      <div class="cols">
+        <div>
+          <h3>Fault alarms</h3>
+          <table class="alarms">
+            <thead><tr><th>Fault</th><th>Display</th><th>Buzzer</th><th>Soft off</th><th>Hard off</th></tr></thead>
+            <tbody id="alarms"></tbody>
+          </table>
+          <p class="note">Soft off and Hard off act on the PC through the device's power switch header.</p>
+        </div>
+        <div>
+          <h3>Fault thresholds</h3>
+          <div id="gThresholds"></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="apply" disabled>Apply</button>
+        <button id="reload" title="Read the configuration the device is running now">Reload from device</button>
+        <button id="store" title="Save the running configuration so it survives a power cycle">Store to device memory</button>
+        <button id="load" title="Discard unsaved device changes and load what is stored">Reload from device memory</button>
+        <button class="danger" id="reset">Reset to defaults</button>
+        <span class="result" id="cfgResult"></span>
+      </div>
+      <p class="note">Apply changes the running configuration. Store to device memory keeps it after a power cycle.
+        Themes, colours and the background image are edited in the WireView app.</p>
+    </form>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Alerts and shutdown</h2>
+      <div class="switch">
+        <div class="what">Shutdown on fault<small>Power this PC off when its WireView reports a fault.</small></div>
+        <input type="checkbox" id="sShutdown">
+      </div>
+      <div class="switch">
+        <div class="what">Start at login<small>Run the agent when you log in.</small></div>
+        <input type="checkbox" id="sLogin">
+      </div>
+      <p class="note">Fault notifications are always on while the agent runs, for this PC and for the remote hosts.</p>
+      <p class="note hidden" id="noShutdownNote">This agent was started with --no-shutdown: it logs instead of powering off.</p>
+      <div class="result" id="alertResult"></div>
+    </section>
+
+    <section>
+      <h2>LAN monitoring</h2>
+      <div class="switch">
+        <div class="what">Publish on the LAN<small id="pubState"></small></div>
+        <input type="checkbox" id="sPublish">
+      </div>
+      <div class="field"><label for="sPort">Port</label>
+        <div class="row" style="flex-wrap:nowrap"><input type="number" id="sPort" min="1024" max="65535" step="1" style="max-width:110px">
+          <button id="savePort">Save port</button></div></div>
+      <h3>Remote hosts to watch</h3>
+      <ul class="hosts" id="hosts"></ul>
+      <div class="row" style="flex-wrap:nowrap">
+        <input type="text" id="newHost" placeholder="host or host:port" spellcheck="false">
+        <button id="addHost">Add</button>
+      </div>
+      <h3>Network secret</h3>
+      <div class="row" style="flex-wrap:nowrap">
+        <input type="password" id="secret" spellcheck="false" placeholder="not set: remote writes are off">
+        <button id="showSecret">Show</button>
+        <button id="saveSecret">Save</button>
+      </div>
+      <p class="note">Shared with the other hosts; it signs device commands sent over the LAN.</p>
+      <div class="result" id="lanResult"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Tools</h2>
+    <div class="row">
+      <button id="openApp">Open WireView app</button>
+      <span class="muted">for the graphs, firmware updates, themes and the device log</span>
+      <span class="result" id="appResult"></span>
+    </div>
+    <dl class="kv" style="margin-top:10px">
+      <dt>Agent log</dt><dd class="mono" id="logPath"></dd>
+      <dt>Settings</dt><dd class="mono" id="settingsPath"></dd>
+      <dt>Agent</dt><dd id="agentInfo"></dd>
+    </dl>
+  </section>
+</main>
+
+<script>
+"use strict";
+(function () {
+  const token = (new URLSearchParams(location.hash.slice(1))).get("t") || "";
+  const $ = (id) => document.getElementById(id);
+  const SCREENS = [["Main", 224], ["Simple", 225], ["Current", 226], ["Temperature", 227], ["Status", 228]];
+  let status = null;         // last /api/status
+  let cfg = null;            // last /api/config answer
+  let hostsDraft = null;     // remote hosts list being edited
+  let busy = 0;
+
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids) if (kid !== null && kid !== undefined) e.append(kid);
+    return e;
+  }
+  const fmt = (v, d) => (typeof v === "number" && isFinite(v)) ? v.toFixed(d) : "-";
+  const tempText = (t) => (typeof t === "number" && t > -99) ? t.toFixed(1) + " °C" : "no probe";
+
+  async function api(method, path, body) {
+    const opts = { method, headers: { "X-Agent-Token": token }, cache: "no-store" };
+    if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    let res;
+    try { res = await fetch(path, opts); }
+    catch (e) { const err = new Error("the agent does not answer"); err.offline = true; throw err; }
+    let data = null;
+    try { data = await res.json(); } catch (e) { }
+    if (res.status === 401) { $("noToken").classList.remove("hidden"); }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || (res.status === 429 ? "too many requests, try again in a moment" : "HTTP " + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function say(id, ok, text) {
+    const r = $(id);
+    r.className = "result " + (ok ? "ok" : "err");
+    r.textContent = text;
+    clearTimeout(r._t);
+    if (ok) r._t = setTimeout(() => { r.textContent = ""; }, 6000);
+  }
+
+  async function run(resultId, fn, buttons) {
+    busy++;
+    (buttons || []).forEach(b => b.disabled = true);
+    try { const msg = await fn(); if (msg) say(resultId, true, msg); return true; }
+    catch (e) { say(resultId, false, e.message); return false; }
+    finally { busy--; (buttons || []).forEach(b => b.disabled = false); refreshButtons(); }
+  }
+
+  // ---- Status ----
+
+  function renderStatus(s) {
+    status = s;
+    $("offline").classList.add("hidden");
+    $("ver").textContent = "v" + s.agent.version + " on " + s.agent.host;
+    const d = s.device;
+    const pill = $("state");
+    if (!d) { pill.className = "pill bad"; pill.textContent = "No device"; }
+    else if (d.serialSuspended) { pill.className = "pill warn"; pill.textContent = "Serial port lent to the app"; }
+    else if (d.faultText) { pill.className = "pill bad"; pill.textContent = "Fault"; }
+    else if (d.connected) { pill.className = "pill ok"; pill.textContent = "Connected"; }
+    else { pill.className = "pill warn"; pill.textContent = "Not connected"; }
+
+    $("noDevice").classList.toggle("hidden", !!d);
+    $("devBody").classList.toggle("hidden", !d);
+    $("devSource").textContent = d ? (d.serialSuspended ? "last readings, the app has the port" : (d.source || "")) : "";
+    if (d) {
+      $("devName").textContent = d.name || "-";
+      $("devFw").textContent = (d.firmware ? "v" + String(d.firmware).padStart(2, "0") : "-") + (d.buildString ? "  (" + d.buildString + ")" : "");
+      $("devId").textContent = d.uniqueId || "-";
+      const r = d.readings;
+      if (r) {
+        const volts = r.pinVoltage || [], amps = r.pinCurrent || [];
+        const live = volts.filter(v => v > 0.5);
+        $("pw").textContent = fmt(r.sumPowerW, 1) + " W";
+        $("cur").textContent = fmt(r.sumCurrentA, 2) + " A";
+        $("volt").textContent = live.length ? fmt(live.reduce((a, b) => a + b, 0) / live.length, 2) + " V" : "-";
+        $("fan").textContent = fmt(r.fan, 0) + " %";
+        const rows = [];
+        for (let i = 0; i < 6; i++) {
+          rows.push(el("tr", {}, el("td", { text: "Pin " + (i + 1) }), el("td", { text: fmt(volts[i], 2) + " V" }),
+            el("td", { text: fmt(amps[i], 2) + " A" }), el("td", { text: fmt((volts[i] || 0) * (amps[i] || 0), 1) + " W" })));
+        }
+        $("pins").replaceChildren(...rows);
+        const t = [["Temp in", r.tempInC, "--temp-in"], ["Temp out", r.tempOutC, "--temp-out"],
+                   ["External 1", r.ext1C, "--ext1"], ["External 2", r.ext2C, "--ext2"]];
+        $("temps").replaceChildren(...t.map(([n, v, c]) => el("span", {},
+          el("i", {}, el("b", { class: "swatch", style: "background:var(" + c + ")" }), n), el("b", { text: tempText(v) }))));
+        $("psu").textContent = r.psuCapW ? "PSU cable capability: " + r.psuCapW + " W" : "";
+      }
+      const active = !!d.faultText || (d.faultStatus || 0) !== 0;
+      $("faultBox").classList.toggle("active", active);
+      $("faultState").textContent = active ? (d.faultText || "FAULT") : "No active fault";
+      $("faultLog").textContent = d.faultLogText ? "Fault log: " + d.faultLogText : "";
+    }
+
+    const hosts = s.remoteHosts || [];
+    $("remoteSection").classList.toggle("hidden", hosts.length === 0);
+    $("remote").replaceChildren(...hosts.map(h => {
+      const r = h.readings;
+      const temps = r ? [r.tempInC, r.tempOutC, r.ext1C, r.ext2C].filter(t => t > -99) : [];
+      if (!h.online || !r)
+        return el("div", { class: "h off" }, el("div", {}, el("b", { text: h.host })), el("div", { class: "muted", text: "offline" }));
+      return el("div", { class: "h" },
+        el("div", {}, el("b", { text: h.host }), el("div", { class: "muted", text: h.online ? ((h.hostName || "") + (r ? "  " + r.name : "")) : "" })),
+        el("div", { text: r ? fmt(r.sumPowerW, 1) + " W" : "-" }),
+        el("div", { text: r ? fmt(r.sumCurrentA, 2) + " A" : "-" }),
+        el("div", { text: temps.length ? "max " + Math.max(...temps).toFixed(1) + " °C" : "-" }),
+        el("div", { text: r ? fmt(r.fan, 0) + " % fan" : "-" }),
+        el("div", { class: h.faultText ? "bad" : "muted", text: !h.online ? "offline" : (h.faultText || "no fault") }));
+    }));
+
+    renderSettings(s.settings, s.publish, s.agent);
+    $("logPath").textContent = s.agent.logPath || "-";
+    $("settingsPath").textContent = s.agent.settingsPath || "-";
+    $("agentInfo").textContent = "wireview-agent " + s.agent.version + ", " + s.agent.os + ", up " + uptime(s.agent.uptimeSeconds);
+    $("openApp").title = s.gui.location || "the WireView app was not found";
+    refreshButtons();
+  }
+
+  function uptime(sec) {
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);
+    return h > 0 ? h + " h " + m + " min" : m > 0 ? m + " min" : sec + " s";
+  }
+
+  function refreshButtons() {
+    const d = status && status.device;
+    const usable = !!(d && d.connected && d.canWrite && !d.serialSuspended);
+    $("clearFaults").disabled = busy > 0 || !usable || !(d.faultText || d.faultStatus);
+    document.querySelectorAll("[data-screen]").forEach(b => b.disabled = busy > 0 || !usable);
+    ["reload", "store", "load", "reset"].forEach(id => $(id).disabled = busy > 0 || !usable);
+    $("apply").disabled = busy > 0 || !usable || !cfg || editedFields().length === 0;
+  }
+
+  async function poll() {
+    try { renderStatus(await api("GET", "/api/status")); }
+    catch (e) {
+      if (e.offline) { $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Agent unreachable"; }
+      if (e.status === 401) { setTimeout(poll, 5000); return; }
+    }
+    setTimeout(poll, 1000);
+  }
+
+  // ---- Screen and faults ----
+
+  $("screens").replaceChildren(...SCREENS.map(([n, c]) => el("button", { "data-screen": c, text: n })));
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-screen]");
+    if (!b) return;
+    run("screenResult", async () => (await api("POST", "/api/command", { op: "screen", cmd: Number(b.dataset.screen) })).message);
+  });
+  $("clearFaults").addEventListener("click", () =>
+    run("clearResult", async () => (await api("POST", "/api/command", { op: "clearFaults" })).message, [$("clearFaults")]));
+
+  // ---- Device configuration ----
+
+  const F = {}; // field key -> { get(), set(v), wrap }
+
+  function opt(list, value) {
+    return list.map(o => el("option", { value: o.value, text: o.label, selected: o.value === value }));
+  }
+  function addField(group, key, label, input, getter) {
+    const wrap = el("div", { class: "field" }, el("label", { for: "f_" + key, text: label }), input);
+    input.id = "f_" + key;
+    input.addEventListener("input", onEdit);
+    input.addEventListener("change", onEdit);
+    $(group).append(wrap);
+    F[key] = { get: getter, wrap };
+  }
+  function num(group, key, label, rangeKey, unit) {
+    const r = cfg.options.ranges[rangeKey];
+    const i = el("input", { type: "number", min: r.min, max: r.max, step: r.step, required: true });
+    i.value = cfg.config[key];
+    addField(group, key, label + (unit ? " (" + unit + ")" : ""), i, () => i.value === "" ? NaN : Number(i.value));
+    F[key].range = r;
+    F[key].input = i;
+  }
+  function sel(group, key, label, list) {
+    const s = el("select", {}, ...opt(list, cfg.config[key]));
+    addField(group, key, label, s, () => Number(s.value));
+  }
+
+  function buildForm() {
+    for (const k of Object.keys(F)) delete F[k];
+    ["gGeneral", "gFan", "gDisplay", "gThresholds"].forEach(g => $(g).replaceChildren());
+    const c = cfg.config, o = cfg.options;
+    const name = el("input", { type: "text", maxlength: 31, pattern: "[ -~]*", spellcheck: "false" });
+    name.value = c.friendlyName;
+    addField("gGeneral", "friendlyName", "Friendly name", name, () => name.value.trim());
+    num("gGeneral", "backlightDuty", "Backlight duty", "backlightDuty", "%");
+
+    sel("gFan", "fanMode", "Fan mode", o.fanModes);
+    sel("gFan", "fanTempSource", "Temperature source", o.tempSources);
+    num("gFan", "fanDutyMin", "Duty min", "fanDuty", "%");
+    num("gFan", "fanDutyMax", "Duty max", "fanDuty", "%");
+    num("gFan", "fanTempMinC", "Temp min", "fanTemp", "°C");
+    num("gFan", "fanTempMaxC", "Temp max", "fanTemp", "°C");
+
+    sel("gDisplay", "currentScale", "Current scale", o.currentScales);
+    sel("gDisplay", "powerScale", "Power scale", o.powerScales);
+    if (c.theme !== null && c.theme !== undefined) sel("gDisplay", "theme", "Theme", o.themes);
+    sel("gDisplay", "displayRotation", "Display rotation", o.displayRotations);
+    sel("gDisplay", "timeoutMode", "Timeout mode", o.timeoutModes);
+    const boxes = el("div", { class: "checks" });
+    for (const s of o.screens.filter(s => s.label.indexOf("Unknown") !== 0)) {
+      const cb = el("input", { type: "checkbox", value: s.name, checked: c.cycleScreens.includes(s.name) });
+      boxes.append(el("label", {}, cb, s.label));
+    }
+    addField("gDisplay", "cycleScreens", "Cycle screens", boxes,
+      () => [...boxes.querySelectorAll("input:checked")].map(i => i.value));
+    num("gDisplay", "cycleTimeSeconds", "Cycle time", "cycleTime", "s");
+    num("gDisplay", "timeoutSeconds", "Timeout", "byteSeconds", "s");
+    if (c.averaging !== null && c.averaging !== undefined) sel("gDisplay", "averaging", "Averaging", o.averaging);
+    if (c.defaultScreen !== null && c.defaultScreen !== undefined) sel("gDisplay", "defaultScreen", "Default screen", o.screens);
+
+    const kinds = [["display", "Display"], ["buzzer", "Buzzer"], ["softOff", "Soft off"], ["hardOff", "Hard off"]];
+    $("alarms").replaceChildren(...o.faults.map(f => {
+      const a = c.faultAlarms.find(x => x.fault === f.name) || {};
+      return el("tr", {}, el("td", { text: f.label }), ...kinds.map(([k, l]) => {
+        const cb = el("input", { type: "checkbox", "data-fault": f.name, "data-kind": k, checked: !!a[k], "aria-label": f.label + " " + l });
+        cb.addEventListener("change", onEdit);
+        return el("td", {}, cb);
+      }));
+    }));
+
+    num("gThresholds", "tempThresholdC", "Temperature", "tempThreshold", "°C");
+    num("gThresholds", "ocpThresholdA", "Over-current (OCP)", "ocp", "A");
+    num("gThresholds", "wireOcpThresholdA", "Wire over-current", "wireOcp", "A");
+    num("gThresholds", "oppThresholdW", "Over-power (OPP)", "opp", "W");
+    num("gThresholds", "imbalanceThresholdPercent", "Current imbalance", "percent", "%");
+    num("gThresholds", "imbalanceMinLoadA", "Imbalance min load", "byteAmps", "A");
+    num("gThresholds", "shutdownWaitSeconds", "Shutdown wait time", "byteSeconds", "s");
+    num("gThresholds", "loggingIntervalSeconds", "Logging interval", "byteSeconds", "s");
+
+    const layout = ["V1", "V2", "V3"][cfg.version] || ("layout " + cfg.version);
+    $("cfgInfo").textContent = "config " + layout + (cfg.firmware ? ", firmware v" + String(cfg.firmware).padStart(2, "0") : "");
+    $("cfgMissing").classList.add("hidden");
+    $("cfg").classList.remove("hidden");
+    onEdit();
+  }
+
+  function alarmsNow() {
+    return cfg.config.faultAlarms.map(a => {
+      const out = { fault: a.fault };
+      for (const k of ["display", "buzzer", "softOff", "hardOff"]) {
+        const cb = document.querySelector('input[data-fault="' + a.fault + '"][data-kind="' + k + '"]');
+        out[k] = cb ? cb.checked : a[k];
+      }
+      return out;
+    });
+  }
+
+  function editedFields() {
+    if (!cfg) return [];
+    const out = [];
+    for (const [k, f] of Object.entries(F)) {
+      const now = f.get(), was = cfg.config[k];
+      if (JSON.stringify(now) !== JSON.stringify(was)) out.push(k);
+    }
+    if (JSON.stringify(alarmsNow()) !== JSON.stringify(cfg.config.faultAlarms)) out.push("faultAlarms");
+    return out;
+  }
+
+  function onEdit() {
+    if (!cfg) return;
+    const edited = new Set(editedFields());
+    for (const [k, f] of Object.entries(F)) f.wrap.classList.toggle("edited", edited.has(k));
+    document.querySelectorAll("input[data-fault]").forEach(cb => {
+      const a = cfg.config.faultAlarms.find(x => x.fault === cb.dataset.fault) || {};
+      cb.parentElement.classList.toggle("edited", !!a[cb.dataset.kind] !== cb.checked);
+    });
+    refreshButtons();
+  }
+
+  function collect() {
+    const c = Object.assign({}, cfg.config);
+    for (const [k, f] of Object.entries(F)) {
+      const v = f.get();
+      if (f.range) {
+        if (!isFinite(v) || v < f.range.min || v > f.range.max)
+          throw new Error(f.wrap.querySelector("label").textContent + ": enter " + f.range.min + " to " + f.range.max);
+        if (f.range.step >= 1 && Math.round(v) !== v)
+          throw new Error(f.wrap.querySelector("label").textContent + ": whole numbers only");
+      }
+      c[k] = v;
+    }
+    if (!/^[ -~]*$/.test(c.friendlyName)) throw new Error("Friendly name: plain ASCII only");
+    if (c.friendlyName.length > 31) throw new Error("Friendly name: at most 31 characters");
+    c.faultAlarms = alarmsNow();
+    return c;
+  }
+
+  async function loadConfig(message) {
+    try {
+      cfg = await api("GET", "/api/config");
+      buildForm();
+      if (message) say("cfgResult", true, message);
+    } catch (e) {
+      cfg = null;
+      $("cfg").classList.add("hidden");
+      $("cfgMissing").classList.remove("hidden");
+      $("cfgMissing").textContent = "The configuration cannot be read: " + e.message;
+    }
+    refreshButtons();
+  }
+
+  $("apply").addEventListener("click", () => run("cfgResult", async () => {
+    const edited = editedFields();
+    const answer = await api("POST", "/api/config", { config: collect() });
+    cfg = answer;
+    buildForm();
+    return "Applied (" + edited.length + " field" + (edited.length === 1 ? "" : "s") + "). Store to device memory to keep it after a power cycle.";
+  }));
+  $("reload").addEventListener("click", () => run("cfgResult", async () => { await loadConfig(); return "Configuration read from the device."; }));
+  async function nvm(cmd) {
+    const r = await api("POST", "/api/command", { op: "nvm", cmd });
+    await new Promise(res => setTimeout(res, 150));
+    await loadConfig();
+    return r.message;
+  }
+  $("store").addEventListener("click", () => run("cfgResult", () => nvm(2)));
+  $("load").addEventListener("click", () => {
+    if (editedFields().length && !confirm("Discard the changes on this page and load the configuration stored in the device's memory?")) return;
+    run("cfgResult", () => nvm(1));
+  });
+  $("reset").addEventListener("click", () => {
+    if (!confirm("Reset the device configuration to the factory defaults? The running configuration is replaced; use Store to device memory afterwards to keep the defaults.")) return;
+    run("cfgResult", () => nvm(3));
+  });
+
+  // ---- Agent settings ----
+
+  function renderSettings(st, pub, agent) {
+    if (document.activeElement !== $("sShutdown")) $("sShutdown").checked = st.shutdownOnFault;
+    $("sLogin").checked = st.startAtLogin;
+    $("sPublish").checked = st.publishEnabled;
+    if (document.activeElement !== $("sPort") && !$("sPort")._dirty) $("sPort").value = st.publishPort;
+    $("pubState").textContent = pub.error ? pub.error
+      : pub.listening ? (pub.lan ? "Listening on all interfaces, port " + pub.port : "Off: listening on 127.0.0.1:" + pub.port + " only")
+      : "Not listening";
+    $("pubState").style.color = pub.error ? "var(--warn)" : "";
+    $("noShutdownNote").classList.toggle("hidden", !agent.noShutdown);
+    if (hostsDraft === null) renderHosts(st.remoteHosts);
+    const sec = $("secret");
+    if (document.activeElement !== sec && !sec._dirty) sec.value = st.networkSecret || "";
+  }
+
+  function renderHosts(list) {
+    $("hosts").replaceChildren(...list.map((h, i) => el("li", {}, el("span", { class: "mono", text: h }),
+      el("button", { text: "Remove", onclick: () => saveHosts(list.filter((_, j) => j !== i)) }))));
+    if (list.length === 0) $("hosts").append(el("li", { class: "muted", text: "None. Add the hosts whose WireView you want to watch." }));
+  }
+
+  async function saveSettings(body, resultId) {
+    const r = await api("POST", "/api/settings", body);
+    if (r.panelUrl && r.panelUrl.split("#")[0] !== location.href.split("#")[0]) {
+      say(resultId, true, "Saved. Moving to the new port...");
+      setTimeout(() => { location.href = r.panelUrl; }, 600);
+      return null;
+    }
+    if (status) { status.settings = r.settings; renderSettings(r.settings, status.publish, status.agent); }
+    if (r.publishError) throw new Error("Saved, but " + r.publishError);
+    return r.message;
+  }
+
+  function toggle(id, key, resultId) {
+    $(id).addEventListener("change", () => {
+      const v = $(id).checked;
+      run(resultId, () => saveSettings({ [key]: v }, resultId)).then(ok => { if (!ok) $(id).checked = !v; });
+    });
+  }
+  toggle("sShutdown", "shutdownOnFault", "alertResult");
+  toggle("sLogin", "startAtLogin", "alertResult");
+  toggle("sPublish", "publishEnabled", "lanResult");
+  $("sPort").addEventListener("input", () => { $("sPort")._dirty = true; });
+  $("savePort").addEventListener("click", () => {
+    const p = Number($("sPort").value);
+    if (!Number.isInteger(p) || p < 1024 || p > 65535) { say("lanResult", false, "The port must be 1024 to 65535."); return; }
+    run("lanResult", async () => { const m = await saveSettings({ publishPort: p }, "lanResult"); $("sPort")._dirty = false; return m; }, [$("savePort")]);
+  });
+  function saveHosts(list) {
+    hostsDraft = list;
+    run("lanResult", async () => {
+      try { const m = await saveSettings({ remoteHosts: list }, "lanResult"); return m; }
+      finally { hostsDraft = null; if (status) renderHosts(status.settings.remoteHosts); }
+    });
+  }
+  function addHost() {
+    const v = $("newHost").value.trim();
+    if (!v) return;
+    const list = (status ? status.settings.remoteHosts : []).concat([v]);
+    $("newHost").value = "";
+    saveHosts(list);
+  }
+  $("addHost").addEventListener("click", addHost);
+  $("newHost").addEventListener("keydown", (e) => { if (e.key === "Enter") addHost(); });
+  $("secret").addEventListener("input", () => { $("secret")._dirty = true; });
+  $("showSecret").addEventListener("click", () => {
+    const s = $("secret"), show = s.type === "password";
+    s.type = show ? "text" : "password";
+    $("showSecret").textContent = show ? "Hide" : "Show";
+  });
+  $("saveSecret").addEventListener("click", () => run("lanResult", async () => {
+    const m = await saveSettings({ networkSecret: $("secret").value }, "lanResult");
+    $("secret")._dirty = false;
+    return m;
+  }, [$("saveSecret")]));
+
+  $("openApp").addEventListener("click", () => run("appResult", async () => {
+    const r = await api("POST", "/api/open-app");
+    if (!r.ok) throw new Error(r.message);
+    return r.message;
+  }, [$("openApp")]));
+
+  // ---- Start ----
+
+  if (!token) {
+    $("noToken").classList.remove("hidden");
+    $("cfgMissing").textContent = "Not available without the access token.";
+    return;
+  }
+  poll();
+  loadConfig();
+})();
+</script>
+</body>
+</html>
