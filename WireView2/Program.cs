@@ -31,13 +31,14 @@ internal static class Program
         // Software rendering keeps Mesa (and its LLVM shader compiler) out of the
         // process, which on this UI is tens of MB for no visible difference.
         string? modes = Environment.GetEnvironmentVariable("WIREVIEW_RENDER_MODE");
-        if (string.IsNullOrWhiteSpace(modes) && OperatingSystem.IsLinux())
+        if (string.IsNullOrWhiteSpace(modes))
         {
-            // Default on Linux. Measured on X11 (docs/footprint-plan.md): GL via
-            // Mesa cost 57 MB RSS and six threads for a UI of gauges and a few
-            // line charts, with no CPU difference; GL under XWayland is also where
-            // the flashing (#3) and connection-loss reports came from.
-            modes = "software";
+            // Settings decide (GPU rendering off by default on Linux, on on
+            // Windows; see AppSettings.GpuRendering and docs/footprint-plan.md).
+            // GL under XWayland is also where the flashing (#3) and
+            // connection-loss reports came from.
+            AppSettings.Reload();
+            if (!AppSettings.Current.GpuRendering) modes = "software";
         }
         if (!string.IsNullOrWhiteSpace(modes))
         {

@@ -47,6 +47,9 @@
                     <TextBlock Text="Startup" FontWeight="SemiBold" FontSize="16"/>
                     <CheckBox Content="Auto-start on login" IsChecked="{Binding AutoStart}"/>
                     <CheckBox Content="Start minimized" IsChecked="{Binding StartMinimized}"/>
+                    <CheckBox Content="GPU rendering (applies at the next start)" IsChecked="{Binding GpuRendering}"/>
+                    <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="12"
+                               Text="Off, the app draws on the CPU and uses about half the memory. On, the GPU draws, which costs less CPU on the Monitoring page at fast polling intervals."/>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Screen after connection:" VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding DeviceScreens}"

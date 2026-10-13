@@ -17,7 +17,7 @@ GUI RSS by mapping (`/proc/<pid>/smaps`):
 | Mapping | RSS | What it is |
 |---|---|---|
 | anonymous | 94 MB | .NET GC heap, Skia surfaces, Mesa buffers |
-| `libLLVM.so.21` + `libgallium` | 53 MB | Mesa's shader compiler and GL driver. LLVM resident at this size means llvmpipe (software GL) is doing the rendering, i.e. GPU path overhead with none of the GPU benefit. To confirm: run with `AVALONIA_X11_RENDER_MODE=Software` and compare, or `glxinfo -B` inside the same session |
+| `libLLVM.so.21` + `libgallium` | 53 MB | Mesa's GL driver (Intel iris here) and the LLVM it links; resident whether or not the driver uses it |
 | `/memfd:doublemapper` | 40 MB | .NET W^X double mapping of JIT code (`DOTNET_EnableWriteXorExecute`) |
 | `[heap]` | 23 MB | native malloc (Skia, HarfBuzz, X11) |
 | `System.Private.CoreLib.dll` | 11 MB | runtime |
@@ -141,8 +141,31 @@ anonymous memory in the visible state is the GC heap plus Skia surfaces; the 33 
 
 Verification: `Bitmap.DecodeToWidth` produced 1920x963 for both the edition background and the
 default Dark dictionary brush, and the rendered frames were checked under Avalonia.Headless.
-CPU on the Monitoring page at 50 ms polling with software rendering still needs a look on a
-real session; at 1 s on Overview it is equal to GL.
+
+**Software versus GPU rendering by page**, same build (`--page` option, 1200x800 window, this
+machine, CPU of the app process only; GL work done by the GPU and the compositor is not counted):
+
+| Page, polling | Software | GL (egl) |
+|---|---|---|
+| Overview, 1 s | 2.3 % | 2.7 % |
+| Overview, 50 ms | 3.4 % | 2.1 % |
+| Monitoring, 1 s | 3.6 % | 1.1 % |
+| Monitoring, 50 ms | 9.8 % | 3.8 % |
+
+Memory is the same in every row: about 150 MB RSS / 138 MB PSS software, 275 / 195 GL. The
+Monitoring page repaints the plot on every sample; with software rendering that repaint is CPU
+work proportional to the window area, so a 4K maximized window costs roughly four times the
+figures above. The background photo under the plot is about 1.1 of the 3.6 % (measured with
+opacity 0); `RenderOptions.BitmapInterpolationMode=MediumQuality` on the background Border made
+things far worse (17 % at 1 s, 40 % at 50 ms) and is not used.
+
+Decision: software stays the Linux default (memory is paid all the time, the CPU only on the
+Monitoring page) and **Settings → Startup → GPU rendering** flips it at the next start; Windows
+defaults to GPU. `WIREVIEW_RENDER_MODE` overrides both. The `--page` command-line option was added
+for these measurements and is documented for launchers.
+
+Not pursued: decoding the background at the exact window size for a 1:1 blit (at most the
+1.1 % above), and tray-hidden cache dropping beyond the compacting GC on hide.
 
 ## 4. Phase 2: a headless agent, so the GUI runs only when wanted
 

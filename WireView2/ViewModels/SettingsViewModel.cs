@@ -17,6 +17,7 @@ public class SettingsViewModel : ViewModelBase
     private bool _exportToHwinfo;
     private bool _autoStart;
     private bool _startMinimized;
+    private bool _gpuRendering;
     private AppSettings.ThemeMode _themePreference;
     private AppSettings.BackgroundColorMode _backgroundColorPreference;
     private double _backgroundOpacity;
@@ -60,6 +61,19 @@ public class SettingsViewModel : ViewModelBase
             if (Set(ref _startMinimized, value))
             {
                 AppSettings.Current.StartMinimized = value;
+                AppSettings.SaveCurrent();
+            }
+        }
+    }
+
+    public bool GpuRendering
+    {
+        get => _gpuRendering;
+        set
+        {
+            if (Set(ref _gpuRendering, value))
+            {
+                AppSettings.Current.GpuRendering = value;
                 AppSettings.SaveCurrent();
             }
         }
@@ -323,6 +337,7 @@ public class SettingsViewModel : ViewModelBase
     {
         _autoStart = AppSettings.Current.AutoStart;
         _startMinimized = AppSettings.Current.StartMinimized;
+        _gpuRendering = AppSettings.Current.GpuRendering;
         _themePreference = AppSettings.Current.ThemePreference;
         _backgroundColorPreference = AppSettings.Current.BackgroundColorPreference;
         ApplyBackgroundColor(_backgroundColorPreference);
@@ -345,6 +360,8 @@ public class SettingsViewModel : ViewModelBase
 
         if (Set(ref _startMinimized, AppSettings.Current.StartMinimized, nameof(StartMinimized)))
             OnPropertyChanged(nameof(StartMinimized));
+        if (Set(ref _gpuRendering, AppSettings.Current.GpuRendering, nameof(GpuRendering)))
+            OnPropertyChanged(nameof(GpuRendering));
 
         if (Set(ref _themePreference, AppSettings.Current.ThemePreference, nameof(ThemePreference)))
         {

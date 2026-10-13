@@ -120,6 +120,22 @@ public partial class MainWindowViewModel : ViewModelBase
         return $"{name} - {transport} · {shortId}";
     }
 
+    /// <summary>Selects a page by name (overview, monitoring, logging, device,
+    /// settings); unknown names keep the current page. Used for the --page
+    /// command-line option.</summary>
+    public void ShowPage(string? name)
+    {
+        CurrentPageViewModel = name?.Trim().ToLowerInvariant() switch
+        {
+            "overview" => Overview,
+            "monitoring" => Monitoring,
+            "logging" => Logging,
+            "device" => Device,
+            "settings" => Settings,
+            _ => CurrentPageViewModel,
+        };
+    }
+
     [RelayCommand]
     private void ShowOverview() => CurrentPageViewModel = Overview;
 

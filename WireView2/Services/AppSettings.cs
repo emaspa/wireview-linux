@@ -70,6 +70,14 @@ public class AppSettings
     public bool LoggingOnStart { get; set; }
     public bool StartMinimized { get; set; }
 
+    /// <summary>Draw with the GPU (Avalonia's default backend) instead of the
+    /// software renderer. Off by default on Linux: the software path keeps Mesa
+    /// out of the process (about 120 MB less resident, 55 MB less proportional)
+    /// and costs CPU only on the Monitoring page at fast polling. Windows keeps
+    /// the GPU default. Read by Program before Avalonia starts, so it applies at
+    /// the next launch; WIREVIEW_RENDER_MODE overrides it.</summary>
+    public bool GpuRendering { get; set; } = OperatingSystem.IsWindows();
+
     public string? ScreensaverFilePath { get; set; }
     public int ScreensaverTimeoutSeconds { get; set; }
     public int ScreensaverFrameDelayMs { get; set; } = 100;

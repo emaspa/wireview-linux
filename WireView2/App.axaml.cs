@@ -66,6 +66,7 @@ public class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _startPage = StartPageFromArgs(desktop.Args);
             AppSettings.Reload();
             WireView2.Net.FileLog.Init(
                 System.IO.Path.Combine(
@@ -558,6 +559,22 @@ public class App : Application
         new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             typeface, emSize, Brushes.White);
 
+    /// <summary>Page the first window opens on, from "--page name" or
+    /// "--page=name" on the command line (overview, monitoring, logging, device,
+    /// settings). Handy for launchers and for measuring a page; consumed once.</summary>
+    private string? _startPage;
+
+    private static string? StartPageFromArgs(string[]? args)
+    {
+        if (args == null) return null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--page" && i + 1 < args.Length) return args[i + 1];
+            if (args[i].StartsWith("--page=", StringComparison.Ordinal)) return args[i]["--page=".Length..];
+        }
+        return null;
+    }
+
     private void ShowMainWindow(IClassicDesktopStyleApplicationLifetime desktop, bool startMinimized = false)
     {
         lock (_mainWindowGate)
@@ -570,7 +587,9 @@ public class App : Application
             var window = desktop.MainWindow as MainWindow;
             if (window == null || !window.IsVisible)
             {
-                window = new MainWindow { DataContext = new MainWindowViewModel() };
+                var viewModel = new MainWindowViewModel();
+                if (_startPage != null) { viewModel.ShowPage(_startPage); _startPage = null; }
+                window = new MainWindow { DataContext = viewModel };
                 window.PropertyChanged += (_, args) =>
                 {
                     if (args.Property == Window.WindowStateProperty || args.Property == Visual.IsVisibleProperty)

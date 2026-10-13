@@ -304,6 +304,9 @@ The app has five pages accessible from the left sidebar:
 | **Device** | Device info, full device configuration (fan, display, alarms, thresholds), display theme editor, and firmware updates |
 | **Settings** | App theme (Auto, Light, Dark, Noctua Light, Noctua Dark; Auto follows the desktop's light/dark setting and switches to the Noctua colors while a WireView Pro II Noctua Edition is selected), startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
 
+`wireview-linux --page monitoring` opens on a given page (overview, monitoring,
+logging, device, settings) instead of Overview.
+
 ### Configuration profiles
 
 On the **Device** page, you can save the current device configuration as a named profile and load it later. Profiles are stored as JSON files in `~/.local/share/PowerMonitor/profiles/`.
@@ -352,18 +355,22 @@ wireview-linux/
 
 ### Rendering backend
 
-On Linux the app draws with Avalonia's software renderer. On this UI it is as
-fast as OpenGL, it keeps Mesa and its shader compiler out of the process (about
-55 MB less resident memory), and it avoids the GL-under-XWayland glitches some
-Nvidia setups showed. To try the GPU path instead, set `WIREVIEW_RENDER_MODE`
-to a comma-separated preference list before launching:
+On Linux the app draws with Avalonia's software renderer by default. It keeps
+Mesa out of the process (about 120 MB less resident memory, 55 MB less
+proportional), and it avoids the GL-under-XWayland glitches some Nvidia setups
+showed. It costs CPU only on the Monitoring page at fast polling (at 50 ms,
+about 10 % of one core instead of 4 % on a 1200x800 window; larger windows cost
+proportionally more). **Settings → Startup → GPU rendering** switches to the
+GPU backend at the next start. `WIREVIEW_RENDER_MODE` overrides the setting
+with a comma-separated preference list:
 
 ```bash
 WIREVIEW_RENDER_MODE=egl,software wireview-linux   # Linux: software, egl, glx, vulkan
 set WIREVIEW_RENDER_MODE=software                   # Windows: software, angle, wgl, vulkan
 ```
 
-Windows keeps Avalonia's default (ANGLE on Direct3D) unless the variable is set.
+Windows defaults to GPU rendering (ANGLE on Direct3D); the same setting turns
+it off.
 
 ### Permission denied on /dev/ttyACM0
 
