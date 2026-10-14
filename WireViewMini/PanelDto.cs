@@ -23,7 +23,13 @@ internal sealed record PanelStatus(
     PanelHistory? History);
 
 internal sealed record PanelMiniInfo(
-    string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown);
+    string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown,
+    string Instance);
+
+/// <summary>GET /api/panel-probe, without the token: lets a control panel page find
+/// WireView Mini again after its port changed. <paramref name="Instance"/> is
+/// <see cref="PanelMiniInfo.Instance"/>.</summary>
+internal sealed record PanelProbe(bool Mini, string Instance, int Port);
 
 /// <param name="Fallback">The wanted port is taken: the panel and /sensors are on a loopback fallback.</param>
 internal sealed record PanelPublishInfo(
@@ -216,6 +222,7 @@ internal sealed record PanelError(string Error);
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.Never)]
 [JsonSerializable(typeof(PanelStatus))]
+[JsonSerializable(typeof(PanelProbe))]
 [JsonSerializable(typeof(PanelConfig))]
 [JsonSerializable(typeof(PanelMessage))]
 [JsonSerializable(typeof(PanelProfiles))]

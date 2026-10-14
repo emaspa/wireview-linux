@@ -162,7 +162,7 @@ WireView Mini publishes on port `9876`, the app's publish port: on the LAN when 
 
 With wireviewd running it leaves publishing to the daemon: its own listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on the LAN** says (it logs this once).
 
-When the publish port is taken (on Linux wireviewd holds `9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a loopback-only fallback port instead (the next free one of the publish port +1 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`, and moves back to the publish port once it is free (it retries every 30 s); the tray, `--open` and `--status` use whichever port it is on.
+When the publish port is taken (on Linux wireviewd holds `9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a loopback-only fallback port instead (the next free one of the publish port +1 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`, and moves back to the publish port once it is free (it retries every 30 s); the tray, `--open` and `--status` use whichever port it is on. A control panel page left open follows it: while the page cannot reach WireView Mini, it asks the publish port and the ten after it (on this PC only, without the token) which one answers as the same run, and goes there. A restarted WireView Mini has a new token, so that page says to open the panel again from the tray.
 
 ## Building
 

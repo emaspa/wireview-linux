@@ -243,7 +243,7 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
     This page needs WireView Mini's access token. Open it from the tray menu (<b>Settings and controls...</b>)
     or run <span class="mono">wireview-mini --open</span>.
   </div>
-  <div class="banner hidden" id="offline">WireView Mini does not answer. It may have stopped, or its port changed. Retrying.</div>
+  <div class="banner hidden" id="offline">WireView Mini does not answer. It may have stopped, or its port changed. Retrying, and looking for it on the nearby ports.</div>
 
   <section id="status">
     <h2>Status <span class="sub" id="devSource"></span></h2>
@@ -952,10 +952,41 @@ const WVPixels = (function () {
   async function poll() {
     try { renderStatus(await api("GET", "/api/status" + historyQuery())); }
     catch (e) {
-      if (e.offline) { $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Mini unreachable"; }
+      if (e.offline) {
+        $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Mini unreachable";
+        await findMovedMini();
+      }
       if (e.status === 401) { setTimeout(poll, 5000); return; }
     }
     setTimeout(poll, 1000);
+  }
+
+  // WireView Mini moves between its wanted port and a loopback fallback next to it
+  // (when wireviewd takes or frees port 9876 on Linux). This page then no longer
+  // reaches it on its own origin: ask the nearby ports, without the token, which
+  // one answers as the same run, and go there with the token. A restarted
+  // WireView Mini has another instance id and another token, so it is left alone.
+  let probeAt = 0;
+  async function findMovedMini() {
+    if (!status || Date.now() < probeAt) return;
+    probeAt = Date.now() + 3000;
+    const here = Number(location.port) || (location.protocol === "https:" ? 443 : 80);
+    const base = status.publish.wantedPort || 9876;
+    const ports = [];
+    for (let p = base; p <= base + 10 && p <= 65535; p++) if (p !== here) ports.push(p);
+    const found = await Promise.all(ports.map(async (p) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 1500);
+      try {
+        const res = await fetch("http://127.0.0.1:" + p + "/api/panel-probe", { cache: "no-store", signal: ctl.signal });
+        if (!res.ok) return null;
+        const j = await res.json();
+        return j && j.mini === true && j.instance === status.mini.instance ? p : null;
+      } catch { return null; }
+      finally { clearTimeout(timer); }
+    }));
+    const port = found.find(p => p !== null);
+    if (port) location.replace("http://127.0.0.1:" + port + "/" + location.hash);
   }
 
   // ---- Screen and faults ----

@@ -85,6 +85,13 @@ internal sealed class ControlPanel
         if (image)
             return req.Method is "GET" or "HEAD" ? Png(req.Path["/panel/".Length..]) : Error(405, "method not allowed");
 
+        // Without the token, from this PC only: a page left on a port WireView Mini
+        // moved away from (the fallback port after wireviewd stopped, or back) asks
+        // the nearby ports which one is its WireView Mini. Cross-origin for that
+        // page, hence the CORS header; it tells nothing but that this run is here.
+        if (req.Path == "/api/panel-probe")
+            return req.Method is "GET" or "HEAD" ? Probe() : Error(405, "method not allowed");
+
         if (!TokenMatches(req.Header(TokenHeader)))
             return Error(401, "missing or wrong control panel token; open the panel from the tray or with wireview-mini --open");
 
@@ -167,7 +174,9 @@ internal sealed class ControlPanel
                 new("Referrer-Policy", "no-referrer"),
                 new("Content-Security-Policy",
                     "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
-                    "connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
+                    // connect-src: this PC on any port too, for the probe that finds
+                    // WireView Mini again after its port changed (see /api/panel-probe).
+                    "connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
             ],
         };
     }
@@ -204,7 +213,8 @@ internal sealed class ControlPanel
                 Host: Environment.MachineName,
                 LogPath: FileLog.CurrentPath,
                 SettingsPath: AppSettings.GetSettingsPath(),
-                NoShutdown: _mini.NoShutdown),
+                NoShutdown: _mini.NoShutdown,
+                Instance: _mini.Instance),
             Publish: new PanelPublishInfo(
                 Listening: ep != null,
                 Address: ep?.Address.ToString(),
@@ -1217,6 +1227,12 @@ internal sealed class ControlPanel
 
     private static string OsName =>
         OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+
+    private HttpResponseInfo Probe() =>
+        Ok(new PanelProbe(true, _mini.Instance, _mini.Publisher.Endpoint?.Port ?? 0), MiniJsonContext.Default.PanelProbe) with
+        {
+            Headers = [new("Access-Control-Allow-Origin", "*"), new("Cache-Control", "no-store")],
+        };
 
     private static HttpResponseInfo Ok<T>(T value, JsonTypeInfo<T> type) =>
         HttpResponseInfo.Json(200, JsonSerializer.Serialize(value, type));

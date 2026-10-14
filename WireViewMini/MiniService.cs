@@ -112,6 +112,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         _noShutdown = noShutdown;
         _localKey = MiniKey.LoadOrCreate();
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        Instance = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
         Firmware = new FirmwareService(this);
         Theme = new ThemeService(this);
         DeviceLog = new DeviceLogService(this);
@@ -211,6 +212,11 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     /// <summary>The control panel's API token: random, minted once per run.</summary>
     public string PanelToken { get; }
+
+    /// <summary>A random id for this run, so an open control panel page can tell
+    /// this WireView Mini on another port from a restarted one (whose token it
+    /// does not have). Not a secret: the probe answers it without the token.</summary>
+    public string Instance { get; }
 
     public TimeSpan Uptime => _uptime.Elapsed;
 
