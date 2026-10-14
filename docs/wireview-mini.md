@@ -142,6 +142,10 @@ This needs wireview-hwmon 1.8 or newer (older versions have no `wireviewctl conf
 
 Launch WireView Desktop (where the app is installed) and where WireView Mini's log and settings are.
 
+### About
+
+The version, the author and the same disclaimer as the app's Settings page. `wireview-mini --help` ends with the same lines.
+
 ## How the app uses it
 
 At startup the app asks `http://127.0.0.1:9876/sensors` before it opens the serial port (after hwmon on Linux). When WireView Mini answers, the app connects through it, shown as `mini` in the device picker and *Connected via WireView Mini* in the status bar, and does not open the port itself: two programs on one serial port corrupt each other's data. The app signs its commands to WireView Mini with a key WireView Mini keeps next to `settings.json` (`mini.key`), so writes work with no network secret set. The app does not show a second fault notification while WireView Mini runs.
