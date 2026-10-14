@@ -37,7 +37,7 @@ Why there are two clients, and which to leave running. Measured on Linux with wi
 | Desktop app, window visible | 150 MB / 138 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
 | Desktop app, minimized | 126 MB / 115 MB | 0.6 % | |
 | WireView Mini (Linux, ahead-of-time compiled) | 50 MB / 43 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
-| WireView Mini (Windows) | 39 MB | not measured yet | Task Manager's figure for the single-file build, which is compiled at run time by the .NET runtime it carries with it; an ahead-of-time Windows build is planned |
+| WireView Mini (Windows) | 39 to 43 MB | 0.1 % | Task Manager's figures for the single-file build after five minutes, which is compiled at run time by the .NET runtime it carries with it; an ahead-of-time Windows build is planned |
 | wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
 
 In short: the app is for looking at the device, WireView Mini for watching it, and the daemon for machines without a desktop at all.
