@@ -139,6 +139,13 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 .check { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 #dForm { margin-top: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 #dForm .toolbar { margin-top: 8px; padding-top: 8px; }
+.bar { height: 10px; margin: 10px 0 6px; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+.fw-verdict { margin: 8px 0; }
+.fw-verdict.new { color: var(--ok); font-weight: 600; }
+.fw-verdict.warn { color: var(--warn); }
+.fw-verdict.bad { color: var(--bad); }
+#fwConfirm { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -329,11 +336,40 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     </section>
   </div>
 
+  <section id="fwSection">
+    <h2>Firmware <span class="sub">flash the firmware shipped with WireView Mini</span></h2>
+    <dl class="kv">
+      <dt>Device</dt><dd id="fwDevice">-</dd>
+      <dt>Bundled</dt><dd id="fwBundled">-</dd>
+      <dt class="fw-dfu hidden">dfu-util</dt><dd class="fw-dfu hidden" id="fwDfu">-</dd>
+    </dl>
+    <p class="fw-verdict" id="fwVerdict"></p>
+    <div class="row">
+      <button class="primary" id="fwUpdate" disabled>Update firmware</button>
+      <span class="muted" id="fwReason"></span>
+    </div>
+    <div id="fwConfirm" class="hidden">
+      <div class="hint" id="fwConfirmText"></div>
+      <div class="hint hidden" id="fwOverrideText"></div>
+      <label class="check hidden" id="fwOverrideRow"><input type="checkbox" id="fwAllowOlder"> <span id="fwOverrideLabel"></span></label>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="fwFlash">Flash now</button>
+        <button id="fwCancel">Cancel</button>
+      </div>
+    </div>
+    <div id="fwRun" class="hidden">
+      <div class="bar"><i id="fwBar"></i></div>
+      <div id="fwState"></div>
+    </div>
+    <div class="result pre" id="fwResult"></div>
+    <p class="note" id="fwHint"></p>
+  </section>
+
   <section>
     <h2>Tools</h2>
     <div class="row" id="appRow" hidden>
       <button id="openApp">Launch WireView Desktop</button>
-      <span class="muted">for the graphs, firmware updates, themes and the device log</span>
+      <span class="muted">for the graphs, themes and the device log</span>
       <span class="result" id="appResult"></span>
     </div>
     <dl class="kv" style="margin-top:10px">
@@ -411,7 +447,9 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     $("ver").textContent = "v" + s.mini.version + " on " + s.mini.host;
     const d = s.device;
     const pill = $("state");
-    if (!d) { pill.className = "pill bad"; pill.textContent = "No device"; }
+    const flashing = !!(s.firmware && s.firmware.running);
+    if (flashing) { pill.className = "pill warn"; pill.textContent = "Updating firmware"; }
+    else if (!d) { pill.className = "pill bad"; pill.textContent = "No device"; }
     else if (d.serialSuspended) { pill.className = "pill warn"; pill.textContent = "Serial port lent to the app"; }
     else if (d.faultText) { pill.className = "pill bad"; pill.textContent = "Fault"; }
     else if (d.connected) { pill.className = "pill ok"; pill.textContent = "Connected"; }
@@ -419,7 +457,8 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
     $("noDevice").classList.toggle("hidden", !!d);
     $("devBody").classList.toggle("hidden", !d);
-    $("devSource").textContent = d ? (d.serialSuspended ? "last readings, the app has the port" : (d.source || "")) : "";
+    $("devSource").textContent = flashing ? "last readings, firmware update running"
+      : d ? (d.serialSuspended ? "last readings, the app has the port" : (d.source || "")) : "";
     if (d) {
       $("devName").textContent = d.name || "-";
       $("devFw").textContent = (d.firmware ? "v" + String(d.firmware).padStart(2, "0") : "-") + (d.buildString ? "  (" + d.buildString + ")" : "");
@@ -474,6 +513,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     // The launch button only where the app is installed.
     $("appRow").hidden = !s.gui.available;
     $("openApp").title = s.gui.location || "";
+    renderFlash(s);
     refreshButtons();
   }
 
@@ -484,7 +524,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
   function refreshButtons() {
     const d = status && status.device;
-    const usable = !!(d && d.connected && d.canWrite && !d.serialSuspended);
+    const usable = !!(d && d.connected && d.canWrite && !d.serialSuspended && !flashRunning());
     $("clearFaults").disabled = busy > 0 || !usable || !(d.faultText || d.faultStatus);
     document.querySelectorAll("[data-screen]").forEach(b => b.disabled = busy > 0 || !usable);
     ["reload", "store", "load", "reset"].forEach(id => $(id).disabled = busy > 0 || !usable);
@@ -874,6 +914,115 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       busy--;
       $("dSave").disabled = false;
       refreshButtons();
+    }
+  });
+
+  // ---- Firmware ----
+
+  let fw = null;             // last /api/firmware
+  let fwKey = null;          // what fw was read for: device, firmware, build, flash state
+  let fwLoading = false;
+  let fwWasRunning = false;
+
+  function flashRunning() { return !!(status && status.firmware && status.firmware.running); }
+
+  // /api/firmware is read on load and when the device, its firmware or the
+  // flash state changes; the progress itself comes with /api/status.
+  function firmwareKey(s) {
+    const d = s.device, f = s.firmware || {};
+    return [d ? d.uniqueId : "", d ? d.firmware : "", d ? d.buildString : "", d ? d.connected : "",
+            d ? d.canWrite : "", f.running, f.state].join("|");
+  }
+
+  async function loadFirmware() {
+    if (fwLoading) return;
+    fwLoading = true;
+    try { fw = await api("GET", "/api/firmware"); renderFirmware(); }
+    catch (e) { $("fwVerdict").className = "fw-verdict bad"; $("fwVerdict").textContent = "The firmware state cannot be read: " + e.message; }
+    finally { fwLoading = false; }
+  }
+
+  function renderFirmware() {
+    if (!fw) return;
+    const d = fw.device, b = fw.bundled;
+    $("fwDevice").textContent = d ? (d.name + ": " + d.label) : "No device connected";
+    $("fwBundled").textContent = b.label || b.error || "-";
+    $("fwBundled").title = b.path || "";
+    document.querySelectorAll(".fw-dfu").forEach(e => e.classList.toggle("hidden", !fw.dfuUtilRequired));
+    $("fwDfu").textContent = fw.dfuUtil || "not found: install the dfu-util package";
+    const v = $("fwVerdict");
+    v.className = "fw-verdict " + ({ Newer: "new", Downgrade: "warn", Unknown: "warn", ProductMismatch: "bad", TooOldForNoctua: "bad" }[fw.verdict] || "");
+    v.textContent = fw.verdictText || "";
+    $("fwHint").textContent = fw.hint || "";
+    $("fwUpdate").textContent = fw.verdict === "Newer" ? "Update firmware" : fw.needsOverride ? "Flash firmware..." : "Update firmware";
+    renderFlashButtons();
+  }
+
+  function renderFlashButtons() {
+    const running = flashRunning();
+    const can = !!(fw && fw.canFlash) && !running;
+    $("fwUpdate").disabled = !can || !$("fwConfirm").classList.contains("hidden");
+    $("fwReason").textContent = running ? "" : (fw && !fw.canFlash ? (fw.reason || "") : "");
+    $("fwFlash").disabled = !can || (fw && fw.needsOverride && !$("fwAllowOlder").checked);
+  }
+
+  function hideConfirm() {
+    $("fwConfirm").classList.add("hidden");
+    $("fwAllowOlder").checked = false;
+    renderFlashButtons();
+  }
+
+  function renderFlash(s) {
+    const f = s.firmware;
+    if (!f) return;
+    const running = !!f.running;
+    $("fwRun").classList.toggle("hidden", !running);
+    if (running) {
+      hideConfirm();
+      $("fwBar").style.width = Math.round((f.progress || 0) * 100) + "%";
+      $("fwState").textContent = (f.message || "") + (f.state === "Flashing" ? "  " + Math.round((f.progress || 0) * 100) + " %" : "");
+      $("fwResult").textContent = "";
+    } else if (f.state === "Done" || f.state === "Failed") {
+      // The final result stays until the next flash.
+      const r = $("fwResult");
+      r.className = "result pre " + (f.state === "Done" ? "ok" : "err");
+      r.textContent = f.message || "";
+    }
+    if (fwWasRunning !== running) { fwWasRunning = running; refreshButtons(); }
+    const key = firmwareKey(s);
+    if (key !== fwKey) { fwKey = key; loadFirmware(); }
+    renderFlashButtons();
+  }
+
+  $("fwUpdate").addEventListener("click", () => {
+    if (!fw || !fw.canFlash) return;
+    $("fwConfirmText").textContent = fw.confirmText || "";
+    $("fwOverrideText").textContent = fw.overrideWarning || "";
+    $("fwOverrideText").classList.toggle("hidden", !fw.needsOverride);
+    $("fwOverrideLabel").textContent = fw.overrideLabel || "";
+    $("fwOverrideRow").classList.toggle("hidden", !fw.needsOverride);
+    $("fwAllowOlder").checked = false;
+    $("fwResult").textContent = "";
+    $("fwConfirm").classList.remove("hidden");
+    renderFlashButtons();
+  });
+  $("fwAllowOlder").addEventListener("change", renderFlashButtons);
+  $("fwCancel").addEventListener("click", () => { hideConfirm(); say("fwResult", true, "Firmware update cancelled."); });
+  $("fwFlash").addEventListener("click", async () => {
+    const allowOlder = !!(fw && fw.needsOverride && $("fwAllowOlder").checked);
+    $("fwFlash").disabled = true;
+    $("fwCancel").disabled = true;
+    try {
+      const r = await api("POST", "/api/firmware/flash", { allowOlder });
+      hideConfirm();
+      if (status) { status.firmware = r.flash; renderFlash(status); refreshButtons(); }
+    } catch (e) {
+      hideConfirm();
+      say("fwResult", false, e.message);
+      loadFirmware();
+    } finally {
+      $("fwCancel").disabled = false;
+      renderFlashButtons();
     }
   });
 

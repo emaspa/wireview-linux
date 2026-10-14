@@ -489,8 +489,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     // ======================== Bundled firmware ========================
 
     /// <summary>Path of the firmware image shipped alongside the app, if any.</summary>
-    public static string GetBundledFirmwarePath() =>
-        Path.Combine(AppContext.BaseDirectory, "TG-WV-PRO2-FW.hex");
+    public static string GetBundledFirmwarePath() => BundledFirmware.GetPath();
 
     public string FirmwareUpdateHint => OperatingSystem.IsWindows()
         ? "Flashes the firmware image shipped with this app (TG-WV-PRO2-FW.hex) over USB, using " +
@@ -503,13 +502,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
           "Do not unplug it during the update. Requires the dfu-util package and the bundled udev rules. " +
           "Unofficial software: flash at your own risk.";
 
-    private static string FormatFirmwareVersion(int? version) =>
-        version.HasValue ? "v" + version.Value.ToString().PadLeft(2, '0') : "-";
+    private static string FormatFirmwareVersion(int? version) => BundledFirmware.FormatVersion(version);
 
     private const string BundledFirmwareMismatchText = "The bundled firmware does not match this device.";
 
-    private static string FormatBuild(string? build) =>
-        string.IsNullOrWhiteSpace(build) ? string.Empty : "(" + build.Trim() + ")";
+    private static string FormatBuild(string? build) => BundledFirmware.FormatBuild(build);
 
     /// <summary>Upstream 1.0.8's UpdateBundledFirmwareComparison: the image must be
     /// for this device (vendor, aliased product); the notice needs it newer by

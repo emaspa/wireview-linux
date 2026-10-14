@@ -6,24 +6,32 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace WireView2.Services;
+namespace WireView2.Device;
 
 /// <summary>Flashes firmware to the WireView Pro II's STM32 DFU bootloader
 /// (0483:df11) by driving the system dfu-util binary. Requires the dfu-util
 /// package and the shipped udev rule for unprivileged USB access.</summary>
-public static class DfuUtilFlasher
+public static partial class DfuUtilFlasher
 {
     public const string DfuVid = "0483";
     public const string DfuPid = "df11";
 
-    private static readonly Regex ProgressRegex = new(@"(\d{1,3})\s*%", RegexOptions.Compiled);
+    /// <summary>The dfu-util executable: "dfu-util" from PATH, or the
+    /// WIREVIEW_DFU_UTIL environment variable when set (a test hook: a fake
+    /// dfu-util drives the whole flash flow without a device).</summary>
+    public static string DfuUtilPath { get; } =
+        Environment.GetEnvironmentVariable("WIREVIEW_DFU_UTIL") is { Length: > 0 } custom ? custom : "dfu-util";
+
+    // Source-generated: no regex parser or interpreter at run time (NativeAOT).
+    [GeneratedRegex(@"(\d{1,3})\s*%")]
+    private static partial Regex ProgressRegex();
 
     /// <summary>Returns the dfu-util version string, or null if not installed.</summary>
     public static async Task<string?> GetDfuUtilVersionAsync()
     {
         try
         {
-            var (exitCode, stdout, _) = await RunAsync("dfu-util", "--version",
+            var (exitCode, stdout, _) = await RunAsync(DfuUtilPath, "--version",
                 TimeSpan.FromSeconds(5), null, CancellationToken.None).ConfigureAwait(false);
             if (exitCode != 0) return null;
             // First line: "dfu-util 0.11"
@@ -46,7 +54,7 @@ public static class DfuUtilFlasher
             ct.ThrowIfCancellationRequested();
             try
             {
-                var (exitCode, stdout, _) = await RunAsync("dfu-util", "-l",
+                var (exitCode, stdout, _) = await RunAsync(DfuUtilPath, "-l",
                     TimeSpan.FromSeconds(5), null, ct).ConfigureAwait(false);
                 if (exitCode == 0 && stdout.Contains($"[{DfuVid}:{DfuPid}]", StringComparison.OrdinalIgnoreCase))
                     return true;
@@ -71,7 +79,7 @@ public static class DfuUtilFlasher
         IProgress<double>? progress, CancellationToken ct)
     {
         string args = $"-d {DfuVid}:{DfuPid} -a 0 -s 0x{baseAddress:X8}:leave -D \"{binPath}\"";
-        var (exitCode, stdout, stderr) = await RunAsync("dfu-util", args,
+        var (exitCode, stdout, stderr) = await RunAsync(DfuUtilPath, args,
             TimeSpan.FromMinutes(5), progress, ct).ConfigureAwait(false);
 
         // dfu-util exits 74 ("EX_IOERR") on some versions when the device detaches
@@ -124,7 +132,7 @@ public static class DfuUtilFlasher
                     stdout.Append(c);
                     if (c is '\r' or '\n')
                     {
-                        var m = ProgressRegex.Match(line.ToString());
+                        var m = ProgressRegex().Match(line.ToString());
                         if (m.Success && int.TryParse(m.Groups[1].Value, out int pct))
                             progress?.Report(Math.Clamp(pct, 0, 100) / 100.0);
                         line.Clear();

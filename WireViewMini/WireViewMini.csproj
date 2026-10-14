@@ -96,6 +96,16 @@
     <EmbeddedResource Include="ControlPanel.html" LogicalName="wireview-mini.ControlPanel.html" />
   </ItemGroup>
 
+  <!-- The bundled device firmware, the GUI's own file (not a copy in this
+       project): next to the executable, where FirmwareService and the GUI look
+       for it (BundledFirmware.GetPath). Without it the panel's Firmware section
+       says the image is missing and nothing else changes. -->
+  <ItemGroup>
+    <None Include="..\WireView2\Firmware\TG-WV-PRO2-FW.hex" Link="Firmware\TG-WV-PRO2-FW.hex"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" TargetPath="TG-WV-PRO2-FW.hex" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\WireViewDeviceLib\WireViewDeviceLib\WireViewDeviceLib.csproj" />
     <ProjectReference Include="..\WireViewNet\WireViewNet.csproj" />

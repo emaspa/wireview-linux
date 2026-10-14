@@ -28,7 +28,8 @@ internal static class Program
         "The WireView app connects through it while it runs. Its tray icon shows the\n" +
         "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
         "Its control panel, a local web page, edits the device configuration, alarms\n" +
-        "and LAN monitoring: open it from the tray or with --open.\n" +
+        "and LAN monitoring, and flashes the bundled firmware: open it from the tray\n" +
+        "or with --open.\n" +
         "\n" +
         "  (no option)    run in the foreground until Ctrl+C or SIGTERM\n" +
         "  --install      start WireView Mini at login (Linux: XDG autostart entry,\n" +

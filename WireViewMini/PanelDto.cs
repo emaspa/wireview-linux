@@ -16,7 +16,8 @@ internal sealed record PanelStatus(
     PanelDaemon Daemon,
     List<PanelRemoteHost> RemoteHosts,
     PanelSettings Settings,
-    PanelGui Gui);
+    PanelGui Gui,
+    PanelFlash Firmware);
 
 internal sealed record PanelMiniInfo(
     string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown);
@@ -74,6 +75,38 @@ internal sealed record PanelDaemonConfigWritten(
     bool Ok, string? Reply, string? Error, bool Unsupported, IReadOnlyList<string> Changed,
     PanelDaemonConfig? Config, PanelSettings Settings, string? PanelUrl, PanelDaemon Daemon);
 
+/// <summary>The firmware flash state, in /api/status (polled every second, so the
+/// progress needs no extra requests) and in the firmware answers.</summary>
+/// <param name="State">Idle, EnteringBootloader, WaitingForDfu, Flashing, Done or Failed.</param>
+/// <param name="Progress">0 to 1 while flashing.</param>
+/// <param name="Running">Between the start and the end of a flash.</param>
+/// <param name="UpdateAvailable">The bundled firmware is newer than the device's (cached verdict).</param>
+internal sealed record PanelFlash(string State, double Progress, string? Message, bool Running, bool UpdateAvailable);
+
+/// <param name="Firmware">The version number as the device reports it ("5"), null while unknown.</param>
+/// <param name="Label">"v05 (TG-WV-PRO2-FW_...)", the app's words.</param>
+/// <param name="Route">serial, daemon (wireviewd) or readOnly (hwmon without wireviewd).</param>
+internal sealed record PanelFirmwareDevice(
+    string Name, string? Firmware, string? BuildString, string Label, string Route, bool Connected);
+
+/// <param name="Error">Why the image cannot be used (missing, unparsable), null when it can.</param>
+internal sealed record PanelFirmwareImage(string Path, int? Version, string? BuildString, string? Label, string? Error);
+
+/// <summary>GET /api/firmware. <paramref name="Verdict"/>: a FlashVerdict name
+/// (Newer, Same, Unknown, Downgrade, ProductMismatch, TooOldForNoctua), null with
+/// no device or no image. <paramref name="Reason"/>: why it cannot flash, when
+/// <paramref name="CanFlash"/> is false. <paramref name="NeedsOverride"/>: a
+/// downgrade or the same build, which POST /api/firmware/flash takes only with
+/// allowOlder. <paramref name="DfuUtil"/>: dfu-util's version line, null when
+/// missing (and on Windows, where the native flasher needs none).</summary>
+internal sealed record PanelFirmware(
+    PanelFirmwareDevice? Device, PanelFirmwareImage Bundled, string? Verdict, string? VerdictText,
+    bool CanFlash, string? Reason, bool NeedsOverride, string? OverrideWarning, string? OverrideLabel,
+    string? ConfirmText, bool DfuUtilRequired, string? DfuUtil, string Hint, PanelFlash Flash);
+
+/// <summary>POST /api/firmware/flash when it started (202).</summary>
+internal sealed record PanelFlashStarted(bool Ok, string Message, PanelFlash Flash);
+
 /// <summary>Every failure: {"error": "..."}.</summary>
 internal sealed record PanelError(string Error);
 
@@ -93,6 +126,8 @@ internal sealed record PanelError(string Error);
 [JsonSerializable(typeof(PanelDaemonConfigRead))]
 [JsonSerializable(typeof(PanelDaemonConfigWritten))]
 [JsonSerializable(typeof(PanelError))]
+[JsonSerializable(typeof(PanelFirmware))]
+[JsonSerializable(typeof(PanelFlashStarted))]
 [JsonSerializable(typeof(DeviceConfigModel))]
 [JsonSerializable(typeof(DaemonConfigEdit))]
 internal sealed partial class MiniJsonContext : JsonSerializerContext

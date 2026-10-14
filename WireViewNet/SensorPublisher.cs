@@ -341,6 +341,7 @@ namespace WireView2.Net
         private static string ReasonPhrase(int status) => status switch
         {
             200 => "OK",
+            202 => "Accepted",
             400 => "Bad Request",
             401 => "Unauthorized",
             403 => "Forbidden",

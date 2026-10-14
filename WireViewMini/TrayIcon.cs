@@ -13,6 +13,7 @@ internal enum TrayCommand
     Quit = 8,
     OpenPanel = 9,
     ClearFaults = 11,
+    FirmwareUpdate = 15,
     ScreenMain = 20,
     ScreenSimple = 21,
     ScreenCurrent = 22,
@@ -40,7 +41,9 @@ internal sealed record TrayItem(int Id, TrayItemKind Kind, string Label = "", bo
 /// states, whether a fault is active, whether the device takes commands and the
 /// remote host lines. <see cref="DaemonLine"/>, set when wireviewd does the LAN
 /// publishing (Linux), replaces the Publish on the LAN checkbox with a disabled
-/// line. Equal states render identically, so implementations compare with the
+/// line. <see cref="FirmwareLine"/>, set when the bundled firmware is newer than
+/// the device's, adds a line under the header that opens the control panel.
+/// Equal states render identically, so implementations compare with the
 /// last one and send only what changed.</summary>
 internal sealed record TrayState(
     string Header,
@@ -52,7 +55,8 @@ internal sealed record TrayState(
     bool DeviceCommands = false,
     string RemoteLines = "",
     string? DaemonLine = null,
-    bool AppInstalled = true)
+    bool AppInstalled = true,
+    string? FirmwareLine = null)
 {
     public const string AppTitle = "WireView Mini";
 
@@ -79,6 +83,9 @@ internal sealed record TrayState(
         get
         {
             var items = new List<TrayItem> { new(1, TrayItemKind.Header, Header) };
+            // Opens the control panel, whose Firmware section does the update.
+            if (FirmwareLine != null)
+                items.Add(new((int)TrayCommand.FirmwareUpdate, TrayItemKind.Action, FirmwareLine));
             // Only where the app is installed: a standalone WireView Mini has
             // nothing to launch.
             if (AppInstalled)
@@ -136,11 +143,19 @@ internal sealed record TrayState(
     /// <summary>The header line for the WireView Mini status.</summary>
     public static string HeaderFor(MiniStatus status)
     {
+        if (status.Flash is { } flash)
+            return flash.Phase == FlashPhase.Flashing
+                ? string.Create(CultureInfo.InvariantCulture, $"Updating the firmware: {flash.Progress * 100:0} %")
+                : "Updating the firmware...";
         if (status.Handover) return "Serial port lent to the app";
         if (status.DeviceName is not { } name) return "No device";
         if (status.FaultText is { } fault) return $"{name}: {fault}";
         return string.Create(CultureInfo.InvariantCulture, $"{name}: {status.PowerW ?? 0:0.0} W");
     }
+
+    /// <summary>The line under the header when the bundled firmware is newer.</summary>
+    public static string? FirmwareLineFor(MiniStatus status) =>
+        status.FirmwareUpdate ? "Firmware update available" : null;
 
     /// <summary>The tray line while wireviewd publishes: "LAN publishing: wireviewd,
     /// port 9876" while it answers there, "..., off" when it does not, no state

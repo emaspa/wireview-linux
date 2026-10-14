@@ -74,7 +74,8 @@ internal sealed class TrayController : IDisposable
             DeviceCommands: status.DeviceName != null && !status.Handover,
             RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()),
             DaemonLine: _service.DaemonMode ? TrayState.DaemonLineFor(_service.Daemon.Observed) : null,
-            AppInstalled: GuiLauncher.Locate() != null);
+            AppInstalled: GuiLauncher.Locate() != null,
+            FirmwareLine: TrayState.FirmwareLineFor(status));
     }
 
     /// <summary>A menu click, on the tray's thread.</summary>
@@ -91,6 +92,7 @@ internal sealed class TrayController : IDisposable
                     break;
 
                 case TrayCommand.OpenPanel:
+                case TrayCommand.FirmwareUpdate:
                     OpenPanel();
                     break;
 
@@ -159,6 +161,14 @@ internal sealed class TrayController : IDisposable
                 }
 
                 case TrayCommand.Quit:
+                    // Quitting mid-flash leaves the device in its bootloader (and
+                    // stops the native flasher on Windows): wait for the end.
+                    if (_service.Firmware.Running)
+                    {
+                        FileLog.Warn("tray: Quit chosen during a firmware update: not quitting");
+                        _toast.Show("WireView Mini", "A firmware update is running. Quit when it has finished.");
+                        break;
+                    }
                     FileLog.Info("tray: Quit chosen");
                     _requestStop();
                     return;

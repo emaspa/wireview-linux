@@ -258,12 +258,19 @@ Done, in this repo:
   No tray on the desktop: one log line, WireView Mini runs on and registers when a watcher
   appears. `--no-tray` turns it off. Cost on Linux: about +5 MB RSS, +4.5 MB PSS, +1.5 MB
   anonymous; +0.4 MB on the Linux single file, +0.25 MB on the Windows one.
-- WireView Mini as a mini client (everything but the graphs, firmware updates, themes and the
-  device log). Tray menu: *Settings and controls...*, a *Screen* submenu (the five screens,
+- WireView Mini as a mini client (everything but the graphs, themes and the device log;
+  firmware flashing was added later, see the next point). Tray menu: *Settings and controls...*, a *Screen* submenu (the five screens,
   pause, resume), *Clear faults* (enabled during a fault; clears the active faults, keeps the
   log, like the app's banner), a *Remote hosts* submenu (one line per host: power, fault or
   offline). Submenus in the shared menu model and both backends (Win32 `MF_POPUP`, dbusmenu
   `children-display`).
+- Firmware flashing in WireView Mini (2026-10-14): `DfuUtilFlasher`, `FirmwareHexInfo` and a
+  shared `BundledFirmware` moved to `WireViewDeviceLib`; `WireViewMini/FirmwareService.cs` runs
+  the app's gates and flash flow (serial: Mini closes its own port and sends the bootloader
+  command directly; daemon: through wireviewd; dfu-util or WinUSB), `GET /api/firmware`,
+  `POST /api/firmware/flash`, the flash state in `/api/status`, a Firmware card and a tray
+  *Firmware update available* line. Idle until used: the bundled image is parsed once and the
+  verdict cached per device and firmware. +0.3 MB on the Linux AOT binary.
 - Control panel: one embedded page (`WireViewMini/ControlPanel.html`, inline CSS and JS)
   and a JSON API under `/api/` (status, config read and write, screen/NVM/clear-faults
   commands, mini settings, open the app), served on the publish port through a new

@@ -90,9 +90,9 @@ jobs, so the app only needs to run when you want to look at it:
   when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
 
 WireView Mini plus its control panel are a minimal client: everything except the
-graphs, firmware updates, themes and the device log, which stay in the app. With
-the tray menu and the control panel you can watch the device, switch its screen,
-clear faults, edit its configuration and alarms, and set up LAN monitoring and
+graphs, themes and the device log, which stay in the app. With the tray menu and
+the control panel you can watch the device, switch its screen, clear faults, edit
+its configuration and alarms, update its firmware, and set up LAN monitoring and
 shutdown on fault without installing or opening the app.
 
 On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with
@@ -191,7 +191,9 @@ refreshed every second:
 - **LAN monitoring**: Publish on the LAN, the port (the page follows WireView Mini to
   a new port), the remote hosts to watch, and the network secret; with
   wireviewd, the daemon's own settings instead of the first two (below),
-- **Tools**: Launch WireView Desktop (graphs, firmware updates, themes, device log) and
+- **Firmware**: the device's and the bundled firmware (version and build), what a
+  flash would do, and **Update firmware** (see *Firmware updates* below),
+- **Tools**: Launch WireView Desktop (graphs, themes, device log) and
   where WireView Mini's log is.
 
 Settings changed on the page are saved to `settings.json` and applied at once,
@@ -219,6 +221,23 @@ versions have no `wireviewctl config`, and the card says so) and membership of
 the `wireview` group (`sudo usermod -aG wireview $USER`, then log in again).
 WireView Mini moves its own loopback listener off a port you give the daemon, and
 the page follows it. `WIREVIEW_CTL` overrides which `wireviewctl` is run.
+
+**Firmware updates.** WireView Mini ships the same firmware image as the app
+(`TG-WV-PRO2-FW.hex`, next to `wireview-mini`) and the panel's **Firmware** card
+flashes it with the same checks as the app's Device page: it refuses an image
+made for another product, refuses an image older than Noctua Edition support on
+a Noctua Edition, and flashes an older or identical build only after you tick
+*Flash the older (or same) firmware anyway*. **Update firmware** shows the same
+warning as the app first; **Flash now** restarts the device into its bootloader
+and flashes it, with a progress bar, and the device reconnects on its own. On
+Linux it needs the `dfu-util` package (the card says when it is missing); with
+wireviewd the bootloader command goes through the daemon and needs the
+`wireview` group; on Windows it uses the native WinUSB flasher, as the app does.
+While a flash runs the other device controls are off, the app cannot borrow the
+serial port, and the tray's Quit waits for the end. The tray shows *Firmware
+update available*, which opens the panel, when the bundled firmware is newer
+than the device's. The [firmware flashing warning](#features) applies here too.
+`WIREVIEW_DFU_UTIL` overrides which `dfu-util` is run.
 
 On Windows WireView Mini has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get

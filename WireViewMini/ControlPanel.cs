@@ -21,9 +21,10 @@ namespace WireView2.Mini;
 /// it). No CORS headers, so other web pages cannot read the answers.
 ///
 /// API: GET /api/status, GET /api/config, POST /api/config, POST /api/command,
-/// POST /api/settings, POST /api/open-app, and on Linux GET and POST
-/// /api/daemon-config (wireviewd's settings through wireviewctl, see
-/// <see cref="DaemonConfigService"/>). Device writes go through the same
+/// POST /api/settings, POST /api/open-app, GET /api/firmware and POST
+/// /api/firmware/flash (the bundled firmware, see <see cref="FirmwareService"/>),
+/// and on Linux GET and POST /api/daemon-config (wireviewd's settings through
+/// wireviewctl, see <see cref="DaemonConfigService"/>). Device writes go through the same
 /// relay as a LAN command (<see cref="LocalPublishHost.ExecuteCommand"/>), so
 /// they work over direct serial and over hwmon with wireviewd alike.
 /// </summary>
@@ -87,9 +88,12 @@ internal sealed class ControlPanel
                 ("POST", "/api/command") => PostCommand(req.Body),
                 ("POST", "/api/settings") => PostSettings(req.Body),
                 ("POST", "/api/open-app") => OpenApp(),
+                ("GET", "/api/firmware") => GetFirmware(),
+                ("POST", "/api/firmware/flash") => PostFlash(req.Body),
                 ("GET", "/api/daemon-config") => GetDaemonConfig(),
                 ("POST", "/api/daemon-config") => PostDaemonConfig(req.Body),
-                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config")
+                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config"
+                    or "/api/firmware" or "/api/firmware/flash")
                     => Error(405, "method not allowed"),
                 _ => Error(404, "no such API"),
             };
@@ -162,7 +166,8 @@ internal sealed class ControlPanel
                 .Select(h => new PanelRemoteHost(h.Host, h.Endpoint, h.Online, h.HostName, h.Readings, h.FaultText))
                 .ToList(),
             Settings: SettingsView(s),
-            Gui: new PanelGui(Location: gui, Available: gui != null));
+            Gui: new PanelGui(Location: gui, Available: gui != null),
+            Firmware: FlashView(_mini.Firmware.State, _mini.Firmware.UpdateAvailable()));
     }
 
     private static PanelSettings SettingsView(AppSettings s) => new(
@@ -176,7 +181,8 @@ internal sealed class ControlPanel
 
     private PanelDevice? LocalDevice()
     {
-        if (_mini.HandoverActive)
+        // Lent to the app, or closed for a firmware flash: the last readings.
+        if (_mini.PortSuspended)
         {
             var frozen = _mini.Publisher.BuildSnapshot().Devices.FirstOrDefault();
             return new PanelDevice(
@@ -186,7 +192,7 @@ internal sealed class ControlPanel
                 UniqueId: frozen?.Id,
                 Source: null,
                 Connected: false,
-                SerialSuspended: true,
+                SerialSuspended: _mini.HandoverActive,
                 CanWrite: false,
                 Readings: frozen,
                 FaultStatus: frozen?.FaultStatus ?? 0,
@@ -195,7 +201,7 @@ internal sealed class ControlPanel
                 FaultLogText: null);
         }
 
-        var md = PreferredLocal();
+        var md = _mini.PreferredLocal();
         if (md == null) return null;
         var dev = md.Device;
         var latest = md.Latest;
@@ -208,7 +214,7 @@ internal sealed class ControlPanel
             Source: md.Source,
             Connected: dev.Connected,
             SerialSuspended: false,
-            CanWrite: CanWrite(dev),
+            CanWrite: MiniService.CanWrite(dev) && !_mini.Firmware.Running,
             Readings: latest != null ? WireViewSensorDto.FromDevice(dev, latest) : null,
             FaultStatus: status,
             FaultLog: log,
@@ -216,21 +222,6 @@ internal sealed class ControlPanel
             FaultText: _mini.LocalFaultText(md.Id) ?? (status != 0 ? FaultMonitor.FormatFaults((ushort)status) : null),
             FaultLogText: log != 0 ? FaultNames((ushort)log) : null);
     }
-
-    /// <summary>The local device the panel shows and drives. With the hwmon
-    /// module loaded but wireviewd stopped the manager lists both a read-only
-    /// hwmon entry and the serial port, so prefer a device that takes commands,
-    /// then a connected one, then one with readings.</summary>
-    private ManagedDevice? PreferredLocal() =>
-        _mini.LocalDevices.Devices
-            .Where(d => d.Device is not NetworkDevice)
-            .OrderByDescending(d => CanWrite(d.Device))
-            .ThenByDescending(d => d.Device.Connected)
-            .ThenByDescending(d => d.Latest != null)
-            .FirstOrDefault();
-
-    private static bool CanWrite(IWireViewDevice dev) =>
-        dev is WireViewPro2Device || dev is HwmonDevice { DaemonAvailable: true };
 
     private static string FaultNames(ushort mask)
     {
@@ -309,9 +300,11 @@ internal sealed class ControlPanel
     {
         if (_mini.HandoverActive)
             return Error(409, "the serial port is lent to the WireView app; try again when it hands it back");
-        var md = PreferredLocal();
+        if (_mini.Firmware.Running)
+            return Error(409, "a firmware update is running; try again when it has finished");
+        var md = _mini.PreferredLocal();
         if (md == null || !md.Device.Connected) return Error(503, "no device connected");
-        if (!CanWrite(md.Device))
+        if (!MiniService.CanWrite(md.Device))
             return Error(503, "the device is reached through hwmon without wireviewd, which is read only");
         return null;
     }
@@ -584,6 +577,91 @@ internal sealed class ControlPanel
         {
             return ex.SocketErrorCode == SocketError.AddressAlreadyInUse ? "another program uses it" : ex.Message;
         }
+    }
+
+    // ---- Firmware ----
+
+    private static PanelFlash FlashView(FlashState s, bool updateAvailable) => new(
+        State: s.Phase switch
+        {
+            FlashPhase.EnteringBootloader => "EnteringBootloader",
+            FlashPhase.WaitingForDfu => "WaitingForDfu",
+            FlashPhase.Flashing => "Flashing",
+            FlashPhase.Done => "Done",
+            FlashPhase.Failed => "Failed",
+            _ => "Idle",
+        },
+        Progress: Math.Round(s.Progress, 3),
+        Message: s.Message,
+        Running: s.Running,
+        UpdateAvailable: updateAvailable);
+
+    private static string? VerdictName(FlashVerdict? v) => v switch
+    {
+        FlashVerdict.Newer => "Newer",
+        FlashVerdict.Same => "Same",
+        FlashVerdict.Unknown => "Unknown",
+        FlashVerdict.Downgrade => "Downgrade",
+        FlashVerdict.ProductMismatch => "ProductMismatch",
+        FlashVerdict.TooOldForNoctua => "TooOldForNoctua",
+        _ => null,
+    };
+
+    private HttpResponseInfo GetFirmware()
+    {
+        var r = _mini.Firmware.Report();
+        var d = r.Device;
+        var b = r.Bundled;
+        return Ok(new PanelFirmware(
+            Device: d == null ? null : new PanelFirmwareDevice(
+                Name: d.Name,
+                Firmware: string.IsNullOrEmpty(d.FirmwareVersion) ? null : d.FirmwareVersion,
+                BuildString: string.IsNullOrEmpty(d.BuildString) ? null : d.BuildString,
+                Label: d.Label,
+                Route: d.Route switch { FlashRoute.Serial => "serial", FlashRoute.Daemon => "daemon", _ => "readOnly" },
+                Connected: d.Connected),
+            Bundled: new PanelFirmwareImage(
+                Path: r.BundledPath,
+                Version: b?.Version,
+                BuildString: b?.BuildString,
+                Label: b == null ? null : BundledFirmware.Label(b.Version, b.BuildString),
+                Error: r.BundledError),
+            Verdict: VerdictName(r.Verdict),
+            VerdictText: FirmwareService.VerdictText(r.Verdict),
+            CanFlash: r.CanFlash,
+            Reason: r.Reason,
+            NeedsOverride: r.OverrideWarning != null,
+            OverrideWarning: r.OverrideWarning,
+            OverrideLabel: r.OverrideLabel,
+            ConfirmText: r.ConfirmText,
+            DfuUtilRequired: r.DfuUtilRequired,
+            DfuUtil: r.DfuUtilVersion,
+            Hint: r.Hint,
+            Flash: FlashView(r.State, r.Verdict == FlashVerdict.Newer && !r.State.Running)), MiniJsonContext.Default.PanelFirmware);
+    }
+
+    /// <summary>Body: {"allowOlder": bool} ("force" is taken as the same). 202 once
+    /// started (the progress is in /api/status), 409 while one runs or the app
+    /// holds the port, 400 with the gate's message when it may not flash.</summary>
+    private HttpResponseInfo PostFlash(string body)
+    {
+        using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) return Error(400, "expected a JSON object");
+        bool Flag(string name) => root.TryGetProperty(name, out var v) && v.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False or JsonValueKind.Null => false,
+            _ => throw new JsonException($"{name} must be true or false"),
+        };
+        bool allowOlder = Flag("allowOlder") || Flag("force");
+
+        FileLog.Info($"control panel: firmware update requested{(allowOlder ? " (older or same build allowed)" : "")}");
+        var start = _mini.Firmware.Start(allowOlder);
+        if (start.Status != 202) return Error(start.Status, start.Error ?? "the firmware update did not start");
+        return HttpResponseInfo.Json(202, JsonSerializer.Serialize(
+            new PanelFlashStarted(true, start.State.Message ?? "Firmware update started.", FlashView(start.State, false)),
+            MiniJsonContext.Default.PanelFlashStarted));
     }
 
     // ---- App ----

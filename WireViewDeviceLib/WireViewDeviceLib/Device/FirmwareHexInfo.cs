@@ -5,9 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using WireView2.Device;
 
-namespace WireView2.Services;
+namespace WireView2.Device;
 
 /// <summary>Identity of a firmware image: the BuildStruct's vendor/product id,
 /// version and build string ("TG-WV-PRO2-FW_20260902_0741").</summary>
@@ -22,7 +21,7 @@ public sealed record FirmwareImageInfo(byte VendorId, byte ProductId, int Versio
 /// image's lowest address: vendor id at +192, product id at +193, version byte at
 /// +194, a 32-byte NUL-terminated ASCII build string at +227 (192+35). Matches the
 /// upstream 1.0.8 Windows client so comparisons agree across ports.</summary>
-public static class FirmwareHexInfo
+public static partial class FirmwareHexInfo
 {
     private const uint BuildStructOffset = 192;
     private const uint VendorIdOffsetInBuildStruct = 0;
@@ -32,15 +31,16 @@ public static class FirmwareHexInfo
     private const int BuildInfoLength = 32;
 
     // Upstream's BuildTimestampRegex: "_yyyyMMdd_HHmm" not followed by a digit.
-    private static readonly Regex BuildTimestampRegex =
-        new(@"_(\d{8})_(\d{4})(?!\d)", RegexOptions.CultureInvariant);
+    // Source-generated: no regex parser or interpreter at run time (NativeAOT).
+    [GeneratedRegex(@"_(\d{8})_(\d{4})(?!\d)", RegexOptions.CultureInvariant)]
+    private static partial Regex BuildTimestampRegex();
 
     /// <summary>Parses the build timestamp out of a firmware build string such as
     /// "TG-WV-PRO2-FW_20260902_0741" (upstream's TryParseBuildTimestamp).</summary>
     public static DateTime? TryParseBuildTimestamp(string? buildString)
     {
         if (string.IsNullOrWhiteSpace(buildString)) return null;
-        var m = BuildTimestampRegex.Match(buildString);
+        var m = BuildTimestampRegex().Match(buildString);
         if (!m.Success) return null;
         return DateTime.TryParseExact(m.Groups[1].Value + m.Groups[2].Value, "yyyyMMddHHmm",
             CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? t : null;

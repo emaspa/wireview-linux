@@ -12,7 +12,10 @@ namespace WireView2.Mini;
 /// <param name="PowerW">Its latest total power.</param>
 /// <param name="FaultText">Its active fault (<see cref="FaultMonitor.FormatFaults"/>), null when clear.</param>
 /// <param name="Handover">The serial port is lent to a local client (the GUI).</param>
-internal readonly record struct MiniStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover);
+/// <param name="Flash">A firmware update in progress, null otherwise.</param>
+/// <param name="FirmwareUpdate">The bundled firmware is newer than the device's.</param>
+internal readonly record struct MiniStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover,
+    FlashState? Flash = null, bool FirmwareUpdate = false);
 
 /// <summary>One remote device (or an unreachable host) as the tray and the
 /// control panel show it.</summary>
@@ -33,11 +36,12 @@ internal readonly record struct RemoteHostStatus(
 /// (always: on all interfaces when LAN publishing is on, loopback only when it is
 /// off, because the GUI reaches the device through it), raises fault alerts with
 /// <see cref="FaultMonitor"/>, shuts the PC down on a local fault when the
-/// setting asks for it, and lends the serial port to the GUI on request.
+/// setting asks for it, lends the serial port to the GUI on request, and
+/// flashes the bundled firmware on request (<see cref="Firmware"/>).
 /// Settings changes made in the GUI are picked up every tick, and so are the
 /// tray's (<see cref="RequestSettingsChange"/>).
 /// </summary>
-internal sealed class MiniService : IDisposable
+internal sealed class MiniService : IDisposable, IFlashHost
 {
     /// <summary>Handover window when the client does not ask for one, and the
     /// longest one granted: WireView Mini takes the port back after this even if
@@ -67,6 +71,8 @@ internal sealed class MiniService : IDisposable
     private DateTime? _handoverUntil;     // set while the port is lent out
     private DateTime? _unfreezeBy;        // after a handover: stop showing the frozen readings by then
     private volatile bool _handoverActive; // _handoverUntil != null, readable without _gate
+    private DateTime? _flashUntil;        // set while a firmware flash keeps the port closed
+    private volatile bool _flashSuspended; // _flashUntil != null, readable without _gate
 
     // Last shown fault status per local device id (guarded by _monitors).
     private readonly Dictionary<string, ushort> _localFault = new();
@@ -100,6 +106,7 @@ internal sealed class MiniService : IDisposable
         _noShutdown = noShutdown;
         _localKey = MiniKey.LoadOrCreate();
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        Firmware = new FirmwareService(this);
         _panel = new ControlPanel(this);
         _daemon = new DaemonConfigService(() =>
             RunOnTick(() => _nextBindAttempt = DateTime.MinValue, TimeSpan.FromSeconds(5)));
@@ -137,6 +144,8 @@ internal sealed class MiniService : IDisposable
             stop.WaitHandle.WaitOne(1000);
         }
 
+        if (Firmware.Running)
+            FileLog.Warn("stopping during a firmware update: the device may stay in its bootloader until it is flashed again");
         FileLog.Info("stopping: closing the device and the listener");
         Dispose();
     }
@@ -167,6 +176,11 @@ internal sealed class MiniService : IDisposable
             {
                 FileLog.Warn("serial handover window ran out: taking the port back");
                 ResumeLocked();
+            }
+            if (_flashUntil is { } flashUntil && DateTime.UtcNow >= flashUntil)
+            {
+                FileLog.Warn("firmware update window ran out: taking the port back");
+                ResumeFlashLocked();
             }
             if (_unfreezeBy is { } by &&
                 (DateTime.UtcNow >= by || _local.Devices.Any(d => d.Latest != null)))
@@ -202,6 +216,17 @@ internal sealed class MiniService : IDisposable
 
     /// <summary>The serial port is lent to a local client.</summary>
     public bool HandoverActive => _handoverActive;
+
+    /// <summary>The bundled firmware flasher (the panel's Firmware section).</summary>
+    public FirmwareService Firmware { get; }
+
+    /// <summary>The local device is out of use: lent to the GUI, or closed for a
+    /// firmware flash. The panel shows the last readings meanwhile.</summary>
+    public bool PortSuspended => _handoverActive || _flashSuspended;
+
+    /// <summary>Device commands are refused: the port is lent out or a firmware
+    /// update runs (in daemon mode too, where the port is wireviewd's).</summary>
+    private bool DeviceBusy => _handoverActive || Firmware.Running;
 
     /// <summary>Why the publisher is not on the wanted port (the bind error, and
     /// the fallback port while one is used), null while it is.</summary>
@@ -253,7 +278,7 @@ internal sealed class MiniService : IDisposable
     /// <summary>Runs a device command on this PC's device through the same relay
     /// as a LAN command (direct serial, or hwmon through wireviewd).</summary>
     public DaemonResult RunLocalCommand(WireViewCommand cmd) =>
-        _handoverActive ? DaemonResult.NotConnected : _publish.ExecuteCommand(cmd);
+        DeviceBusy ? DaemonResult.NotConnected : _publish.ExecuteCommand(cmd);
 
     /// <summary>Clears the active faults like the app's fault banner: every active
     /// fault (keep-mask 0), the fault log kept (keep-mask 0xFFFF), then a redraw of
@@ -275,6 +300,8 @@ internal sealed class MiniService : IDisposable
     /// handover lock, so it is safe from the device thread.</summary>
     public MiniStatus GetStatus()
     {
+        var flash = Firmware.State;
+        if (flash.Running) return new MiniStatus(null, null, null, Handover: false, Flash: flash);
         if (_handoverActive) return new MiniStatus(null, null, null, Handover: true);
         foreach (var d in _local.Devices)
         {
@@ -282,9 +309,108 @@ internal sealed class MiniService : IDisposable
             ushort fault;
             lock (_monitors) _localFault.TryGetValue(d.Id, out fault);
             return new MiniStatus(d.Device.DeviceName, data.SumPowerW,
-                fault != 0 ? FaultMonitor.FormatFaults(fault) : null, Handover: false);
+                fault != 0 ? FaultMonitor.FormatFaults(fault) : null, Handover: false,
+                FirmwareUpdate: Firmware.UpdateAvailable());
         }
         return default;
+    }
+
+    /// <summary>The local device the panel shows and drives. With the hwmon
+    /// module loaded but wireviewd stopped the manager lists both a read-only
+    /// hwmon entry and the serial port, so prefer a device that takes commands,
+    /// then a connected one, then one with readings.</summary>
+    internal ManagedDevice? PreferredLocal() =>
+        _local.Devices
+            .Where(d => d.Device is not NetworkDevice)
+            .OrderByDescending(d => CanWrite(d.Device))
+            .ThenByDescending(d => d.Device.Connected)
+            .ThenByDescending(d => d.Latest != null)
+            .FirstOrDefault();
+
+    /// <summary>The device takes commands: serial, or hwmon with wireviewd.</summary>
+    internal static bool CanWrite(IWireViewDevice dev) =>
+        dev is WireViewPro2Device || dev is HwmonDevice { DaemonAvailable: true };
+
+    // ---- Firmware flashing (IFlashHost) ----
+
+    FlashTarget? IFlashHost.FlashTarget()
+    {
+        if (PortSuspended) return null;
+        var md = PreferredLocal();
+        if (md == null) return null;
+        var dev = md.Device;
+        return new FlashTarget(md.Id, dev.DeviceName, dev.VendorId, dev.ProductId,
+            dev.FirmwareVersion ?? "", dev.BuildString ?? "", dev.Connected,
+            dev switch
+            {
+                WireViewPro2Device => FlashRoute.Serial,
+                HwmonDevice { DaemonAvailable: true } => FlashRoute.Daemon,
+                _ => FlashRoute.ReadOnly,
+            });
+    }
+
+    DaemonResult IFlashHost.EnterBootloaderThroughDaemon()
+    {
+        var hwmon = PreferredLocal()?.Device as HwmonDevice;
+        return hwmon?.EnterBootloader() ?? DaemonResult.NotConnected;
+    }
+
+    /// <summary>Like <see cref="Suspend"/>, but for WireView Mini's own flash: its
+    /// own window (a GUI resumeSerial does not end it) and refused while the GUI
+    /// holds the port. Returns once the port is closed.</summary>
+    bool IFlashHost.SuspendForFlash(int seconds)
+    {
+        int window = Math.Clamp(seconds, 1, MaxHandoverSeconds);
+        lock (_gate)
+        {
+            if (_handoverUntil != null) return false;
+            bool rearm = _flashUntil != null;
+            _flashUntil = DateTime.UtcNow.AddSeconds(window);
+            _flashSuspended = true;
+            if (rearm) return true;
+
+            _unfreezeBy = null;
+            _publish.FreezeDevices();
+            // Wait for a discovery pass in flight, so no port is opened after this.
+            _local.Stop(TimeSpan.FromSeconds(5));
+            FileLog.Info($"firmware update: device closed and discovery paused for up to {window} s");
+        }
+        return true;
+    }
+
+    string? IFlashHost.EnterBootloaderDirect()
+    {
+        // The app's EnterBootloaderViaMini, with WireView Mini's port already closed.
+        string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
+        if (port == null)
+            return "No WireView serial port found.";
+        var direct = new WireViewPro2Device(port);
+        try
+        {
+            direct.Connect();
+            if (!direct.Connected)
+                return $"Could not open {port}.";
+            direct.EnterBootloader();
+            FileLog.Info($"firmware update: bootloader command sent on {port}");
+            return null;
+        }
+        finally
+        {
+            try { direct.Disconnect(); } catch { }
+        }
+    }
+
+    void IFlashHost.ResumeAfterFlash()
+    {
+        lock (_gate) ResumeFlashLocked();
+    }
+
+    private void ResumeFlashLocked()
+    {
+        if (_flashUntil == null) return;
+        _flashUntil = null;
+        _flashSuspended = false;
+        RestartLocalLocked();
     }
 
     /// <summary>Queues a settings edit (the tray's checkboxes, the control panel).
@@ -515,7 +641,13 @@ internal sealed class MiniService : IDisposable
         switch (cmd.Op)
         {
             case WireViewCommand.SuspendSerialOp:
-                Suspend(cmd.Seconds);
+                // WireView Mini is flashing the device itself: the app must not
+                // open the port in the middle of it.
+                if (!Suspend(cmd.Seconds))
+                {
+                    FileLog.Warn("serial handover refused: a firmware update is running");
+                    return DaemonResult.Error;
+                }
                 return DaemonResult.Ok;
             case WireViewCommand.ResumeSerialOp:
                 bool resumed = false;
@@ -533,22 +665,25 @@ internal sealed class MiniService : IDisposable
                 if (resumed) WaitForLocalDevice(ResumeWait);
                 return DaemonResult.Ok;
             default:
-                return null;
+                // No device commands from the LAN or the app while flashing.
+                return Firmware.Running ? DaemonResult.NotConnected : null;
         }
     }
 
     /// <summary>Closes the port (stops the local manager) and keeps the last
     /// readings published, marked not connected. Re-sending extends the window.
-    /// Returns once the port is closed, so the client can open it right away.</summary>
-    private void Suspend(int seconds)
+    /// Returns once the port is closed, so the client can open it right away;
+    /// false (nothing done) while WireView Mini flashes the firmware.</summary>
+    private bool Suspend(int seconds)
     {
         int window = seconds <= 0 ? DefaultHandoverSeconds : Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
         {
+            if (_flashUntil != null || Firmware.Running) return false;
             bool rearm = _handoverUntil != null;
             _handoverUntil = DateTime.UtcNow.AddSeconds(window);
             _handoverActive = true;
-            if (rearm) return;
+            if (rearm) return true;
 
             _unfreezeBy = null;
             _publish.FreezeDevices();
@@ -556,6 +691,7 @@ internal sealed class MiniService : IDisposable
             _local.Stop(TimeSpan.FromSeconds(5));
             FileLog.Info($"serial port handed over to a local client for up to {window} s");
         }
+        return true;
     }
 
     private static readonly TimeSpan ResumeWait = TimeSpan.FromSeconds(3);
@@ -571,6 +707,11 @@ internal sealed class MiniService : IDisposable
     {
         _handoverUntil = null;
         _handoverActive = false;
+        RestartLocalLocked();
+    }
+
+    private void RestartLocalLocked()
+    {
         _unfreezeBy = DateTime.UtcNow + UnfreezeGrace;
         _local.SetPollInterval(_pollMs);
         _local.Start();
