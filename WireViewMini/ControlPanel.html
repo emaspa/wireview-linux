@@ -68,11 +68,21 @@ h3 { margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
 .big .f { border-left-color: var(--muted); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 /* The app's per-wire bar chart, filling the right column: a group of up to
-   three bars per pin (15 V, 10 A, 150 W full scale; more when a reading
-   exceeds it), the value above each bar when one series is on. */
+   three bars per pin (12 V, 10 A, 120 W full scale; more when a reading
+   exceeds it by over 5 percent), the value above each bar when one series is on. Gridlines at
+   0, 25, 50, 75 and 100 percent of full scale run behind the groups, each read
+   in the gutter column on the left, one line per enabled series in its colour. */
 .pinchart { display: flex; flex-direction: column; min-height: 100%; }
-.bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; flex: 1; min-height: 190px; align-items: end; margin: 26px 0 22px; }
-.bars .pin { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; border-bottom: 1px solid var(--line); }
+.bars { display: grid; grid-template-columns: auto repeat(6, 1fr); gap: 8px; flex: 1; min-height: 190px; align-items: end; margin: 26px 0 22px; }
+.bars .gutter, .bars .grid { position: relative; grid-row: 1; align-self: stretch; }
+.bars .gutter { grid-column: 1; min-width: 28px; }
+.bars .grid { grid-column: 2 / -1; pointer-events: none; }
+.bars .grid b { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.bars .gutter div { position: absolute; right: 0; transform: translateY(50%); display: flex; flex-direction: column; align-items: flex-end; font-size: 10px; line-height: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bars .gutter .gv { color: var(--voltage); }
+.bars .gutter .gi { color: var(--current); }
+.bars .gutter .gp { color: var(--power); }
+.bars .pin { position: relative; z-index: 1; grid-row: 1; display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; border-bottom: 1px solid var(--line); }
 .bars .pbar { position: relative; flex: 1 1 0; max-width: 22px; min-height: 2px; border-radius: 3px 3px 0 0; transition: height .3s; }
 .bars .pbar.bv { background: var(--voltage); }
 .bars .pbar.bi { background: var(--current); }
@@ -125,6 +135,12 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 .alarms th, .alarms td { text-align: center; }
 .alarms th:first-child, .alarms td:first-child { text-align: left; }
 .alarms td.edited { background: #33290f; }
+/* Profiles: the app's saved device configurations, above the form. */
+.profiles { padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.profiles h3 { margin-top: 0; }
+.profiles .row + .row { margin-top: 8px; }
+.profiles select, .profiles input[type=text] { width: 240px; max-width: 100%; }
+.profiles .confirm { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--warn); }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px;
            padding-top: 12px; border-top: 1px solid var(--line); }
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0;
@@ -351,6 +367,25 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
     <h2 class="card-head"><button type="button" class="card-toggle" data-card="config" aria-expanded="false" aria-controls="cfgBody"><span class="chev" aria-hidden="true"></span>Device configuration</button>
       <span class="sub" id="cfgInfo"></span></h2>
     <div class="card-body" id="cfgBody" hidden>
+    <div class="profiles">
+      <h3>Profiles</h3>
+      <div class="row">
+        <select id="profSel" aria-label="Saved profiles"></select>
+        <button id="profLoad" title="Fill the form below with the profile; Apply sends it to the device">Load</button>
+        <button class="danger" id="profDelete">Delete</button>
+        <span class="confirm hidden" id="profConfirm" role="group" aria-label="Confirm delete">
+          <span id="profConfirmText"></span>
+          <button class="danger" id="profYes">Delete</button>
+          <button id="profNo">Cancel</button>
+        </span>
+      </div>
+      <div class="row">
+        <input type="text" id="profName" placeholder="New profile name..." maxlength="200" spellcheck="false" aria-label="New profile name">
+        <button id="profSave" title="Save the form's values, unsaved edits included, as a profile">Save current as profile</button>
+        <span class="result" id="profResult"></span>
+      </div>
+      <p class="note">Shared with the WireView app's Device page<span id="profFolder"></span>. Load fills the form, Apply sends it to the device.</p>
+    </div>
     <div id="cfgMissing" class="muted">Loading the configuration...</div>
     <form id="cfg" class="hidden" autocomplete="off" onsubmit="return false">
       <div class="cols">
@@ -701,8 +736,12 @@ const WVPixels = (function () {
   let busy = 0;
 
   // The app's Overview bar chart: per pin, a bar per enabled series on its own
-  // scale (the app's per-wire limits; the scale grows when a reading exceeds it).
-  const BAR_MAX = { v: 15, i: 10, p: 150 };
+  // scale. 12 V and 10 A per wire, 120 W = 12 V x 10 A so the gridlines of the
+  // three series line up. A 12 V rail reads a little high (12.18 V), so a reading
+  // up to 5 percent over full scale fills the bar and keeps the scale; only a
+  // larger one grows the scale to the reading.
+  const BAR_MAX = { v: 12, i: 10, p: 120 };
+  const BAR_SLACK = 1.05;
   let lastPins = null;
   function renderBars() {
     if (!lastPins) return;
@@ -713,7 +752,10 @@ const WVPixels = (function () {
       vals.v.push(volts[k] || 0); vals.i.push(amps[k] || 0); vals.p.push((volts[k] || 0) * (amps[k] || 0));
     }
     const max = {};
-    for (const key of ["v", "i", "p"]) max[key] = Math.max(BAR_MAX[key], ...vals[key]);
+    for (const key of ["v", "i", "p"]) {
+      const top = Math.max(...vals[key]);
+      max[key] = top > BAR_MAX[key] * BAR_SLACK ? top : BAR_MAX[key];
+    }
     const groups = [];
     for (let k = 0; k < 6; k++) {
       const bars = [];
@@ -724,10 +766,26 @@ const WVPixels = (function () {
           el("span", { text: fmt(vals[key][k], dec) + unit })));
       };
       add("v", " V", 1, "bv"); add("i", " A", 2, "bi"); add("p", " W", 1, "bp");
-      groups.push(el("div", { class: "pin" }, ...bars, el("i", { text: "Pin " + (k + 1) })));
+      groups.push(el("div", { class: "pin", style: "grid-column:" + (k + 2) }, ...bars, el("i", { text: "Pin " + (k + 1) })));
     }
-    $("pinBars").replaceChildren(...groups);
+    // Gridlines at quarters of each series' current full scale, labelled in the
+    // gutter for the enabled series only (the scales differ per series).
+    const lines = [], labels = [];
+    for (const q of [0, 25, 50, 75, 100]) {
+      lines.push(el("b", { style: "bottom:" + q + "%" }));
+      const parts = [];
+      const add = (key, unit, cls) => {
+        if (show[key]) parts.push(el("span", { class: cls, text: scaleText(max[key] * q / 100) + unit }));
+      };
+      add("v", " V", "gv"); add("i", " A", "gi"); add("p", " W", "gp");
+      if (parts.length) labels.push(el("div", { style: "bottom:" + q + "%" }, ...parts));
+    }
+    $("pinBars").replaceChildren(el("div", { class: "gutter" }, ...labels), el("div", { class: "grid" }, ...lines), ...groups);
     $("pinBars").classList.toggle("labels", Object.values(show).filter(Boolean).length === 1);
+  }
+  // A gridline value: "7.5", "3.75", "112.5" (two decimals at most, one from 100).
+  function scaleText(v) {
+    return String(+v.toFixed(v >= 100 ? 1 : 2));
   }
   for (const id of ["bV", "bI", "bP"]) {
     try { const v = localStorage.getItem("bars." + id); if (v !== null) $(id).checked = v === "1"; } catch {}
@@ -887,6 +945,7 @@ const WVPixels = (function () {
     document.querySelectorAll("[data-screen]").forEach(b => b.disabled = busy > 0 || !usable);
     ["reload", "store", "load", "reset"].forEach(id => $(id).disabled = busy > 0 || !usable);
     $("apply").disabled = busy > 0 || !usable || !cfg || editedFields().length === 0;
+    refreshProfileButtons();
     refreshTheme();
   }
 
@@ -1085,6 +1144,101 @@ const WVPixels = (function () {
     if (!confirm("Reset the device configuration to the factory defaults? The running configuration is replaced; use Store to device memory afterwards to keep the defaults.")) return;
     run("cfgResult", () => nvm(3));
   });
+
+  // ---- Profiles ----
+
+  // The app's device profiles (the same files). As on the app's Device page: Save
+  // takes the form's values, unsaved edits included; Load only fills the form, and
+  // Apply sends it to the device.
+  let profileNames = null; // null until listed
+  function renderProfiles(r, select) {
+    profileNames = r.profiles;
+    const sel = $("profSel"), keep = select !== undefined ? select : sel.value;
+    sel.replaceChildren(...(profileNames.length
+      ? profileNames.map(n => el("option", { value: n, text: n, selected: n === keep }))
+      : [el("option", { value: "", text: "No saved profiles" })]));
+    $("profFolder").textContent = r.folder ? " (" + r.folder + ")" : "";
+    hideProfileConfirm();
+    refreshProfileButtons();
+  }
+  async function loadProfiles() {
+    try { renderProfiles(await api("GET", "/api/profiles")); }
+    catch (e) { say("profResult", false, "The profiles cannot be listed: " + e.message); }
+  }
+  function selectedProfile() { return profileNames && profileNames.length ? $("profSel").value : ""; }
+  function refreshProfileButtons() {
+    const picked = selectedProfile();
+    $("profLoad").disabled = busy > 0 || !cfg || !picked;
+    $("profDelete").disabled = busy > 0 || !picked;
+    $("profSave").disabled = busy > 0 || !cfg || !($("profName").value.trim() || picked);
+    $("profYes").disabled = busy > 0;
+  }
+  function hideProfileConfirm() {
+    $("profConfirm").classList.add("hidden");
+    $("profDelete").classList.remove("hidden");
+  }
+  const profilePath = (name) => "/api/profiles/" + encodeURIComponent(name);
+
+  // Puts one profile value in its form control; false when the form cannot show it.
+  function setField(key, value) {
+    const c = $("f_" + key);
+    if (!c || !F[key]) return false;
+    if (c.tagName === "SELECT") {
+      const before = c.value;
+      c.value = String(value);
+      if (c.value !== String(value)) { c.value = before; return false; }
+    } else c.value = String(value);
+    return true;
+  }
+
+  $("profSel").addEventListener("change", () => { hideProfileConfirm(); refreshProfileButtons(); });
+  $("profName").addEventListener("input", refreshProfileButtons);
+  $("profLoad").addEventListener("click", () => run("profResult", async () => {
+    const name = selectedProfile();
+    const r = await api("GET", profilePath(name) + "?version=" + cfg.version + (cfg.firmware ? "&firmware=" + cfg.firmware : ""));
+    const skipped = [];
+    for (const key of r.fields) {
+      if (key === "faultAlarms") {
+        for (const a of r.config.faultAlarms)
+          for (const k of ["display", "buzzer", "softOff", "hardOff"]) {
+            const cb = document.querySelector('input[data-fault="' + a.fault + '"][data-kind="' + k + '"]');
+            if (cb) cb.checked = !!a[k];
+          }
+      } else if (!setField(key, r.config[key])) {
+        const label = F[key] ? F[key].wrap.querySelector("label").textContent : key;
+        skipped.push(F[key] ? label + " was not set (its value " + r.config[key] + " is not offered here)" : label + " is not on this device");
+      }
+    }
+    onEdit();
+    const notes = r.notes.concat(skipped);
+    const edited = editedFields().length;
+    say("profResult", notes.length ? "warn" : true, "Profile \"" + r.name + "\" loaded"
+      + (edited ? ", " + edited + " field" + (edited === 1 ? "" : "s") + " differ from the device. Press Apply to send it to the device." : ", it matches the device.")
+      + (notes.length ? " Note: " + notes.join("; ") + "." : ""), true);
+    return "";
+  }));
+  $("profDelete").addEventListener("click", () => {
+    const name = selectedProfile();
+    if (!name) return;
+    $("profConfirmText").textContent = "Delete \"" + name + "\"?";
+    $("profDelete").classList.add("hidden");
+    $("profConfirm").classList.remove("hidden");
+    $("profNo").focus();
+  });
+  $("profNo").addEventListener("click", hideProfileConfirm);
+  $("profYes").addEventListener("click", () => run("profResult", async () => {
+    const r = await api("DELETE", profilePath(selectedProfile()));
+    renderProfiles(r, "");
+    return r.message;
+  }));
+  $("profSave").addEventListener("click", () => run("profResult", async () => {
+    // As the app: an empty name saves over the selected profile.
+    const name = $("profName").value.trim() || selectedProfile();
+    const r = await api("POST", "/api/profiles", { name, config: collect() });
+    $("profName").value = "";
+    renderProfiles(r, r.name);
+    return r.message;
+  }));
 
   // ---- Mini settings ----
 
@@ -2312,7 +2466,7 @@ const WVPixels = (function () {
     try { return localStorage.getItem(CARD_KEY + name) === "1"; } catch (e) { return false; }
   }
   const cardOpened = {
-    config: () => { if (!cfg) loadConfig(); },
+    config: () => { if (!cfg) loadConfig(); loadProfiles(); },
     theme: (open) => onThemeCard(open),
     firmware: () => { renderFirmware(); },
     daemon: () => { if (status) renderDaemon(status.daemon); },

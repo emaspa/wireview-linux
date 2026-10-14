@@ -44,7 +44,7 @@ Voltage, current, and power readings across all 6 pins with live charts, plus cu
 
 The **Device** page edits the device configuration: fan speed, display settings, fault alarms, thresholds.
 
-On the **Device** page, you can save the current device configuration as a named profile, load it later, and manage the saved profiles. Profiles are stored as JSON files in `~/.config/PowerMonitor/profiles/` (`%APPDATA%\PowerMonitor\profiles\` on Windows).
+On the **Device** page, you can save the current device configuration as a named profile, load it later, and manage the saved profiles. Profiles are stored as JSON files in `~/.config/PowerMonitor/profiles/` (`%APPDATA%\PowerMonitor\profiles\` on Windows). WireView Mini's control panel lists, saves and loads the same profiles in its Device configuration card.
 
 ## Theme editor
 
@@ -92,11 +92,11 @@ wireview-linux/
 ├── WireView2/                  # Main Avalonia UI application
 │   ├── Views/                  # AXAML views
 │   ├── ViewModels/             # MVVM view models
-│   ├── Services/               # App settings, profiles, notifications
+│   ├── Services/               # Logging, autostart, discovery, theme files
 │   └── Assets/                 # Icons, backgrounds
 ├── WireViewDeviceLib/          # Device communication library
 │   └── Device/                 # Serial + hwmon + network devices, port finder
-├── WireViewNet/                # LAN layer - /sensors publisher, remote device client, HMAC auth
+├── WireViewNet/                # LAN layer - /sensors publisher, remote device client, HMAC auth; shared settings and device profiles
 ├── WireViewMini/               # WireView Mini - tray icon, control panel, always-on service
 ├── udev/                       # udev rules for USB permissions
 └── install.sh                  # Installation script

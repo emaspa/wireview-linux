@@ -57,6 +57,17 @@ internal sealed record PanelConfig(
 
 internal sealed record PanelConfigWrite(bool Changed, bool ReadBackMatches);
 
+/// <summary>GET /api/profiles, and the list after a save or a delete
+/// (<paramref name="Message"/> then says what was done). <paramref name="Folder"/>:
+/// where the files are, shared with the app.</summary>
+internal sealed record PanelProfiles(List<string> Profiles, string Folder, string? Message, string? Name);
+
+/// <summary>GET /api/profiles/NAME: the profile as config values for the form.
+/// <paramref name="Fields"/>: the config fields the profile sets (the form keeps
+/// its other fields); <paramref name="Notes"/>: what was left out or changed for
+/// this device.</summary>
+internal sealed record PanelProfile(string Name, DeviceConfigModel Config, List<string> Fields, List<string> Notes);
+
 /// <summary>A command that worked (POST /api/command) and POST /api/open-app.</summary>
 internal sealed record PanelMessage(bool Ok, string Message);
 
@@ -207,6 +218,8 @@ internal sealed record PanelError(string Error);
 [JsonSerializable(typeof(PanelStatus))]
 [JsonSerializable(typeof(PanelConfig))]
 [JsonSerializable(typeof(PanelMessage))]
+[JsonSerializable(typeof(PanelProfiles))]
+[JsonSerializable(typeof(PanelProfile))]
 [JsonSerializable(typeof(PanelSettingsSaved))]
 [JsonSerializable(typeof(PanelDaemonConfigRead))]
 [JsonSerializable(typeof(PanelDaemonConfigWritten))]

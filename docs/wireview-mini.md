@@ -72,7 +72,7 @@ Settings changed on the page are saved to `settings.json` and applied at once, t
 
 ### Status
 
-Device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power as a table with the temperatures under it, the app's per-wire bar chart beside them (voltage, current and power toggles, value labels with one series on), the fan duty, and the fault state with a **Clear faults** button.
+Device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power as a table with the temperatures under it, the app's per-wire bar chart beside them (voltage, current and power toggles; 12 V, 10 A and 120 W full scale, growing when a reading is more than 5 percent over; gridlines at every quarter of full scale labelled for each series shown; value labels on the bars with one series on), the fan duty, and the fault state with a **Clear faults** button.
 
 ### Remote hosts
 
@@ -101,6 +101,8 @@ WireView Mini keeps the readings of this PC's device of the last `HistoryMinutes
 Grouped like the app's Device page: General (friendly name, backlight), Fan (mode, temperature source, duty and temperature limits), Display (current and power scale, theme on older firmware, rotation, timeout mode, cycle screens, cycle time, timeout, averaging, default screen), the fault alarm table (display, buzzer, soft off, hard off per fault type) and the fault thresholds.
 
 **Apply** writes only the fields you changed, the way the app does; **Store to device memory** keeps them after a power cycle; **Reload from device**, **Reload from device memory** and **Reset to defaults** (asks first) are there too. Out-of-range values are refused with a message.
+
+**Profiles** at the top of the card are the app's device profiles, the same files (`~/.config/PowerMonitor/profiles/`, `%APPDATA%\PowerMonitor\profiles\` on Windows), so a profile saved in the app shows here and the other way round. **Save current as profile** saves the form's values, unsaved edits included; **Load** fills the form and nothing reaches the device until you press **Apply**, as in the app. A profile field the device's configuration does not have (the legacy theme on firmware with the color theme, averaging on the oldest firmware) is left out, as in the app, and an averaging window older firmware does not have becomes its longest one.
 
 ### Theme
 
