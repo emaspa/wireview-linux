@@ -278,6 +278,12 @@ Done, in this repo:
 - Cost: page never opened, the same idle as before (RSS 64 to 68 MB, PSS 53 to 57 MB,
   anonymous 15 to 18 MB, 15 threads, about 1 % of one core); after the page has been used and
   closed, about +17 MB RSS (flat afterwards). +0.15 MB on each single file.
+- wireviewd's settings in the control panel (Linux, hwmon + daemon): `DaemonConfigService` runs
+  `wireviewctl config show --show-secret` / `config set` (changed keys only, the secret on stdin,
+  wireview-hwmon 1.8 or newer), `GET`/`POST /api/daemon-config`, `daemon` in `/api/status` (what
+  answers on the daemon's port, looked at every 3 s) and a disabled *LAN publishing: wireviewd* tray
+  line; in that mode the agent's listener stays on loopback and off the daemon's port. Tested with a
+  fake wireviewctl and against 1.8's permission hint; the real write waits for the daemon upgrade.
 - Serial handover: `suspendSerial`/`resumeSerial` commands (loopback only, signed with the
   agent's `agent.key` or the network secret). The agent closes the port, keeps publishing the
   last readings with `connected: false` and `serialSuspended: true`, and takes the port back on

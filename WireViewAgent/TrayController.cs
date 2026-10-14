@@ -72,7 +72,8 @@ internal sealed class TrayController : IDisposable
             ShutdownOnFault: settings.SoftwareShutdownOnFault,
             StartAtLogin: AgentInstaller.IsInstalled(),
             DeviceCommands: status.DeviceName != null && !status.Handover,
-            RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()));
+            RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()),
+            DaemonLine: _service.DaemonMode ? TrayState.DaemonLineFor(_service.Daemon.Observed) : null);
     }
 
     /// <summary>A menu click, on the tray's thread.</summary>

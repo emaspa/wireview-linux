@@ -101,12 +101,17 @@ namespace WireView2.Net
         /// <summary>The <c>/sensors</c> snapshot on localhost, or null when nothing
         /// answers in time or the answer is not a WireView snapshot. Any publisher
         /// may answer (wireviewd, the GUI); check <see cref="WireViewHostSnapshot.Agent"/>.</summary>
-        public static WireViewHostSnapshot? TryFetch(int port, TimeSpan timeout)
+        public static WireViewHostSnapshot? TryFetch(int port, TimeSpan timeout) => TryFetch(port, timeout, "127.0.0.1");
+
+        /// <summary><see cref="TryFetch(int, TimeSpan)"/> on another address of this
+        /// machine (a publisher bound to one address, such as wireviewd with bind=).</summary>
+        public static WireViewHostSnapshot? TryFetch(int port, TimeSpan timeout, string host)
         {
             try
             {
+                string h = host.Contains(':') && !host.StartsWith('[') ? $"[{host}]" : host;
                 using var cts = new CancellationTokenSource(timeout);
-                string json = Http.GetStringAsync($"{BaseUrl(port)}/sensors", cts.Token).GetAwaiter().GetResult();
+                string json = Http.GetStringAsync($"http://{h}:{port}/sensors", cts.Token).GetAwaiter().GetResult();
                 return JsonSerializer.Deserialize<WireViewHostSnapshot>(json, WireViewJson.Options);
             }
             catch

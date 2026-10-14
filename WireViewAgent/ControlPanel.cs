@@ -20,7 +20,9 @@ namespace WireView2.Agent;
 /// it). No CORS headers, so other web pages cannot read the answers.
 ///
 /// API: GET /api/status, GET /api/config, POST /api/config, POST /api/command,
-/// POST /api/settings, POST /api/open-app. Device writes go through the same
+/// POST /api/settings, POST /api/open-app, and on Linux GET and POST
+/// /api/daemon-config (wireviewd's settings through wireviewctl, see
+/// <see cref="DaemonConfigService"/>). Device writes go through the same
 /// relay as a LAN command (<see cref="LocalPublishHost.ExecuteCommand"/>), so
 /// they work over direct serial and over hwmon with wireviewd alike.
 /// </summary>
@@ -86,7 +88,9 @@ internal sealed class ControlPanel
                 ("POST", "/api/command") => PostCommand(req.Body),
                 ("POST", "/api/settings") => PostSettings(req.Body),
                 ("POST", "/api/open-app") => OpenApp(),
-                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app")
+                ("GET", "/api/daemon-config") => GetDaemonConfig(),
+                ("POST", "/api/daemon-config") => PostDaemonConfig(req.Body),
+                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config")
                     => Error(405, "method not allowed"),
                 _ => Error(404, "no such API"),
             };
@@ -159,6 +163,7 @@ internal sealed class ControlPanel
                 wantedLan = _agent.PublishWanted?.Lan,
             },
             device = LocalDevice(),
+            daemon = DaemonView(),
             remoteHosts = _agent.GetRemoteHosts().Select(h => new
             {
                 host = h.Host,
@@ -493,7 +498,95 @@ internal sealed class ControlPanel
             message = changes.Count == 0 ? "Nothing changed." : "Saved.",
             settings = SettingsView(AppSettings.Current),
             panelUrl = note == "moved" ? _agent.PanelUrl : null,
-            publishError = _agent.PublishError,
+            // With wireviewd the loopback fallback is the expected state, not an error.
+            publishError = _agent.DaemonMode ? null : _agent.PublishError,
+        });
+    }
+
+    // ---- wireviewd settings (Linux) ----
+
+    /// <summary>present: wireviewd serves this PC's device (it does the LAN
+    /// publishing); publishing and port: what answers on its port (null before
+    /// the first look); editable: wireviewctl has a config command (null while not known).</summary>
+    private object DaemonView()
+    {
+        var seen = _agent.Daemon.Observed;
+        return new
+        {
+            present = _agent.DaemonMode,
+            publishing = seen?.Publishing,
+            port = seen?.Port,
+            editable = _agent.Daemon.Supported,
+        };
+    }
+
+    private static object? ConfigView(DaemonConfig? c) => c == null ? null : new
+    {
+        remoteEnabled = c.RemoteEnabled,
+        port = c.Port,
+        bind = c.Bind,
+        secret = c.Secret,
+        logDays = c.LogDays,
+        extra = c.Extra,
+    };
+
+    private HttpResponseInfo GetDaemonConfig()
+    {
+        if (!OperatingSystem.IsLinux()) return Error(404, "wireviewd runs on Linux only");
+        var r = _agent.Daemon.Read(showSecret: true);
+        return Ok(new
+        {
+            ok = r.Ok,
+            config = ConfigView(r.Config),
+            error = r.Error,
+            unsupported = r.Unsupported,
+            note = r.Note,
+            tool = DaemonConfigService.Locate(),
+            daemon = DaemonView(),
+        });
+    }
+
+    /// <summary>Body: {"config": {remoteEnabled, port, bind, secret, logDays},
+    /// "copySecret": bool}; fields left out stay as they are. copySecret also sets
+    /// the agent's network secret (for the remote hosts) to the daemon's after a
+    /// successful save. wireviewctl checks the values: its message comes back as error.</summary>
+    private HttpResponseInfo PostDaemonConfig(string body)
+    {
+        if (!OperatingSystem.IsLinux()) return Error(404, "wireviewd runs on Linux only");
+        using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) return Error(400, "expected a JSON object");
+        var element = root.TryGetProperty("config", out var c) ? c : root;
+        if (element.ValueKind != JsonValueKind.Object) return Error(400, "config must be a JSON object");
+        var edit = element.Deserialize<DaemonConfigEdit>(Json) ?? new DaemonConfigEdit();
+        bool copySecret = root.TryGetProperty("copySecret", out var cs) && cs.ValueKind == JsonValueKind.True;
+
+        string? panelBefore = _agent.PanelUrl;
+        var w = _agent.Daemon.Write(edit);
+
+        if (w.Ok && copySecret && w.Config is { } now)
+        {
+            string? secret = string.IsNullOrEmpty(now.Secret) ? null : now.Secret;
+            string? mine = string.IsNullOrEmpty(AppSettings.Current.NetworkSecret) ? null : AppSettings.Current.NetworkSecret;
+            if (secret != mine &&
+                !_agent.RequestSettingsChange(secret == null ? "network secret cleared (as wireviewd's)" : "network secret set to wireviewd's",
+                    x => x.NetworkSecret = secret, source: "control panel", wait: TimeSpan.FromSeconds(6)))
+                return Error(500, "the agent did not apply the settings in time; reload the page");
+        }
+
+        string? panelAfter = _agent.PanelUrl;
+        return Ok(new
+        {
+            ok = w.Ok,
+            reply = w.Reply,
+            error = w.Error,
+            unsupported = w.Unsupported,
+            changed = w.Changed,
+            config = ConfigView(w.Config),
+            settings = SettingsView(AppSettings.Current),
+            // The agent's listener moved off the daemon's new port: the page follows it.
+            panelUrl = panelAfter != null && panelAfter != panelBefore ? panelAfter : null,
+            daemon = DaemonView(),
         });
     }
 

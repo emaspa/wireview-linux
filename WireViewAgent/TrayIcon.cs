@@ -38,8 +38,10 @@ internal sealed record TrayItem(int Id, TrayItemKind Kind, string Label = "", bo
 
 /// <summary>Everything a tray icon shows: the menu header line, the checkbox
 /// states, whether a fault is active, whether the device takes commands and the
-/// remote host lines. Equal states render identically, so implementations compare
-/// with the last one and send only what changed.</summary>
+/// remote host lines. <see cref="DaemonLine"/>, set when wireviewd does the LAN
+/// publishing (Linux), replaces the Publish on the LAN checkbox with a disabled
+/// line. Equal states render identically, so implementations compare with the
+/// last one and send only what changed.</summary>
 internal sealed record TrayState(
     string Header,
     bool Connected,
@@ -48,12 +50,16 @@ internal sealed record TrayState(
     bool ShutdownOnFault,
     bool StartAtLogin,
     bool DeviceCommands = false,
-    string RemoteLines = "")
+    string RemoteLines = "",
+    string? DaemonLine = null)
 {
     public const string AppTitle = "WireView agent";
 
     /// <summary>First id of the remote host lines (one per host or device).</summary>
     public const int RemoteLineIdBase = 100;
+
+    /// <summary>The "LAN publishing: wireviewd, ..." line in place of the publish checkbox.</summary>
+    public const int DaemonLineId = 14;
 
     public static TrayState Initial { get; } = new("No device", false, false, false, false, false);
 
@@ -100,7 +106,9 @@ internal sealed record TrayState(
             items.AddRange(
             [
                 new(7, TrayItemKind.Separator),
-                new((int)TrayCommand.TogglePublish, TrayItemKind.Check, "Publish on the LAN", PublishEnabled),
+                DaemonLine != null
+                    ? new(DaemonLineId, TrayItemKind.Header, DaemonLine)
+                    : new((int)TrayCommand.TogglePublish, TrayItemKind.Check, "Publish on the LAN", PublishEnabled),
                 new((int)TrayCommand.ToggleShutdownOnFault, TrayItemKind.Check, "Shutdown on fault", ShutdownOnFault),
                 new((int)TrayCommand.ToggleStartAtLogin, TrayItemKind.Check, "Start at login", StartAtLogin),
                 new(13, TrayItemKind.Separator),
@@ -129,6 +137,16 @@ internal sealed record TrayState(
         if (status.FaultText is { } fault) return $"{name}: {fault}";
         return string.Create(CultureInfo.InvariantCulture, $"{name}: {status.PowerW ?? 0:0.0} W");
     }
+
+    /// <summary>The tray line while wireviewd publishes: "LAN publishing: wireviewd,
+    /// port 9876" while it answers there, "..., off" when it does not, no state
+    /// before the first look.</summary>
+    public static string DaemonLineFor(DaemonObservation? seen) => seen switch
+    {
+        { Publishing: true } s => $"LAN publishing: wireviewd, port {s.Port}",
+        { } => "LAN publishing: wireviewd, off",
+        null => "LAN publishing: wireviewd",
+    };
 
     /// <summary>The Remote hosts submenu's lines: "host: 123.4 W", "host: FAULT: ...",
     /// "host: offline"; a host with several devices gets one line per device.</summary>

@@ -128,6 +128,17 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 @media (max-width: 760px) { .remote .h { grid-template-columns: 1fr 1fr; } .field { grid-template-columns: 1fr; } }
 .screens { display: flex; gap: 8px; flex-wrap: wrap; }
 .note { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+.daemon-state { margin: 0 0 6px; }
+.daemon-state b { font-weight: 600; white-space: nowrap; }
+.daemon-state b.on { color: var(--ok); }
+.daemon-state b.off { color: var(--warn); }
+.hint { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; padding: 8px 10px; margin: 6px 0;
+        border-radius: 6px; background: var(--panel-2); border-left: 3px solid var(--warn); }
+.result.pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.result.warn { color: var(--warn); }
+.check { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+#dForm { margin-top: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+#dForm .toolbar { margin-top: 8px; padding-top: 8px; }
 </style>
 </head>
 <body>
@@ -260,13 +271,44 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
     <section>
       <h2>LAN monitoring</h2>
-      <div class="switch">
-        <div class="what">Publish on the LAN<small id="pubState"></small></div>
-        <input type="checkbox" id="sPublish">
+      <div id="agentPub">
+        <div class="switch">
+          <div class="what">Publish on the LAN<small id="pubState"></small></div>
+          <input type="checkbox" id="sPublish">
+        </div>
+        <div class="field"><label for="sPort">Port</label>
+          <div class="row" style="flex-wrap:nowrap"><input type="number" id="sPort" min="1024" max="65535" step="1" style="max-width:110px">
+            <button id="savePort">Save port</button></div></div>
       </div>
-      <div class="field"><label for="sPort">Port</label>
-        <div class="row" style="flex-wrap:nowrap"><input type="number" id="sPort" min="1024" max="65535" step="1" style="max-width:110px">
-          <button id="savePort">Save port</button></div></div>
+      <div id="daemonBox" class="hidden">
+        <p class="daemon-state">On this PC, LAN publishing is done by wireviewd: <b id="dState">checking</b></p>
+        <div id="dLoading" class="muted">Reading the daemon settings...</div>
+        <div id="dHint" class="hint hidden"></div>
+        <div class="row hidden" id="dRetryRow"><button id="dRetry">Try again</button></div>
+        <form id="dForm" class="hidden" autocomplete="off" onsubmit="return false">
+          <div class="switch">
+            <div class="what">Publish on the LAN<small>wireviewd answers the other hosts on this port</small></div>
+            <input type="checkbox" id="dRemote">
+          </div>
+          <div class="field"><label for="dPort">Port</label>
+            <input type="number" id="dPort" min="1024" max="65535" step="1" style="max-width:110px"></div>
+          <div class="field"><label for="dBind">Bind address</label>
+            <input type="text" id="dBind" spellcheck="false" placeholder="empty: all addresses"></div>
+          <div class="field"><label for="dSecret">Secret</label>
+            <div class="row" style="flex-wrap:nowrap">
+              <input type="password" id="dSecret" spellcheck="false" placeholder="not set: remote writes are off">
+              <button id="dShow">Show</button></div></div>
+          <div class="field"><label for="dLog">Log retention (days)</label>
+            <input type="number" id="dLog" min="0" max="3650" step="1" style="max-width:110px" title="0 keeps every log"></div>
+          <div class="toolbar">
+            <button class="primary" id="dSave">Save</button>
+            <button id="dReload">Reload</button>
+          </div>
+          <div class="result pre" id="dResult"></div>
+          <p class="note">Saved to /etc/wireview/config with wireviewctl; wireviewd applies it without a restart.
+            Other hosts sign their writes to this PC with the secret.</p>
+        </form>
+      </div>
       <h3>Remote hosts to watch</h3>
       <ul class="hosts" id="hosts"></ul>
       <div class="row" style="flex-wrap:nowrap">
@@ -279,7 +321,10 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
         <button id="showSecret">Show</button>
         <button id="saveSecret">Save</button>
       </div>
+      <label class="check hidden" id="sameSecretRow"><input type="checkbox" id="sameSecret">
+        Use the same secret for remote hosts</label>
       <p class="note">Shared with the other hosts; it signs device commands sent over the LAN.</p>
+      <p class="note hidden" id="sameSecretNote">When checked, saving the daemon settings copies wireviewd's secret here.</p>
       <div class="result" id="lanResult"></div>
     </section>
   </div>
@@ -342,12 +387,12 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     return data;
   }
 
-  function say(id, ok, text) {
+  function say(id, ok, text, sticky) {
     const r = $(id);
-    r.className = "result " + (ok ? "ok" : "err");
+    r.className = "result " + (r.classList.contains("pre") ? "pre " : "") + (ok === "warn" ? "warn" : ok ? "ok" : "err");
     r.textContent = text;
     clearTimeout(r._t);
-    if (ok) r._t = setTimeout(() => { r.textContent = ""; }, 6000);
+    if (ok === true && !sticky) r._t = setTimeout(() => { r.textContent = ""; }, 6000);
   }
 
   async function run(resultId, fn, buttons) {
@@ -422,6 +467,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     }));
 
     renderSettings(s.settings, s.publish, s.agent);
+    renderDaemon(s.daemon);
     $("logPath").textContent = s.agent.logPath || "-";
     $("settingsPath").textContent = s.agent.settingsPath || "-";
     $("agentInfo").textContent = "wireview-agent " + s.agent.version + ", " + s.agent.os + ", up " + uptime(s.agent.uptimeSeconds);
@@ -722,6 +768,112 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     if (!r.ok) throw new Error(r.message);
     return r.message;
   }, [$("openApp")]));
+
+  // ---- wireviewd settings (Linux, hwmon + daemon) ----
+
+  let daemonCfg = null;      // last daemon settings read
+  let daemonLoaded = false;  // the form was asked for once
+  const dInputs = ["dRemote", "dPort", "dBind", "dSecret", "dLog"];
+
+  function renderDaemon(d) {
+    const on = !!(d && d.present);
+    $("agentPub").classList.toggle("hidden", on);
+    $("daemonBox").classList.toggle("hidden", !on);
+    // The copy happens on the daemon form's Save: shown with the form only.
+    const form = on && !$("dForm").classList.contains("hidden");
+    $("sameSecretRow").classList.toggle("hidden", !form);
+    $("sameSecretNote").classList.toggle("hidden", !form);
+    if (!on) return;
+    const st = $("dState");
+    if (d.publishing === true) { st.textContent = "answering on port " + d.port; st.className = "on"; }
+    else if (d.publishing === false) { st.textContent = "off"; st.className = "off"; }
+    else { st.textContent = "checking"; st.className = ""; }
+    if (!daemonLoaded) { daemonLoaded = true; loadDaemon(); }
+  }
+
+  function showDaemonHint(text) {
+    $("dLoading").classList.add("hidden");
+    $("dForm").classList.add("hidden");
+    $("dHint").textContent = text;
+    $("dHint").classList.remove("hidden");
+    $("dRetryRow").classList.remove("hidden");
+  }
+
+  function fillDaemon(c) {
+    daemonCfg = c;
+    $("dRemote").checked = c.remoteEnabled;
+    $("dPort").value = c.port;
+    $("dBind").value = c.bind || "";
+    $("dSecret").value = c.secret || "";
+    $("dLog").value = c.logDays;
+    dInputs.forEach(id => { $(id)._dirty = false; });
+  }
+
+  async function loadDaemon(message) {
+    $("dRetry").disabled = true;
+    try {
+      const r = await api("GET", "/api/daemon-config");
+      if (!r.ok) { showDaemonHint(r.error || "The daemon settings cannot be read."); return; }
+      $("dLoading").classList.add("hidden");
+      $("dHint").classList.add("hidden");
+      $("dRetryRow").classList.add("hidden");
+      $("dForm").classList.remove("hidden");
+      fillDaemon(r.config);
+      // Same secret for the remote hosts: on when they already match or the agent has none.
+      const mine = (status && status.settings.networkSecret) || "";
+      $("sameSecret").checked = mine === "" || mine === (r.config.secret || "");
+      if (message) say("dResult", true, message);
+      if (r.note) say("dResult", "warn", r.note, true);
+    } catch (e) {
+      showDaemonHint("The daemon settings cannot be read: " + e.message);
+    } finally {
+      $("dRetry").disabled = false;
+    }
+  }
+
+  dInputs.forEach(id => $(id).addEventListener("input", () => { $(id)._dirty = true; }));
+  $("dRetry").addEventListener("click", () => { $("dLoading").classList.remove("hidden"); $("dHint").classList.add("hidden"); loadDaemon(); });
+  $("dReload").addEventListener("click", () => loadDaemon("Read from /etc/wireview/config."));
+  $("dShow").addEventListener("click", () => {
+    const s = $("dSecret"), show = s.type === "password";
+    s.type = show ? "text" : "password";
+    $("dShow").textContent = show ? "Hide" : "Show";
+  });
+  $("dSave").addEventListener("click", async () => {
+    const whole = (id) => { const v = $(id).value.trim(); return /^[0-9]+$/.test(v) ? Number(v) : NaN; };
+    const port = whole("dPort"), days = whole("dLog");
+    if (isNaN(port)) { say("dResult", false, "Port: enter a whole number from 1024 to 65535."); return; }
+    if (isNaN(days)) { say("dResult", false, "Log retention: enter a whole number of days (0 keeps every log)."); return; }
+    const body = {
+      config: { remoteEnabled: $("dRemote").checked, port, bind: $("dBind").value.trim(),
+                secret: $("dSecret").value, logDays: days },
+      copySecret: $("sameSecret").checked,
+    };
+    busy++;
+    $("dSave").disabled = true;
+    try {
+      const r = await api("POST", "/api/daemon-config", body);
+      if (r.unsupported) { showDaemonHint(r.error); return; }
+      if (!r.ok) { say("dResult", false, r.error || "Not saved."); return; }
+      if (r.config) fillDaemon(r.config);
+      if (status && r.settings) {
+        status.settings = r.settings;
+        if (!$("secret")._dirty) $("secret").value = r.settings.networkSecret || "";
+      }
+      if (r.daemon && status) { status.daemon = r.daemon; renderDaemon(r.daemon); }
+      say("dResult", /failed/i.test(r.reply || "") ? "warn" : true, r.reply || "Saved.", true);
+      if (r.panelUrl && r.panelUrl.split("#")[0] !== location.href.split("#")[0]) {
+        say("dResult", true, (r.reply || "Saved.") + "\nThe control panel moved to another port: following it...", true);
+        setTimeout(() => { location.href = r.panelUrl; }, 1200);
+      }
+    } catch (e) {
+      say("dResult", false, e.message);
+    } finally {
+      busy--;
+      $("dSave").disabled = false;
+      refreshButtons();
+    }
+  });
 
   // ---- Start ----
 

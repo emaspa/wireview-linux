@@ -145,7 +145,7 @@ internal static class GuiLauncher
                Directory.Exists(Path.Combine(home, ".local/share/flatpak/app", FlatpakAppId));
     }
 
-    private static string? FindOnPath(string name)
+    internal static string? FindOnPath(string name)
     {
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(':', StringSplitOptions.RemoveEmptyEntries))
         {

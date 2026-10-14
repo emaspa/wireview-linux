@@ -104,8 +104,9 @@ section below for installing it by hand).
 It reads the app's own `settings.json`, so the app and the control panel
 configure the same settings, and changes apply without restarting the agent. It is meant for Windows and for
 Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it
-still gives alerts and shutdown, and leaves publishing to the daemon (it says so
-in its log when the port is taken).
+still gives alerts and shutdown, and leaves publishing to the daemon: its own
+listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on
+the LAN** says (it logs this once).
 
 ```bash
 wireview-agent              # run in the foreground (Ctrl+C to stop), logs to stderr
@@ -141,7 +142,8 @@ menu, top to bottom:
 - **Remote hosts**, a submenu shown when the settings list remote hosts, with
   one line per host: `host: 123.4 W`, the host's fault, or `host: offline`,
 - the **Publish on the LAN**, **Shutdown on fault** and **Start at login**
-  checkboxes,
+  checkboxes (with wireviewd, a disabled *LAN publishing: wireviewd, port 9876*
+  line, or *LAN publishing: wireviewd, off*, takes the place of the first),
 - **Quit**.
 
 The tooltip carries the same live line. The
@@ -186,7 +188,8 @@ refreshed every second:
 - **Alerts and shutdown**: Shutdown on fault, Start at login (fault
   notifications are always on),
 - **LAN monitoring**: Publish on the LAN, the port (the page follows the agent to
-  a new port), the remote hosts to watch, and the network secret,
+  a new port), the remote hosts to watch, and the network secret; with
+  wireviewd, the daemon's own settings instead of the first two (below),
 - **Tools**: Open WireView app (graphs, firmware updates, themes, device log) and
   where the agent's log is.
 
@@ -195,6 +198,26 @@ the same path as the tray's switches (and, as with those, an app that is open
 at the same time writes back its own copy on its next settings save). Device writes go to the device the same
 way as a command from the LAN, so they work over hwmon with wireviewd and over
 direct serial alike. `GET /sensors` on the same port is unchanged.
+
+**wireviewd's settings.** When the device is reached through hwmon with
+wireviewd, the daemon does the LAN publishing, so the **LAN monitoring** card
+says so with what answers on the daemon's port (*answering on port 9876* or
+*off*) and edits the daemon's settings in `/etc/wireview/config` in place of
+the agent's own switch and port: **Publish on the LAN** (`remote_enabled`),
+**Port**, **Bind address** (empty for all addresses), **Secret** (the passphrase
+other hosts sign their writes to this PC with) and **Log retention** (days, 0
+keeps every log). **Save** writes only the changed keys through
+`wireviewctl config set` (the secret on its standard input, never on a command
+line) and wireviewd reloads them without a restart; the result line shows the
+daemon's answer, such as `config reloaded: listener on [::]:9876`, or
+wireviewctl's message when a value is refused or the file is not writable.
+**Use the same secret for remote hosts**, under the agent's network secret,
+copies the daemon's secret there on Save, so this PC signs its writes to the
+other hosts with the same one. This needs wireview-hwmon 1.8 or newer (older
+versions have no `wireviewctl config`, and the card says so) and membership of
+the `wireview` group (`sudo usermod -aG wireview $USER`, then log in again).
+The agent moves its own loopback listener off a port you give the daemon, and
+the page follows it. `WIREVIEW_CTL` overrides which `wireviewctl` is run.
 
 On Windows the agent has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get

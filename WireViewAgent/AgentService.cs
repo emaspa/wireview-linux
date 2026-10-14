@@ -59,6 +59,7 @@ internal sealed class AgentService : IDisposable
     private readonly DeviceManager _remote;
     private readonly LocalPublishHost _publish;
     private readonly ControlPanel _panel;
+    private readonly DaemonConfigService _daemon;
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
     private readonly object _gate = new();
@@ -73,6 +74,10 @@ internal sealed class AgentService : IDisposable
     // tick (guarded by itself); Done is set once they are applied.
     private readonly List<(string Source, string What, Action<AppSettings> Change, ManualResetEventSlim? Done)> _settingsChanges = new();
     private readonly List<ManualResetEventSlim> _settingsApplied = new();
+    // Work for the tick from other threads (the listener moving off wireviewd's
+    // port); Done is set once the tick has run it (guarded by _settingsChanges).
+    private readonly List<(Action Work, ManualResetEventSlim Done)> _tickWork = new();
+    private volatile bool _daemonMode;     // wireviewd serves this PC's device (Linux)
 
     private (int Port, bool Lan)? _publishWanted;
     private (int Port, bool Lan)? _publishFailed;
@@ -96,6 +101,8 @@ internal sealed class AgentService : IDisposable
         _localKey = AgentKey.LoadOrCreate();
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         _panel = new ControlPanel(this);
+        _daemon = new DaemonConfigService(() =>
+            RunOnTick(() => _nextBindAttempt = DateTime.MinValue, TimeSpan.FromSeconds(5)));
 
         _remote = new DeviceManager(
             new RemoteDeviceProbe(RemoteHostList.Endpoints, () => AppSettings.Current.NetworkSecret).Probe);
@@ -144,8 +151,15 @@ internal sealed class AgentService : IDisposable
         }
 
         ApplyRequestedSettings();
+        UpdateDaemonMode();
+        var work = TakeTickWork();
+        foreach (var w in work)
+            try { w.Work(); } catch (Exception ex) { FileLog.Warn($"tick work failed: {ex.Message}"); }
         EnsurePublisher();
         SignalSettingsApplied();
+        foreach (var w in work)
+            try { w.Done.Set(); } catch (ObjectDisposedException) { } // the waiter gave up
+        if (_daemonMode) _daemon.Tick();
 
         lock (_gate)
         {
@@ -177,6 +191,13 @@ internal sealed class AgentService : IDisposable
     public TimeSpan Uptime => _uptime.Elapsed;
 
     internal LocalPublishHost Publisher => _publish;
+    internal DaemonConfigService Daemon => _daemon;
+
+    /// <summary>Linux with wireviewd serving this PC's device (hwmon + daemon):
+    /// the daemon publishes it on the LAN, the agent listens on loopback only and
+    /// keeps off the daemon's port. Stays set through a daemon restart; cleared
+    /// when the agent opens the device itself (serial).</summary>
+    public bool DaemonMode => _daemonMode;
     internal DeviceManager LocalDevices => _local;
 
     /// <summary>The serial port is lent to a local client.</summary>
@@ -280,6 +301,42 @@ internal sealed class AgentService : IDisposable
         return done?.Wait(wait!.Value) ?? true;
     }
 
+    /// <summary>Runs <paramref name="work"/> on the next tick, before the publisher
+    /// is checked, and returns once that tick is done (false after <paramref name="wait"/>).</summary>
+    public bool RunOnTick(Action work, TimeSpan wait)
+    {
+        using var done = new ManualResetEventSlim();
+        lock (_settingsChanges) _tickWork.Add((work, done));
+        return done.Wait(wait);
+    }
+
+    private (Action Work, ManualResetEventSlim Done)[] TakeTickWork()
+    {
+        lock (_settingsChanges)
+        {
+            if (_tickWork.Count == 0) return [];
+            var work = _tickWork.ToArray();
+            _tickWork.Clear();
+            return work;
+        }
+    }
+
+    private void UpdateDaemonMode()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var devices = _local.Devices;
+        if (!_daemonMode && devices.Any(d => d.Device is HwmonDevice { DaemonAvailable: true }))
+        {
+            _daemonMode = true;
+            FileLog.Info("wireviewd serves this PC's device: it does the LAN publishing, the agent listens on loopback only");
+        }
+        else if (_daemonMode && devices.Any(d => d.Device is not HwmonDevice && d.Device is not NetworkDevice && d.Device.Connected))
+        {
+            _daemonMode = false;
+            FileLog.Info("the agent opened the device itself: wireviewd no longer serves it, LAN publishing follows the agent's setting");
+        }
+    }
+
     private void ApplyRequestedSettings()
     {
         (string Source, string What, Action<AppSettings> Change, ManualResetEventSlim? Done)[] pending;
@@ -349,8 +406,29 @@ internal sealed class AgentService : IDisposable
     /// written next to the panel token for --open and --status.</summary>
     private void EnsurePublisher()
     {
-        if (_publishWanted is not { } want) return;
+        if (_publishWanted is not { } setting) return;
+        bool daemon = _daemonMode;
+        // With wireviewd the daemon publishes on the LAN (as the GUI leaves it to
+        // it on Linux): loopback only, and never on a port the daemon uses.
+        var want = (Port: setting.Port, Lan: setting.Lan && !daemon);
         var current = _publish.Endpoint;
+        if (daemon && current is { } held && _daemon.IsReserved(held.Port))
+        {
+            FileLog.Info($"port {held.Port} is wireviewd's: moving the agent's listener off it");
+            _publish.Stop();
+            current = null;
+            _onFallback = false;
+        }
+        if (daemon && _daemon.IsReserved(want.Port))
+        {
+            if (_onFallback && current != null) return;
+            _publishFailed = want;
+            _nextBindAttempt = DateTime.UtcNow + BindRetry;
+            _portHolder = "wireviewd";
+            _publishError = $"port {want.Port} is left to wireviewd, which publishes this PC's device on the LAN";
+            StartFallback(want.Port, logIt: true);
+            return;
+        }
         bool lan = current is { } c && !IPAddress.IsLoopback(c.Address);
         if (!_onFallback && current is { } cur && cur.Port == want.Port && lan == want.Lan) return;
 
@@ -376,6 +454,7 @@ internal sealed class AgentService : IDisposable
             if (wasFallback) FileLog.Info($"port {want.Port} is free again: the fallback listener is closed");
             FileLog.Info(want.Lan
                 ? $"publishing on port {want.Port}, all interfaces (LAN publishing on)"
+                : daemon ? $"listening on 127.0.0.1:{want.Port} only (wireviewd does the LAN publishing)"
                 : $"publishing on 127.0.0.1:{want.Port} only (LAN publishing off)");
             WritePanelFile();
         }
@@ -402,7 +481,8 @@ internal sealed class AgentService : IDisposable
 
     private void StartFallback(int wanted, bool logIt)
     {
-        var ports = Enumerable.Range(wanted + 1, 10).Where(p => p <= 65535).Append(0);
+        var ports = Enumerable.Range(wanted + 1, 10)
+            .Where(p => p <= 65535 && !(_daemonMode && _daemon.IsReserved(p))).Append(0);
         foreach (int port in ports)
         {
             try { _publish.Start(port, IPAddress.Loopback); }
