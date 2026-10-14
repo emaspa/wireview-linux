@@ -146,7 +146,7 @@ Launch WireView Desktop (where the app is installed) and where WireView Mini's l
 
 ### About
 
-The version, the author and the same disclaimer as the app's Settings page. `wireview-mini --help` ends with the same lines.
+The version, the author, the same disclaimer as the app's Settings page and the thanks to Thermal Grizzly for the development unit. `wireview-mini --help` ends with the same lines.
 
 ## How the app uses it
 

@@ -54,7 +54,8 @@ internal static class Program
         "Unofficial, community-made software by emaspa, https://github.com/emaspa/wireview-linux.\n" +
         "Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs.\n" +
         "Use at your own risk: it interacts with hardware, and the authors are not\n" +
-        "responsible for any damage to your device.";
+        "responsible for any damage to your device.\n" +
+        "Thanks to Thermal Grizzly for providing a WireView Pro II Noctua Edition unit for development.";
 
     public static int Main(string[] args)
     {
