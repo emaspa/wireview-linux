@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
@@ -30,8 +31,6 @@ internal sealed class ControlPanel
 {
     public const string TokenHeader = "X-Mini-Token";
     private const string PageResource = "wireview-mini.ControlPanel.html";
-
-    private static readonly JsonSerializerOptions Json = WireViewJson.Options;
 
     // Screen commands the panel and the tray send (no SCREEN_GOTO_SAME on its own,
     // it only follows a write).
@@ -82,7 +81,7 @@ internal sealed class ControlPanel
         {
             return (req.Method, req.Path) switch
             {
-                ("GET", "/api/status") => Ok(Status()),
+                ("GET", "/api/status") => Ok(Status(), MiniJsonContext.Default.PanelStatus),
                 ("GET", "/api/config") => GetConfig(),
                 ("POST", "/api/config") => PostConfig(req.Body),
                 ("POST", "/api/command") => PostCommand(req.Body),
@@ -134,82 +133,66 @@ internal sealed class ControlPanel
 
     // ---- Status ----
 
-    private object Status()
+    private PanelStatus Status()
     {
         var s = AppSettings.Current;
         var ep = _mini.Publisher.Endpoint;
-        return new
-        {
-            mini = new
-            {
-                version = _mini.Version,
-                uptimeSeconds = (long)_mini.Uptime.TotalSeconds,
-                os = OsName,
-                host = Environment.MachineName,
-                logPath = FileLog.CurrentPath,
-                settingsPath = AppSettings.GetSettingsPath(),
-                noShutdown = _mini.NoShutdown,
-            },
-            publish = new
-            {
-                listening = ep != null,
-                address = ep?.Address.ToString(),
-                port = ep?.Port,
-                lan = ep is { } e && !IPAddress.IsLoopback(e.Address),
-                error = _mini.PublishError,
-                // The wanted port is taken: the panel and /sensors are on a loopback fallback.
-                fallback = _mini.OnFallback,
-                wantedPort = _mini.PublishWanted?.Port,
-                wantedLan = _mini.PublishWanted?.Lan,
-            },
-            device = LocalDevice(),
-            daemon = DaemonView(),
-            remoteHosts = _mini.GetRemoteHosts().Select(h => new
-            {
-                host = h.Host,
-                endpoint = h.Endpoint,
-                online = h.Online,
-                hostName = h.HostName,
-                readings = h.Readings,
-                faultText = h.FaultText,
-            }),
-            settings = SettingsView(s),
-            gui = new { location = GuiLauncher.Locate(), available = GuiLauncher.Locate() != null },
-        };
+        string? gui = GuiLauncher.Locate();
+        return new PanelStatus(
+            Mini: new PanelMiniInfo(
+                Version: _mini.Version,
+                UptimeSeconds: (long)_mini.Uptime.TotalSeconds,
+                Os: OsName,
+                Host: Environment.MachineName,
+                LogPath: FileLog.CurrentPath,
+                SettingsPath: AppSettings.GetSettingsPath(),
+                NoShutdown: _mini.NoShutdown),
+            Publish: new PanelPublishInfo(
+                Listening: ep != null,
+                Address: ep?.Address.ToString(),
+                Port: ep?.Port,
+                Lan: ep is { } e && !IPAddress.IsLoopback(e.Address),
+                Error: _mini.PublishError,
+                Fallback: _mini.OnFallback,
+                WantedPort: _mini.PublishWanted?.Port,
+                WantedLan: _mini.PublishWanted?.Lan),
+            Device: LocalDevice(),
+            Daemon: DaemonView(),
+            RemoteHosts: _mini.GetRemoteHosts()
+                .Select(h => new PanelRemoteHost(h.Host, h.Endpoint, h.Online, h.HostName, h.Readings, h.FaultText))
+                .ToList(),
+            Settings: SettingsView(s),
+            Gui: new PanelGui(Location: gui, Available: gui != null));
     }
 
-    private static object SettingsView(AppSettings s) => new
-    {
-        shutdownOnFault = s.SoftwareShutdownOnFault,
-        startAtLogin = MiniInstaller.IsInstalled(),
-        publishEnabled = s.PublishEnabled,
-        publishPort = s.PublishPort,
-        remoteHosts = s.RemoteHosts ?? new List<string>(),
-        networkSecretSet = !string.IsNullOrEmpty(s.NetworkSecret),
-        networkSecret = s.NetworkSecret ?? "",
-    };
+    private static PanelSettings SettingsView(AppSettings s) => new(
+        ShutdownOnFault: s.SoftwareShutdownOnFault,
+        StartAtLogin: MiniInstaller.IsInstalled(),
+        PublishEnabled: s.PublishEnabled,
+        PublishPort: s.PublishPort,
+        RemoteHosts: s.RemoteHosts ?? new List<string>(),
+        NetworkSecretSet: !string.IsNullOrEmpty(s.NetworkSecret),
+        NetworkSecret: s.NetworkSecret ?? "");
 
-    private object? LocalDevice()
+    private PanelDevice? LocalDevice()
     {
         if (_mini.HandoverActive)
         {
             var frozen = _mini.Publisher.BuildSnapshot().Devices.FirstOrDefault();
-            return new
-            {
-                name = frozen?.Name,
-                firmware = frozen?.FwVer,
-                buildString = frozen?.BuildString,
-                uniqueId = frozen?.Id,
-                source = (string?)null,
-                connected = false,
-                serialSuspended = true,
-                canWrite = false,
-                readings = frozen,
-                faultStatus = frozen?.FaultStatus ?? 0,
-                faultLog = frozen?.FaultLog ?? 0,
-                faultText = (string?)null,
-                faultLogText = (string?)null,
-            };
+            return new PanelDevice(
+                Name: frozen?.Name,
+                Firmware: frozen?.FwVer,
+                BuildString: frozen?.BuildString,
+                UniqueId: frozen?.Id,
+                Source: null,
+                Connected: false,
+                SerialSuspended: true,
+                CanWrite: false,
+                Readings: frozen,
+                FaultStatus: frozen?.FaultStatus ?? 0,
+                FaultLog: frozen?.FaultLog ?? 0,
+                FaultText: null,
+                FaultLogText: null);
         }
 
         var md = PreferredLocal();
@@ -217,23 +200,21 @@ internal sealed class ControlPanel
         var dev = md.Device;
         var latest = md.Latest;
         int status = latest?.FaultStatus ?? 0, log = latest?.FaultLog ?? 0;
-        return new
-        {
-            name = dev.DeviceName,
-            firmware = dev.FirmwareVersion,
-            buildString = dev.BuildString,
-            uniqueId = dev.UniqueId,
-            source = md.Source,
-            connected = dev.Connected,
-            serialSuspended = false,
-            canWrite = CanWrite(dev),
-            readings = latest != null ? WireViewSensorDto.FromDevice(dev, latest) : null,
-            faultStatus = status,
-            faultLog = log,
+        return new PanelDevice(
+            Name: dev.DeviceName,
+            Firmware: dev.FirmwareVersion,
+            BuildString: dev.BuildString,
+            UniqueId: dev.UniqueId,
+            Source: md.Source,
+            Connected: dev.Connected,
+            SerialSuspended: false,
+            CanWrite: CanWrite(dev),
+            Readings: latest != null ? WireViewSensorDto.FromDevice(dev, latest) : null,
+            FaultStatus: status,
+            FaultLog: log,
             // The debounced state the alerts use, else the raw bits.
-            faultText = _mini.LocalFaultText(md.Id) ?? (status != 0 ? FaultMonitor.FormatFaults((ushort)status) : null),
-            faultLogText = log != 0 ? FaultNames((ushort)log) : null,
-        };
+            FaultText: _mini.LocalFaultText(md.Id) ?? (status != 0 ? FaultMonitor.FormatFaults((ushort)status) : null),
+            FaultLogText: log != 0 ? FaultNames((ushort)log) : null);
     }
 
     /// <summary>The local device the panel shows and drives. With the hwmon
@@ -270,22 +251,20 @@ internal sealed class ControlPanel
         return ConfigAnswer(snap, extra: null);
     }
 
-    private HttpResponseInfo ConfigAnswer(ConfigSnapshot snap, object? extra)
+    private HttpResponseInfo ConfigAnswer(ConfigSnapshot snap, PanelConfigWrite? extra)
     {
         DeviceConfigModel model;
         try { model = DeviceConfigModel.Decode(snap.Version, snap.Data); }
         catch (DeviceConfigException ex) { return Error(500, ex.Message); }
         var md = _mini.LocalDevices.Devices.FirstOrDefault(d => d.Device.UniqueId == snap.DeviceId);
         int? fw = int.TryParse(md?.Device.FirmwareVersion, NumberStyles.Integer, CultureInfo.InvariantCulture, out int f) ? f : null;
-        return Ok(new
-        {
-            deviceId = snap.DeviceId,
-            version = snap.Version,
-            firmware = fw,
-            config = model,
-            options = DeviceConfigOptions.For(fw, model),
-            result = extra,
-        });
+        return Ok(new PanelConfig(
+            DeviceId: snap.DeviceId,
+            Version: snap.Version,
+            Firmware: fw,
+            Config: model,
+            Options: DeviceConfigOptions.For(fw, model),
+            Result: extra), MiniJsonContext.Default.PanelConfig);
     }
 
     private HttpResponseInfo PostConfig(string body)
@@ -293,7 +272,7 @@ internal sealed class ControlPanel
         using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
         var root = doc.RootElement;
         var element = root.TryGetProperty("config", out var c) ? c : root;
-        var model = element.Deserialize<DeviceConfigModel>(Json);
+        var model = element.Deserialize(MiniJsonContext.Default.DeviceConfigModel);
         if (model == null) return Error(400, "no config in the request");
 
         if (DeviceProblem() is { } problem) return problem;
@@ -319,11 +298,9 @@ internal sealed class ControlPanel
             Thread.Sleep(150); // let the device take the frames before reading back
             var after = _mini.Publisher.ReadLocalConfig(null);
             if (after == null) return Error(500, "the config was written but could not be read back");
-            return ConfigAnswer(after, new
-            {
-                changed,
-                readBackMatches = after.Data.AsSpan().SequenceEqual(bytes),
-            });
+            return ConfigAnswer(after, new PanelConfigWrite(
+                Changed: changed,
+                ReadBackMatches: after.Data.AsSpan().SequenceEqual(bytes)));
         }
     }
 
@@ -382,7 +359,7 @@ internal sealed class ControlPanel
     };
 
     private static HttpResponseInfo Done(string action, DaemonResult r, string message) =>
-        r == DaemonResult.Ok ? Ok(new { ok = true, message }) : CommandError(action, r);
+        r == DaemonResult.Ok ? Ok(new PanelMessage(true, message), MiniJsonContext.Default.PanelMessage) : CommandError(action, r);
 
     private static HttpResponseInfo CommandError(string action, DaemonResult r) => r switch
     {
@@ -492,58 +469,47 @@ internal sealed class ControlPanel
             if (!applied) return Error(500, "WireView Mini did not apply the settings in time; reload the page");
         }
 
-        return Ok(new
-        {
-            ok = true,
-            message = changes.Count == 0 ? "Nothing changed." : "Saved.",
-            settings = SettingsView(AppSettings.Current),
-            panelUrl = note == "moved" ? _mini.PanelUrl : null,
+        return Ok(new PanelSettingsSaved(
+            Ok: true,
+            Message: changes.Count == 0 ? "Nothing changed." : "Saved.",
+            Settings: SettingsView(AppSettings.Current),
+            PanelUrl: note == "moved" ? _mini.PanelUrl : null,
             // With wireviewd the loopback fallback is the expected state, not an error.
-            publishError = _mini.DaemonMode ? null : _mini.PublishError,
-        });
+            PublishError: _mini.DaemonMode ? null : _mini.PublishError), MiniJsonContext.Default.PanelSettingsSaved);
     }
 
     // ---- wireviewd settings (Linux) ----
 
-    /// <summary>present: wireviewd serves this PC's device (it does the LAN
-    /// publishing); publishing and port: what answers on its port (null before
-    /// the first look); editable: wireviewctl has a config command (null while not known).</summary>
-    private object DaemonView()
+    private PanelDaemon DaemonView()
     {
         var seen = _mini.Daemon.Observed;
-        return new
-        {
-            present = _mini.DaemonMode,
-            publishing = seen?.Publishing,
-            port = seen?.Port,
-            editable = _mini.Daemon.Supported,
-        };
+        return new PanelDaemon(
+            Present: _mini.DaemonMode,
+            Publishing: seen?.Publishing,
+            Port: seen?.Port,
+            Editable: _mini.Daemon.Supported);
     }
 
-    private static object? ConfigView(DaemonConfig? c) => c == null ? null : new
-    {
-        remoteEnabled = c.RemoteEnabled,
-        port = c.Port,
-        bind = c.Bind,
-        secret = c.Secret,
-        logDays = c.LogDays,
-        extra = c.Extra,
-    };
+    private static PanelDaemonConfig? ConfigView(DaemonConfig? c) => c == null ? null : new(
+        RemoteEnabled: c.RemoteEnabled,
+        Port: c.Port,
+        Bind: c.Bind,
+        Secret: c.Secret,
+        LogDays: c.LogDays,
+        Extra: c.Extra);
 
     private HttpResponseInfo GetDaemonConfig()
     {
         if (!OperatingSystem.IsLinux()) return Error(404, "wireviewd runs on Linux only");
         var r = _mini.Daemon.Read(showSecret: true);
-        return Ok(new
-        {
-            ok = r.Ok,
-            config = ConfigView(r.Config),
-            error = r.Error,
-            unsupported = r.Unsupported,
-            note = r.Note,
-            tool = DaemonConfigService.Locate(),
-            daemon = DaemonView(),
-        });
+        return Ok(new PanelDaemonConfigRead(
+            Ok: r.Ok,
+            Config: ConfigView(r.Config),
+            Error: r.Error,
+            Unsupported: r.Unsupported,
+            Note: r.Note,
+            Tool: DaemonConfigService.Locate(),
+            Daemon: DaemonView()), MiniJsonContext.Default.PanelDaemonConfigRead);
     }
 
     /// <summary>Body: {"config": {remoteEnabled, port, bind, secret, logDays},
@@ -558,7 +524,7 @@ internal sealed class ControlPanel
         if (root.ValueKind != JsonValueKind.Object) return Error(400, "expected a JSON object");
         var element = root.TryGetProperty("config", out var c) ? c : root;
         if (element.ValueKind != JsonValueKind.Object) return Error(400, "config must be a JSON object");
-        var edit = element.Deserialize<DaemonConfigEdit>(Json) ?? new DaemonConfigEdit();
+        var edit = element.Deserialize(MiniJsonContext.Default.DaemonConfigEdit) ?? new DaemonConfigEdit();
         bool copySecret = root.TryGetProperty("copySecret", out var cs) && cs.ValueKind == JsonValueKind.True;
 
         string? panelBefore = _mini.PanelUrl;
@@ -575,19 +541,17 @@ internal sealed class ControlPanel
         }
 
         string? panelAfter = _mini.PanelUrl;
-        return Ok(new
-        {
-            ok = w.Ok,
-            reply = w.Reply,
-            error = w.Error,
-            unsupported = w.Unsupported,
-            changed = w.Changed,
-            config = ConfigView(w.Config),
-            settings = SettingsView(AppSettings.Current),
+        return Ok(new PanelDaemonConfigWritten(
+            Ok: w.Ok,
+            Reply: w.Reply,
+            Error: w.Error,
+            Unsupported: w.Unsupported,
+            Changed: w.Changed,
+            Config: ConfigView(w.Config),
+            Settings: SettingsView(AppSettings.Current),
             // WireView Mini's listener moved off the daemon's new port: the page follows it.
-            panelUrl = panelAfter != null && panelAfter != panelBefore ? panelAfter : null,
-            daemon = DaemonView(),
-        });
+            PanelUrl: panelAfter != null && panelAfter != panelBefore ? panelAfter : null,
+            Daemon: DaemonView()), MiniJsonContext.Default.PanelDaemonConfigWritten);
     }
 
     /// <summary>"host" or "host:port" for a remote host entry (port 9876 by default), or null
@@ -627,7 +591,7 @@ internal sealed class ControlPanel
     private static HttpResponseInfo OpenApp()
     {
         var (started, message) = GuiLauncher.Launch();
-        return Ok(new { ok = started, message });
+        return Ok(new PanelMessage(started, message), MiniJsonContext.Default.PanelMessage);
     }
 
     // ---- Helpers ----
@@ -635,9 +599,9 @@ internal sealed class ControlPanel
     private static string OsName =>
         OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
 
-    private static HttpResponseInfo Ok(object value) =>
-        HttpResponseInfo.Json(200, JsonSerializer.Serialize(value, Json));
+    private static HttpResponseInfo Ok<T>(T value, JsonTypeInfo<T> type) =>
+        HttpResponseInfo.Json(200, JsonSerializer.Serialize(value, type));
 
     private static HttpResponseInfo Error(int status, string message) =>
-        HttpResponseInfo.Json(status, JsonSerializer.Serialize(new { error = message }, Json));
+        HttpResponseInfo.Json(status, JsonSerializer.Serialize(new PanelError(message), MiniJsonContext.Default.PanelError));
 }

@@ -30,14 +30,47 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>12.0</LangVersion>
-    <!-- Footprint, as in WireView2.csproj. System.GC.ConserveMemory lives in
-         runtimeconfig.template.json (no MSBuild property). -->
+    <!-- Footprint, as in WireView2.csproj. System.GC.ConserveMemory is the
+         RuntimeHostConfigurationOption below (no MSBuild property). -->
     <InvariantGlobalization>true</InvariantGlobalization>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>false</TieredPGO>
     <AssemblyTitle>WireView Mini</AssemblyTitle>
     <Version>1.3.2.0</Version>
   </PropertyGroup>
+
+  <!-- Publish. Linux (and macOS): NativeAOT by default, one native executable
+       with no .NET runtime (plus libSystem.IO.Ports.Native.so for the serial
+       port), much smaller in memory than the JIT build. It needs clang or gcc
+       and zlib (zlib1g-dev, zlib-devel) and cannot cross-compile to another OS.
+       Windows: the JIT build by default, because the toast package
+       (Microsoft.Toolkit.Uwp.Notifications) uses built-in COM and Reflection.Emit
+       to register the app, which NativeAOT does not support (its IL3050/IL3052
+       warnings), so fault toasts would fail. -p:PublishAot=true on a Windows
+       machine with the Visual Studio Build Tools (C++ workload) builds it anyway.
+       -p:PublishAot=false is the fallback everywhere: the self-contained
+       single-file JIT build (bigger, heavier in memory, same behavior), for a
+       machine without the native toolchain. -->
+  <PropertyGroup>
+    <PublishAot Condition="'$(PublishAot)' == '' and !$(TargetFramework.Contains('-windows'))">true</PublishAot>
+    <!-- The trim and AOT analyzers on every build of both targets: every JSON
+         call goes through source-generated contexts (MiniJsonContext,
+         WireViewJsonContext), so a reflection call shows up as a warning. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <!-- One warning per call site, not one per assembly. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <StripSymbols>true</StripSymbols>
+    <OptimizationPreference>Size</OptimizationPreference>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishAot)' != 'true' and '$(RuntimeIdentifier)' != ''">
+    <SelfContained Condition="'$(SelfContained)' == ''">true</SelfContained>
+    <PublishSingleFile Condition="'$(PublishSingleFile)' == ''">true</PublishSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
 
   <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />

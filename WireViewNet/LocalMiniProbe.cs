@@ -112,7 +112,7 @@ namespace WireView2.Net
                 string h = host.Contains(':') && !host.StartsWith('[') ? $"[{host}]" : host;
                 using var cts = new CancellationTokenSource(timeout);
                 string json = Http.GetStringAsync($"http://{h}:{port}/sensors", cts.Token).GetAwaiter().GetResult();
-                return JsonSerializer.Deserialize<WireViewHostSnapshot>(json, WireViewJson.Options);
+                return JsonSerializer.Deserialize(json, WireViewJsonContext.Default.WireViewHostSnapshot);
             }
             catch
             {

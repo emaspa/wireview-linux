@@ -104,7 +104,7 @@ namespace WireView2.Net
             try
             {
                 string json = Http.GetStringAsync($"{_baseUrl}/sensors").GetAwaiter().GetResult();
-                var snap = JsonSerializer.Deserialize<WireViewHostSnapshot>(json, WireViewJson.Options);
+                var snap = JsonSerializer.Deserialize(json, WireViewJsonContext.Default.WireViewHostSnapshot);
                 var dto = snap?.Devices.FirstOrDefault(d => d.Id == UniqueId);
                 if (dto == null) return false;
 

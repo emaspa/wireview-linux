@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -733,7 +734,11 @@ namespace WireView2.Device
 
         // ---- Marshal helpers ----
 
-        private static T BytesToStruct<T>(byte[] bytes) where T : struct
+        // The structs hold ByValArray/ByValTStr fields, so they need the marshaller
+        // (not a raw memory read); the annotation keeps the marshalling data for
+        // each T in a trimmed or NativeAOT build.
+        private static T BytesToStruct<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)] T>(byte[] bytes)
+            where T : struct
         {
             int size = Marshal.SizeOf<T>();
             IntPtr ptr = Marshal.AllocHGlobal(size);

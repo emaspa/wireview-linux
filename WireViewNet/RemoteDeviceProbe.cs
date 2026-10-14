@@ -63,7 +63,7 @@ namespace WireView2.Net
             try
             {
                 string json = Http.GetStringAsync($"{baseUrl}/sensors").GetAwaiter().GetResult();
-                var snap = JsonSerializer.Deserialize<WireViewHostSnapshot>(json, WireViewJson.Options);
+                var snap = JsonSerializer.Deserialize(json, WireViewJsonContext.Default.WireViewHostSnapshot);
                 var list = snap?.Devices.Select(d => (d.Id, d.Name)).ToList() ?? new();
                 lock (_gate) { _cache[baseUrl] = list; }
             }

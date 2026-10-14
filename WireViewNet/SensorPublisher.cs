@@ -142,7 +142,7 @@ namespace WireView2.Net
                         string json;
                         try
                         {
-                            json = JsonSerializer.Serialize(_snapshotProvider(), WireViewJson.Options);
+                            json = JsonSerializer.Serialize(_snapshotProvider(), WireViewJsonContext.Default.WireViewHostSnapshot);
                         }
                         catch (Exception ex)
                         {
@@ -196,7 +196,7 @@ namespace WireView2.Net
                         catch (Exception ex)
                         {
                             FileLog.Warn($"{method} {path} from {ip} failed: {ex.Message}");
-                            answer = HttpResponseInfo.Json(500, "{\"error\":" + JsonSerializer.Serialize(ex.Message) + "}");
+                            answer = HttpResponseInfo.Json(500, "{\"error\":" + JsonSerializer.Serialize(ex.Message, WireViewJsonContext.Default.String) + "}");
                         }
                         if (answer != null)
                         {
@@ -279,7 +279,7 @@ namespace WireView2.Net
         {
             DaemonResult.Ok => (200, "OK", "{\"ok\":true}", "executed"),
             DaemonResult.Denied => (403, "Forbidden",
-                "{\"error\":\"denied\",\"host\":" + JsonSerializer.Serialize(Environment.MachineName) + "}", "denied by wireviewd"),
+                "{\"error\":\"denied\",\"host\":" + JsonSerializer.Serialize(Environment.MachineName, WireViewJsonContext.Default.String) + "}", "denied by wireviewd"),
             DaemonResult.NotConnected => (503, "Service Unavailable", "{\"error\":\"no device\"}", "no device"),
             _ => (500, "Internal Server Error", "{\"error\":\"relay failed\"}", "relay failed"),
         };

@@ -244,9 +244,29 @@ this PC.
 Build it from source with:
 
 ```bash
-dotnet publish WireViewMini -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
-dotnet publish WireViewMini -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish WireViewMini -c Release -r linux-x64
+dotnet publish WireViewMini -c Release -r win-x64
 ```
+
+On Linux this is a NativeAOT build: one native `wireview-mini` executable of
+about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so`
+next to it for the serial port. It idles at about 40 MB resident instead of
+about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang`
+plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them,
+add `-p:PublishAot=false` to get the self-contained single-file JIT build, which
+behaves the same.
+
+On Windows the default is the single-file JIT build, and it also builds from
+Linux. A NativeAOT build can only be made on Windows, with the Visual Studio
+Build Tools and their "Desktop development with C++" workload:
+
+```powershell
+dotnet publish WireViewMini -c Release -r win-x64 -p:PublishAot=true
+```
+
+Expect the Windows AOT build to lose its fault toasts: the toast library
+registers the app through COM and code generated at run time, and NativeAOT
+supports neither.
 
 ## Requirements
 

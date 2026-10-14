@@ -218,8 +218,13 @@ tray icon (the app's icon) with a small menu, and shows the live power in its to
 menu's first line; drawing a power glyph into the icon needs a rasteriser WireView Mini does not
 carry. Users who want the glyph keep the GUI resident, now at Phase 1 size.
 
-Expected footprint for the .NET mini, trimmed and invariant: 25 to 40 MB RSS on Windows, idle CPU
-~0. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+Expected footprint for WireView Mini in .NET, trimmed and invariant: 25 to 40 MB RSS on Windows,
+idle CPU ~0. Measured on Linux (2026-10-14, hwmon + wireviewd, panel closed): the JIT single-file
+build sits at 87 MB RSS / 75 MB PSS / 32 MB anonymous after a while; the NativeAOT build (10.7 MB
+binary, zero trimming warnings, source-generated JSON) starts at 23 MB RSS and levels off at about
+39 MB RSS / 33 MB PSS / 23 MB anonymous, 0.2 % of a core, so AOT is the default Linux publish.
+Windows stays on the JIT build until the toast package is replaced (it needs COM and Reflection.Emit,
+which NativeAOT does not have). Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
 packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 

@@ -1,4 +1,5 @@
-﻿using System.IO.Ports;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.IO.Ports;
 using System.Runtime.InteropServices;
 
 namespace WireView2.Device
@@ -662,7 +663,11 @@ namespace WireView2.Device
             return offset == size ? buf : null;
         }
 
-        public static T BytesToStruct<T>(byte[] bytes) where T : struct
+        // The structs hold ByValArray/ByValTStr fields, so they need the marshaller
+        // (not a raw memory read); the annotation keeps the marshalling data for
+        // each T in a trimmed or NativeAOT build.
+        public static T BytesToStruct<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)] T>(byte[] bytes)
+            where T : struct
         {
             var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             try { return Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject()); }

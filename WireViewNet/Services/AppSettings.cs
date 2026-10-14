@@ -177,7 +177,7 @@ public class AppSettings
             RestrictToOwner(path);
             try
             {
-                Current = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), ReadOptions)
+                Current = JsonSerializer.Deserialize(File.ReadAllText(path), AppSettingsReadContext.Default.AppSettings)
                           ?? new AppSettings();
             }
             catch
@@ -210,13 +210,6 @@ public class AppSettings
         catch { return DateTime.MinValue; }
     }
 
-    // Reading also accepts enum names ("NoctuaDark"); files are still written with
-    // numbers so older app versions can read them.
-    private static readonly JsonSerializerOptions ReadOptions = new()
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
-
     /// <summary>A value this version does not know (a newer app's theme, a
     /// hand-edited file) falls back to the default instead of reaching the UI.</summary>
     private void Normalize()
@@ -230,10 +223,7 @@ public class AppSettings
         lock (Sync)
         {
             string path = GetSettingsPath();
-            string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
+            string json = JsonSerializer.Serialize(Current, AppSettingsWriteContext.Default.AppSettings);
             WriteOwnerOnly(path, json);
             _loadedWriteTimeUtc = WriteTimeUtc(path);
         }
@@ -297,4 +287,33 @@ public class AppSettings
     {
         SaveCurrent();
     }
+}
+
+// settings.json through source-generated serializers (no reflection, so WireView
+// Mini also reads it in a NativeAOT build). Both use the System.Text.Json
+// defaults the file has always been written with: property names as declared,
+// case-sensitive, nulls written.
+
+/// <summary>Writing: indented, enums as numbers so older app versions can read
+/// the file.</summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(AppSettings))]
+internal sealed partial class AppSettingsWriteContext : JsonSerializerContext
+{
+}
+
+/// <summary>Reading: also accepts enum names ("NoctuaDark") besides numbers, one
+/// string converter per enum (the generic ones need no reflection). A new enum
+/// setting needs its converter in this list.</summary>
+[JsonSourceGenerationOptions(Converters =
+[
+    typeof(JsonStringEnumConverter<AppSettings.BackgroundColorMode>),
+    typeof(JsonStringEnumConverter<AppSettings.ThemeMode>),
+    typeof(JsonStringEnumConverter<AppSettings.StartupScreen>),
+    typeof(JsonStringEnumConverter<AppSettings.PortSelectionMode>),
+    typeof(JsonStringEnumConverter<AppSettings.NavPaneMode>),
+])]
+[JsonSerializable(typeof(AppSettings))]
+internal sealed partial class AppSettingsReadContext : JsonSerializerContext
+{
 }

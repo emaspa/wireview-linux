@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using WireView2.Device;
 
@@ -121,16 +120,20 @@ namespace WireView2.Net
         public bool SerialSuspended { get; set; }
     }
 
-    /// <summary>Shared JSON options for the publish/consume contract (camelCase).
-    /// Unknown members are skipped (the System.Text.Json default), so newer
-    /// publishers can add fields without breaking older readers.</summary>
-    public static class WireViewJson
+    /// <summary>Source-generated serializer for the LAN contract (the /sensors
+    /// snapshot, and strings spliced into hand-written answers): no reflection,
+    /// so it also works in WireView Mini's NativeAOT build. camelCase names,
+    /// case-insensitive reading, nulls written. Unknown members are skipped (the
+    /// System.Text.Json default), so newer publishers can add fields without
+    /// breaking older readers. WireView Mini's control panel has its own context
+    /// with the same options (MiniJsonContext; its types are internal to it).</summary>
+    [JsonSourceGenerationOptions(
+        PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never)]
+    [JsonSerializable(typeof(WireViewHostSnapshot))]
+    [JsonSerializable(typeof(string))]
+    public sealed partial class WireViewJsonContext : JsonSerializerContext
     {
-        public static readonly JsonSerializerOptions Options = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        };
     }
 }
