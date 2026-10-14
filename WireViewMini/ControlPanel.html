@@ -331,7 +331,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
   <section>
     <h2>Tools</h2>
-    <div class="row">
+    <div class="row" id="appRow" hidden>
       <button id="openApp">Launch WireView Desktop</button>
       <span class="muted">for the graphs, firmware updates, themes and the device log</span>
       <span class="result" id="appResult"></span>
@@ -471,7 +471,9 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     $("logPath").textContent = s.mini.logPath || "-";
     $("settingsPath").textContent = s.mini.settingsPath || "-";
     $("miniInfo").textContent = "wireview-mini " + s.mini.version + ", " + s.mini.os + ", up " + uptime(s.mini.uptimeSeconds);
-    $("openApp").title = s.gui.location || "the WireView app was not found";
+    // The launch button only where the app is installed.
+    $("appRow").hidden = !s.gui.available;
+    $("openApp").title = s.gui.location || "";
     refreshButtons();
   }
 

@@ -133,7 +133,7 @@ menu, top to bottom:
 - the live state (`WireView Pro II: 123.4 W`, the fault while one is active,
   *Serial port lent to the app* during a handover, or *No device*),
 - **Launch WireView Desktop** (starts the app, or on Windows brings the running app's
-  window forward),
+  window forward; shown only where the app is installed),
 - **Settings and controls...**, which opens the control panel in the browser,
 - **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then
   **Pause updates** and **Resume updates** (the device's display),

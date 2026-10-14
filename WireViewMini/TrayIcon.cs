@@ -51,7 +51,8 @@ internal sealed record TrayState(
     bool StartAtLogin,
     bool DeviceCommands = false,
     string RemoteLines = "",
-    string? DaemonLine = null)
+    string? DaemonLine = null,
+    bool AppInstalled = true)
 {
     public const string AppTitle = "WireView Mini";
 
@@ -77,10 +78,13 @@ internal sealed record TrayState(
     {
         get
         {
-            var items = new List<TrayItem>
-            {
-                new(1, TrayItemKind.Header, Header),
-                new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Launch WireView Desktop"),
+            var items = new List<TrayItem> { new(1, TrayItemKind.Header, Header) };
+            // Only where the app is installed: a standalone WireView Mini has
+            // nothing to launch.
+            if (AppInstalled)
+                items.Add(new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Launch WireView Desktop"));
+            items.AddRange(
+            [
                 new((int)TrayCommand.OpenPanel, TrayItemKind.Action, "Settings and controls..."),
                 new(3, TrayItemKind.Separator),
                 new(10, TrayItemKind.Submenu, "Screen", Enabled: DeviceCommands, Children:
@@ -95,7 +99,7 @@ internal sealed record TrayState(
                     new((int)TrayCommand.ResumeUpdates, TrayItemKind.Action, "Resume updates", Enabled: DeviceCommands),
                 ]),
                 new((int)TrayCommand.ClearFaults, TrayItemKind.Action, "Clear faults", Enabled: Fault && DeviceCommands),
-            };
+            ]);
             if (RemoteLines.Length > 0)
             {
                 var lines = RemoteLines.Split('\n')
