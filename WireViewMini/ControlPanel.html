@@ -67,6 +67,20 @@ h3 { margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
 .big .v { border-left-color: var(--voltage); }
 .big .f { border-left-color: var(--muted); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* The app's per-wire bar chart: a group of up to three bars per pin, each
+   against its own fixed scale (15 V, 10 A, 150 W; more when a reading exceeds it). */
+.bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; height: 150px; align-items: end; margin: 22px 0 24px; }
+.bars .pin { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; border-bottom: 1px solid var(--line); }
+.bars .pbar { position: relative; flex: 1 1 0; max-width: 20px; min-height: 2px; border-radius: 3px 3px 0 0; transition: height .3s; }
+.bars .pbar.bv { background: var(--voltage); }
+.bars .pbar.bi { background: var(--current); }
+.bars .pbar.bp { background: var(--power); }
+/* Value labels only with one series on: three labels a pin overlap, and the table below has the numbers. */
+.bars:not(.labels) .pbar span { display: none; }
+.bars .pbar span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 2px; font-size: 10px; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bars .pin i { position: absolute; top: 100%; margin-top: 3px; font-style: normal; font-size: 11px; color: var(--muted); }
+.barlegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.barlegend label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--line); }
@@ -232,6 +246,12 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
       <div class="cols">
         <div>
           <h3>Connector pins</h3>
+          <div class="barlegend">
+            <label><input type="checkbox" id="bV"><b class="swatch" style="background:var(--voltage)"></b>Voltage</label>
+            <label><input type="checkbox" id="bI" checked><b class="swatch" style="background:var(--current)"></b>Current</label>
+            <label><input type="checkbox" id="bP"><b class="swatch" style="background:var(--power)"></b>Power</label>
+          </div>
+          <div class="bars" id="pinBars"></div>
           <table>
             <thead><tr><th>Pin</th><th>Voltage</th><th>Current</th><th>Power</th></tr></thead>
             <tbody id="pins"></tbody>
@@ -678,6 +698,43 @@ const WVPixels = (function () {
   let hostsDraft = null;     // remote hosts list being edited
   let busy = 0;
 
+  // The app's Overview bar chart: per pin, a bar per enabled series on its own
+  // scale (the app's per-wire limits; the scale grows when a reading exceeds it).
+  const BAR_MAX = { v: 15, i: 10, p: 150 };
+  let lastPins = null;
+  function renderBars() {
+    if (!lastPins) return;
+    const { volts, amps } = lastPins;
+    const show = { v: $("bV").checked, i: $("bI").checked, p: $("bP").checked };
+    const vals = { v: [], i: [], p: [] };
+    for (let k = 0; k < 6; k++) {
+      vals.v.push(volts[k] || 0); vals.i.push(amps[k] || 0); vals.p.push((volts[k] || 0) * (amps[k] || 0));
+    }
+    const max = {};
+    for (const key of ["v", "i", "p"]) max[key] = Math.max(BAR_MAX[key], ...vals[key]);
+    const groups = [];
+    for (let k = 0; k < 6; k++) {
+      const bars = [];
+      const add = (key, unit, dec, cls) => {
+        if (!show[key]) return;
+        const h = Math.max(0, Math.min(100, vals[key][k] / max[key] * 100));
+        bars.push(el("div", { class: "pbar " + cls, style: "height:" + h.toFixed(1) + "%" },
+          el("span", { text: fmt(vals[key][k], dec) + unit })));
+      };
+      add("v", " V", 1, "bv"); add("i", " A", 2, "bi"); add("p", " W", 1, "bp");
+      groups.push(el("div", { class: "pin" }, ...bars, el("i", { text: "Pin " + (k + 1) })));
+    }
+    $("pinBars").replaceChildren(...groups);
+    $("pinBars").classList.toggle("labels", Object.values(show).filter(Boolean).length === 1);
+  }
+  for (const id of ["bV", "bI", "bP"]) {
+    try { const v = localStorage.getItem("bars." + id); if (v !== null) $(id).checked = v === "1"; } catch {}
+    $(id).addEventListener("change", () => {
+      try { localStorage.setItem("bars." + id, $(id).checked ? "1" : "0"); } catch {}
+      renderBars();
+    });
+  }
+
   function el(tag, attrs, ...kids) {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) {
@@ -764,6 +821,8 @@ const WVPixels = (function () {
             el("td", { text: fmt(amps[i], 2) + " A" }), el("td", { text: fmt((volts[i] || 0) * (amps[i] || 0), 1) + " W" })));
         }
         $("pins").replaceChildren(...rows);
+        lastPins = { volts, amps };
+        renderBars();
         const t = [["Temp in", r.tempInC, "--temp-in"], ["Temp out", r.tempOutC, "--temp-out"],
                    ["External 1", r.ext1C, "--ext1"], ["External 2", r.ext2C, "--ext2"]];
         $("temps").replaceChildren(...t.map(([n, v, c]) => el("span", {},

@@ -72,7 +72,7 @@ Settings changed on the page are saved to `settings.json` and applied at once, t
 
 ### Status
 
-Device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power, the temperatures, the fan duty, and the fault state with a **Clear faults** button.
+Device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power as the app's per-wire bar chart (voltage, current and power toggles, value labels with one series on) and as a table, the temperatures, the fan duty, and the fault state with a **Clear faults** button.
 
 ### Remote hosts
 
