@@ -1348,27 +1348,15 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         finally { _isApplyingThemePreset = false; }
     }
 
-    private static ThemePresetDefinition GetThemePresetDefinition(UiThemePreset preset) => preset switch
+    /// <summary>The preset's values from the shared table (<see cref="DeviceThemePresets"/>,
+    /// which WireView Mini's panel uses too), by the enum's name; Custom and any
+    /// name the table lacks get its fallback (TG 3's values).</summary>
+    private static ThemePresetDefinition GetThemePresetDefinition(UiThemePreset preset)
     {
-        UiThemePreset.ThemeTg1 => new(0xFFFFFFFF, 0xFF646464, 0xFFE64121, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyOrange, WireViewPro2Device.THEME_FAN.ThermalGrizzlyOrange, false),
-        UiThemePreset.ThemeTg2 => new(0xFFFFFFFF, 0xFF646464, 0xFFBEBEBE, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark, WireViewPro2Device.THEME_FAN.ThermalGrizzlyDark, false),
-        UiThemePreset.ThemeTg3 => new(0xFF969696, 0xFF505050, 0xFFFFFFFF, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.Disabled, WireViewPro2Device.THEME_FAN.ThermalGrizzlyBlackWhite, false),
-        UiThemePreset.ThemeTg4 => new(0xFFFFFFFF, 0xFF646464, 0xFFE64121, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyOrange, WireViewPro2Device.THEME_FAN.ThermalGrizzlyOrange, true),
-        UiThemePreset.ThemeTg5 => new(0xFFFFFFFF, 0xFF646464, 0xFFBEBEBE, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark, WireViewPro2Device.THEME_FAN.ThermalGrizzlyDark, true),
-        UiThemePreset.ThemeTg6 => new(0xFF969696, 0xFF505050, 0xFFFFFFFF, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.Disabled, WireViewPro2Device.THEME_FAN.ThermalGrizzlyBlackWhite, true),
-        // The Noctua Edition's firmware defaults (20260902_0741): Thermal Grizzly's
-        // Dark artwork with Noctua colors. Any Pro II can show it.
-        UiThemePreset.ThemeNoctua => new(0xFFD1D3D5, 0xFFE7CEB4, 0xFF653025, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.ThermalGrizzlyDark, WireViewPro2Device.THEME_FAN.ThermalGrizzlyDark, false),
-        _ => new(0xFF969696, 0xFF505050, 0xFFFFFFFF, 0xFF000000,
-            WireViewPro2Device.THEME_BACKGROUND.Disabled, WireViewPro2Device.THEME_FAN.ThermalGrizzlyBlackWhite, false),
-    };
+        var p = DeviceThemePresets.Find(preset.ToString()) ?? DeviceThemePresets.Fallback;
+        return new(p.PrimaryColor, p.SecondaryColor, p.HighlightColor, p.BackgroundColor,
+            p.BackgroundBitmap, p.FanBitmap, p.DisplayInversion);
+    }
 
     private static WireViewPro2Device.THEME_FAN MapFanBitmapFromBackground(WireViewPro2Device.THEME_BACKGROUND background) =>
         DeviceConfigEditor.FanBitmapFor(background);

@@ -15,7 +15,7 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 - **Desktop notifications** - Via `notify-send`
 - **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
 - **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
-- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview. Theme files (.wv2t) are compatible with the official Windows app. The Noctua preset is the WireView Pro II Noctua Edition's own look: Thermal Grizzly's Dark background with Noctua colors. It works on any WireView Pro II and is also available as [themes/Noctua-Edition.wv2t](themes/Noctua-Edition.wv2t) for the Windows app
+- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview, in the app or in [WireView Mini](#wireview-mini)'s control panel. Theme files (.wv2t) are compatible with the official Windows app. The Noctua preset is the WireView Pro II Noctua Edition's own look: Thermal Grizzly's Dark background with Noctua colors. It works on any WireView Pro II and is also available as [themes/Noctua-Edition.wv2t](themes/Noctua-Edition.wv2t) for the Windows app
 - **Firmware updates** - Flash the bundled firmware (v05, build 20260902_0741) from the Device page over USB DFU. Requires the `dfu-util` package; compares the bundled and device firmware by version and build date, refuses an image made for another product, and warns before downgrades. The bundled image is byte for byte the firmware a Noctua Edition ships with, so flashing it again restores the factory firmware on either edition
 
 > **Warning:** firmware flashing restarts the device into its STM32 bootloader and rewrites its flash. It follows the same DFU procedure as the official Windows client (and refuses to start if `dfu-util` or the firmware image is missing), but a power loss or unplug mid-flash can leave the device unbootable until reflashed manually. This is unofficial software, not affiliated with or endorsed by Thermal Grizzly: flash at your own risk. The previous experimental `dfu-enabled` branch has been removed in favor of this built-in implementation.
@@ -90,10 +90,10 @@ jobs, so the app only needs to run when you want to look at it:
   when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
 
 WireView Mini plus its control panel are a minimal client: everything except the
-graphs, themes and the device log, which stay in the app. With the tray menu and
-the control panel you can watch the device, switch its screen, clear faults, edit
-its configuration and alarms, update its firmware, and set up LAN monitoring and
-shutdown on fault without installing or opening the app.
+graphs and the device log, which stay in the app. With the tray menu and the
+control panel you can watch the device, switch its screen, clear faults, edit
+its configuration and alarms, edit its display theme, update its firmware, and
+set up LAN monitoring and shutdown on fault without installing or opening the app.
 
 On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with
 no hwmon device it opens the WireView's serial port (`/dev/ttyACM*`) itself, like
@@ -170,7 +170,9 @@ loopback-only fallback port instead (the next free one of the publish port +1
 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`,
 and moves back to the publish port once it is free (it retries every 30 s); the
 tray, `--open` and `--status` use whichever port it is on. The page shows,
-refreshed every second:
+refreshed every second (Device configuration, Theme, Firmware and wireviewd's
+settings are collapsed until you click their header, and are read from the
+device only then; the page remembers which ones you left open):
 
 - **Status**: device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`),
   total power, current and voltage, each pin's voltage, current and power, the
@@ -186,6 +188,12 @@ refreshed every second:
   app does; **Store to device memory** keeps them after a power cycle; **Reload
   from device**, **Reload from device memory** and **Reset to defaults** (asks
   first) are there too. Out-of-range values are refused with a message,
+- **Theme** (firmware with the color theme, config V3), opened on demand: the
+  app's presets, the four colors, display inversion, the background and fan
+  slots, a custom background image with the app's fit, scale and offsets, a live
+  preview of the main screen, **Apply**, **Reload from device**, **Save theme
+  file...** and **Load theme file...** (.wv2t) and **Restore factory artwork**
+  (see *Theme editor* below),
 - **Alerts and shutdown**: Shutdown on fault, Start at login (fault
   notifications are always on),
 - **LAN monitoring**: Publish on the LAN, the port (the page follows WireView Mini to
@@ -193,7 +201,7 @@ refreshed every second:
   wireviewd, the daemon's own settings instead of the first two (below),
 - **Firmware**: the device's and the bundled firmware (version and build), what a
   flash would do, and **Update firmware** (see *Firmware updates* below),
-- **Tools**: Launch WireView Desktop (graphs, themes, device log) and
+- **Tools**: Launch WireView Desktop (graphs, device log) and
   where WireView Mini's log is.
 
 Settings changed on the page are saved to `settings.json` and applied at once,
@@ -238,6 +246,24 @@ serial port, and the tray's Quit waits for the end. The tray shows *Firmware
 update available*, which opens the panel, when the bundled firmware is newer
 than the device's. The [firmware flashing warning](#features) applies here too.
 `WIREVIEW_DFU_UTIL` overrides which `dfu-util` is run.
+
+**Theme editor.** The panel's **Theme** card does what the app's theme editor
+does. Opening it, **Reload from device** and picking a slot not read yet read the
+device's colors from its configuration and the slot's artwork from its flash
+over the serial port (about a second; with wireviewd WireView Mini borrows the
+port from the daemon for it, which needs the `wireview` group; without it the
+preview shows no artwork). The status poll never reads the artwork. **Apply** writes the colors, inversion and slots
+the way the configuration's Apply does (Store to device memory keeps them). A
+custom background image is scaled in the browser to 320x170 with the app's fit
+modes, converted to the device's RGB565 and written to the selected slot's flash
+with the highlight-tinted fan frames the app makes, then the screen is redrawn;
+the transfer takes a minute or two, with a progress bar. Theme files are written
+and read with the app's code, so they open in the app and in the official Windows
+app. **Restore factory artwork** writes the selected slot and its fan frames back
+from `ext_flash.bin` (shipped next to `wireview-mini`, the same file as the app's,
+and also the Noctua Edition's factory artwork). While a theme transfer runs, the
+other device controls and the firmware flash wait, and the app cannot borrow the
+serial port.
 
 On Windows WireView Mini has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get

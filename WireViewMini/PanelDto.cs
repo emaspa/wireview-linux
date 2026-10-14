@@ -17,7 +17,8 @@ internal sealed record PanelStatus(
     List<PanelRemoteHost> RemoteHosts,
     PanelSettings Settings,
     PanelGui Gui,
-    PanelFlash Firmware);
+    PanelFlash Firmware,
+    PanelThemeUpload? Theme);
 
 internal sealed record PanelMiniInfo(
     string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown);
@@ -107,14 +108,57 @@ internal sealed record PanelFirmware(
 /// <summary>POST /api/firmware/flash when it started (202).</summary>
 internal sealed record PanelFlashStarted(bool Ok, string Message, PanelFlash Flash);
 
+/// <summary>A theme upload's state: in /api/status while one runs (null
+/// otherwise), and in the theme answers.</summary>
+/// <param name="State">Idle, Uploading, WritingConfig, Redrawing, Done or Failed.</param>
+internal sealed record PanelThemeUpload(string State, double Progress, string? Message, bool Running);
+
+/// <summary>A device theme. Colours are "#rrggbb" ("#aarrggbb" when the alpha is
+/// not 255); the slot ids are THEME_BACKGROUND and THEME_FAN values.</summary>
+internal sealed record PanelThemeValues(
+    string PrimaryColor, string SecondaryColor, string HighlightColor, string BackgroundColor,
+    bool DisplayInversion, int BackgroundBitmapId, int FanBitmapId);
+
+/// <summary>The device's artwork read for the preview: base64 RGB565 in the
+/// device layout (column-major, mirrored, little-endian). Background null for
+/// slot none; fan frames null when the slot has none.</summary>
+internal sealed record PanelThemeArtwork(
+    int BackgroundSlot, int FanSlot, int Width, int Height, string? Background,
+    int FanWidth, int FanHeight, string? FanFrame1, string? FanFrame2);
+
+/// <summary>One of the app's presets. <paramref name="Name"/>: the app's (ThemeTg1 ... ThemeNoctua).</summary>
+internal sealed record PanelThemePreset(string Name, string Label, PanelThemeValues Values);
+
+internal sealed record PanelOption(int Value, string Label);
+
+/// <summary>GET /api/theme and POST /api/theme (200). <paramref name="Unavailable"/>:
+/// why the editor cannot be used (not connected, older firmware), null when it can.
+/// <paramref name="Preset"/>: the app's preset for the device's values, or Custom.
+/// <paramref name="Artwork"/>: null when not read (artwork=0, or the read failed:
+/// <paramref name="ArtworkError"/>). <paramref name="FactoryArtwork"/>: ext_flash.bin is
+/// next to WireView Mini (Restore factory artwork).</summary>
+internal sealed record PanelTheme(
+    bool UiV2Supported, string? Unavailable, int? ConfigVersion, PanelThemeValues? Values, string? Preset,
+    PanelThemeArtwork? Artwork, string? ArtworkError, List<PanelThemePreset> Presets,
+    List<PanelOption> Backgrounds, List<PanelOption> Fans, bool FactoryArtwork,
+    PanelThemeUpload Upload, string? Message);
+
+/// <summary>POST /api/theme and POST /api/theme/restore-defaults when an upload started (202).</summary>
+internal sealed record PanelThemeStarted(bool Ok, string Message, PanelThemeUpload Upload);
+
+/// <summary>POST /api/theme/file: an uploaded .wv2t read as the editor's state
+/// (the images base64 RGB565, null when the file has none).</summary>
+internal sealed record PanelThemeFile(
+    PanelThemeValues Values, string Preset, string? Background, string? FanFrame1, string? FanFrame2, string Message);
+
 /// <summary>Every failure: {"error": "..."}.</summary>
 internal sealed record PanelError(string Error);
 
 /// <summary>Source-generated serializer for the control panel: no reflection, so it
 /// works in WireView Mini's NativeAOT build. The options are the LAN contract's
 /// (<see cref="WireViewJsonContext"/>): camelCase, case-insensitive reading, nulls
-/// written. Request bodies are read into <see cref="DeviceConfigModel"/> and
-/// <see cref="DaemonConfigEdit"/>.</summary>
+/// written. Request bodies are read into <see cref="DeviceConfigModel"/>,
+/// <see cref="DaemonConfigEdit"/> and <see cref="ThemeEdit"/>.</summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
@@ -128,6 +172,10 @@ internal sealed record PanelError(string Error);
 [JsonSerializable(typeof(PanelError))]
 [JsonSerializable(typeof(PanelFirmware))]
 [JsonSerializable(typeof(PanelFlashStarted))]
+[JsonSerializable(typeof(PanelTheme))]
+[JsonSerializable(typeof(PanelThemeStarted))]
+[JsonSerializable(typeof(PanelThemeFile))]
+[JsonSerializable(typeof(ThemeEdit))]
 [JsonSerializable(typeof(DeviceConfigModel))]
 [JsonSerializable(typeof(DaemonConfigEdit))]
 internal sealed partial class MiniJsonContext : JsonSerializerContext

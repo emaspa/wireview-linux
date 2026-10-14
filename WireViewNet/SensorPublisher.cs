@@ -31,6 +31,7 @@ namespace WireView2.Net
         private readonly Func<WireViewCommand, DaemonResult>? _commandSink;
         private readonly Func<string?, ConfigSnapshot?>? _configReader;
         private readonly Func<HttpRequestInfo, HttpResponseInfo?>? _extraRoutes;
+        private readonly Func<HttpRequestInfo, int>? _extraRouteBodyLimit;
         private readonly int _maxRequestBytes;
         private readonly int _rateLimitPerMinute;
         private readonly SemaphoreSlim _slots;
@@ -51,9 +52,11 @@ namespace WireView2.Net
             int rateLimitPerMinute = 120,
             IPAddress? bindAddress = null,
             Func<string?>? localSecretProvider = null,
-            Func<HttpRequestInfo, HttpResponseInfo?>? extraRoutes = null)
+            Func<HttpRequestInfo, HttpResponseInfo?>? extraRoutes = null,
+            Func<HttpRequestInfo, int>? extraRouteBodyLimit = null)
         {
             _extraRoutes = extraRoutes;
+            _extraRouteBodyLimit = extraRouteBodyLimit;
             _port = port;
             _bindAddress = bindAddress ?? IPAddress.Any;
             _localSecretProvider = localSecretProvider;
@@ -185,7 +188,10 @@ namespace WireView2.Net
 
                     if (_extraRoutes != null)
                     {
-                        string? body = await ReadBody(stream, buf, headers, headEnd, total, ct).ConfigureAwait(false);
+                        // A route may take a body over the size cap (WireView Mini's
+                        // theme images); it is asked with the request line and headers only.
+                        int allowed = _extraRouteBodyLimit?.Invoke(new HttpRequestInfo(method, path, headers, "", loopback, ip)) ?? 0;
+                        string? body = await ReadBody(stream, buf, headers, headEnd, total, ct, allowed).ConfigureAwait(false);
                         if (body == null)
                         {
                             await WriteJson(stream, 413, "Payload Too Large", "{\"error\":\"too large\"}").ConfigureAwait(false);
@@ -311,13 +317,30 @@ namespace WireView2.Net
             return (p.Length > 0 ? p[0] : "", p.Length > 1 ? p[1] : "");
         }
 
-        /// <summary>The request body (up to Content-Length, at most the size cap), or
-        /// null when the declared length is over the cap.</summary>
-        private async Task<string?> ReadBody(NetworkStream stream, byte[] buf, string headers, int headEnd, int total, CancellationToken ct)
+        /// <summary>The request body (up to Content-Length, at most the size cap, or
+        /// <paramref name="allowed"/> when that is larger), or null when the declared
+        /// length is over both.</summary>
+        private async Task<string?> ReadBody(NetworkStream stream, byte[] buf, string headers, int headEnd, int total,
+            CancellationToken ct, int allowed = 0)
         {
             int want = ContentLength(headers);
-            if (want > _maxRequestBytes) return null;
             int bodyStart = headEnd + 4, have = total - bodyStart;
+            if (want > _maxRequestBytes)
+            {
+                if (want > allowed) return null;
+                // Its own buffer, sized to the declared length: the per-connection
+                // one stays at the cap, so other requests cost what they did.
+                var big = new byte[want];
+                int got = Math.Clamp(have, 0, want);
+                Buffer.BlockCopy(buf, bodyStart, big, 0, got);
+                while (got < want)
+                {
+                    int n = await stream.ReadAsync(big.AsMemory(got, want - got), ct).ConfigureAwait(false);
+                    if (n <= 0) break;
+                    got += n;
+                }
+                return Encoding.UTF8.GetString(big, 0, got);
+            }
             while (have < want && total < buf.Length)
             {
                 int n = await stream.ReadAsync(buf.AsMemory(total, buf.Length - total), ct).ConfigureAwait(false);

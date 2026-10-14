@@ -271,6 +271,17 @@ Done, in this repo:
   `POST /api/firmware/flash`, the flash state in `/api/status`, a Firmware card and a tray
   *Firmware update available* line. Idle until used: the bundled image is parsed once and the
   verdict cached per device and firmware. +0.3 MB on the Linux AOT binary.
+- Theme editor in WireView Mini (2026-10-14): the .wv2t document, its reflection-free reader
+  and writer (`ThemeFileFormat`, a source-generated context, byte-identical output) and the
+  preset table (`DeviceThemePresets`) moved to `WireViewDeviceLib`, the app's `ThemeFile` and
+  presets on top; `WireViewMini/ThemeService.cs` reads the theme (config, slot artwork over
+  the serial port, borrowed from wireviewd in daemon mode) on request only, applies colors
+  through the config write and custom artwork through the SPI writes, restores the factory
+  artwork from a bundled `ext_flash.bin`; `GET`/`POST /api/theme`, restore, `.wv2t` download,
+  upload and export; a Theme card that does the raster work in the browser (canvas). Large
+  bodies only for the theme routes (loopback, with the token). The long panel cards (Device
+  configuration, Theme, Firmware, wireviewd settings) are collapsed and read on opening.
+  +0.42 MB on the Linux AOT binary (11,044,880 to 11,481,312 bytes).
 - Control panel: one embedded page (`WireViewMini/ControlPanel.html`, inline CSS and JS)
   and a JSON API under `/api/` (status, config read and write, screen/NVM/clear-faults
   commands, mini settings, open the app), served on the publish port through a new

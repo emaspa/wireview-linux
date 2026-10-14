@@ -46,6 +46,10 @@ namespace WireView2.Net
         /// control panel), on the same port; null passes them on (404).</summary>
         public Func<HttpRequestInfo, HttpResponseInfo?>? ExtraRoutes { get; init; }
 
+        /// <summary>The largest body an extra route takes, asked with the request
+        /// line and headers before the body is read (0 or less: the usual size cap).</summary>
+        public Func<HttpRequestInfo, int>? ExtraRouteBodyLimit { get; init; }
+
         public bool IsRunning
         {
             get { lock (_gate) return _publisher?.IsRunning == true; }
@@ -76,7 +80,8 @@ namespace WireView2.Net
                     rateLimitPerMinute: s.RateLimitPerMinute,
                     bindAddress: bindAddress,
                     localSecretProvider: LocalSecretProvider,
-                    extraRoutes: ExtraRoutes);
+                    extraRoutes: ExtraRoutes,
+                    extraRouteBodyLimit: ExtraRouteBodyLimit);
                 try
                 {
                     publisher.Start();

@@ -36,12 +36,13 @@ internal readonly record struct RemoteHostStatus(
 /// (always: on all interfaces when LAN publishing is on, loopback only when it is
 /// off, because the GUI reaches the device through it), raises fault alerts with
 /// <see cref="FaultMonitor"/>, shuts the PC down on a local fault when the
-/// setting asks for it, lends the serial port to the GUI on request, and
-/// flashes the bundled firmware on request (<see cref="Firmware"/>).
+/// setting asks for it, lends the serial port to the GUI on request, flashes
+/// the bundled firmware on request (<see cref="Firmware"/>) and reads and writes
+/// the display theme on request (<see cref="Theme"/>).
 /// Settings changes made in the GUI are picked up every tick, and so are the
 /// tray's (<see cref="RequestSettingsChange"/>).
 /// </summary>
-internal sealed class MiniService : IDisposable, IFlashHost
+internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
 {
     /// <summary>Handover window when the client does not ask for one, and the
     /// longest one granted: WireView Mini takes the port back after this even if
@@ -84,6 +85,8 @@ internal sealed class MiniService : IDisposable, IFlashHost
     // port); Done is set once the tick has run it (guarded by _settingsChanges).
     private readonly List<(Action Work, ManualResetEventSlim Done)> _tickWork = new();
     private volatile bool _daemonMode;     // wireviewd serves this PC's device (Linux)
+    // The last screen sent through RunLocalCommand: the theme's redraw returns there.
+    private volatile int _lastScreen = (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN;
 
     private (int Port, bool Lan)? _publishWanted;
     private (int Port, bool Lan)? _publishFailed;
@@ -107,6 +110,7 @@ internal sealed class MiniService : IDisposable, IFlashHost
         _localKey = MiniKey.LoadOrCreate();
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         Firmware = new FirmwareService(this);
+        Theme = new ThemeService(this);
         _panel = new ControlPanel(this);
         _daemon = new DaemonConfigService(() =>
             RunOnTick(() => _nextBindAttempt = DateTime.MinValue, TimeSpan.FromSeconds(5)));
@@ -119,6 +123,7 @@ internal sealed class MiniService : IDisposable, IFlashHost
             CommandHook = HandleMiniCommand,
             LocalSecretProvider = () => _localKey,
             ExtraRoutes = _panel.Handle,
+            ExtraRouteBodyLimit = _panel.BodyLimit,
         };
 
         _local.DataUpdated += (_, e) => OnData(_local, e.Id, e.Data, local: true);
@@ -220,6 +225,9 @@ internal sealed class MiniService : IDisposable, IFlashHost
     /// <summary>The bundled firmware flasher (the panel's Firmware section).</summary>
     public FirmwareService Firmware { get; }
 
+    /// <summary>The display theme editor's device side (the panel's Theme section).</summary>
+    public ThemeService Theme { get; }
+
     /// <summary>The local device is out of use: lent to the GUI, or closed for a
     /// firmware flash. The panel shows the last readings meanwhile.</summary>
     public bool PortSuspended => _handoverActive || _flashSuspended;
@@ -273,10 +281,16 @@ internal sealed class MiniService : IDisposable, IFlashHost
 
     /// <summary>Runs a device command on this PC's device through the same relay
     /// as a LAN command (direct serial, or hwmon through wireviewd).</summary>
-    public DaemonResult RunLocalCommand(WireViewCommand cmd) =>
-        Firmware.Running ? DaemonResult.Busy
-        : _handoverActive ? DaemonResult.NotConnected
-        : _publish.ExecuteCommand(cmd);
+    public DaemonResult RunLocalCommand(WireViewCommand cmd)
+    {
+        if (Firmware.Running) return DaemonResult.Busy;
+        if (_handoverActive) return DaemonResult.NotConnected;
+        var r = _publish.ExecuteCommand(cmd);
+        if (r == DaemonResult.Ok && cmd.Op == "screen"
+            && cmd.Cmd is >= (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN and <= (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS)
+            _lastScreen = cmd.Cmd;
+        return r;
+    }
 
     /// <summary>Clears the active faults like the app's fault banner: every active
     /// fault (keep-mask 0), the fault log kept (keep-mask 0xFFFF), then a redraw of
@@ -401,6 +415,33 @@ internal sealed class MiniService : IDisposable, IFlashHost
     void IFlashHost.ResumeAfterFlash()
     {
         lock (_gate) ResumeFlashLocked();
+    }
+
+    bool IFlashHost.SerialTransferRunning => Theme.Busy;
+
+    // ---- Theme transfers (IThemeHost) ----
+
+    bool IThemeHost.FlashRunning => Firmware.Running;
+
+    FlashTarget? IThemeHost.ThemeTarget() => ((IFlashHost)this).FlashTarget();
+
+    ConfigSnapshot? IThemeHost.ReadConfig() => _publish.ReadLocalConfig(null);
+
+    DaemonResult IThemeHost.RunCommand(WireViewCommand cmd) => RunLocalCommand(cmd);
+
+    WireViewPro2Device.SCREEN_CMD IThemeHost.LastScreen => (WireViewPro2Device.SCREEN_CMD)_lastScreen;
+
+    /// <summary>The app's RunOnSerialDeviceAsync: WireView Mini's own port when it
+    /// has the device on serial (the poll loop waits on the port lock meanwhile),
+    /// else the port borrowed from wireviewd for the transfer.</summary>
+    Task<T> IThemeHost.RunOnSerialAsync<T>(Func<IThemeDevice, CancellationToken, Task<T>> op, CancellationToken ct)
+    {
+        var dev = PreferredLocal()?.Device;
+        if (dev is WireViewPro2Device { Connected: true } pro2)
+            return op(new SerialThemeDevice(pro2), ct);
+        if (dev is HwmonDevice { Connected: true, DaemonAvailable: true } hwmon)
+            return DirectSerialSession.RunAsync(hwmon, (d, t) => op(new SerialThemeDevice(d), t), ct);
+        throw new InvalidOperationException("Theme assets require a locally connected device.");
     }
 
     private void ResumeFlashLocked()
@@ -639,11 +680,13 @@ internal sealed class MiniService : IDisposable, IFlashHost
         switch (cmd.Op)
         {
             case WireViewCommand.SuspendSerialOp:
-                // WireView Mini is flashing the device itself: the app must not
-                // open the port in the middle of it.
+                // WireView Mini is flashing the device or moving theme artwork
+                // itself: the app must not open the port in the middle of it.
                 if (!Suspend(cmd.Seconds))
                 {
-                    FileLog.Warn("serial handover refused: a firmware update is running");
+                    FileLog.Warn(Theme.Busy
+                        ? "serial handover refused: a theme transfer is running"
+                        : "serial handover refused: a firmware update is running");
                     return DaemonResult.Busy;
                 }
                 return DaemonResult.Ok;
@@ -671,13 +714,14 @@ internal sealed class MiniService : IDisposable, IFlashHost
     /// <summary>Closes the port (stops the local manager) and keeps the last
     /// readings published, marked not connected. Re-sending extends the window.
     /// Returns once the port is closed, so the client can open it right away;
-    /// false (nothing done) while WireView Mini flashes the firmware.</summary>
+    /// false (nothing done) while WireView Mini flashes the firmware or moves theme
+    /// artwork over the port.</summary>
     private bool Suspend(int seconds)
     {
         int window = seconds <= 0 ? DefaultHandoverSeconds : Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
         {
-            if (_flashUntil != null || Firmware.Running) return false;
+            if (_flashUntil != null || Firmware.Running || Theme.Busy) return false;
             bool rearm = _handoverUntil != null;
             _handoverUntil = DateTime.UtcNow.AddSeconds(window);
             _handoverActive = true;

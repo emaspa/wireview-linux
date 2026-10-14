@@ -146,6 +146,35 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 .fw-verdict.warn { color: var(--warn); }
 .fw-verdict.bad { color: var(--bad); }
 #fwConfirm { margin-top: 10px; }
+/* Collapsible cards: the header's button toggles the body (aria-expanded). */
+.card-head { flex-wrap: wrap; }
+.card-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 0; margin: 0; border: 0; background: none;
+               color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.card-toggle:hover:not(:disabled) { background: none; border: 0; color: #fff; }
+.card-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.card-toggle .chev { display: inline-block; width: 10px; color: var(--muted); font-size: 11px; transition: transform .15s; }
+.card-toggle .chev::before { content: "\25B8"; }
+.card-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.card-body[hidden] { display: none !important; }
+section > h2.card-head:has(+ .card-body[hidden]) { margin-bottom: 0; }
+.card-note { color: var(--ok); font-weight: 600; font-size: 12px; }
+.card-note.warn { color: var(--warn); }
+h3.card-head { margin: 10px 0 6px; }
+h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 650; font-size: 12px; }
+.theme-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 24px; align-items: start; }
+@media (max-width: 760px) { .theme-grid { grid-template-columns: minmax(0, 1fr); } }
+.field input[type=color] { width: 56px; height: 28px; padding: 0 2px; background: #141414; border: 1px solid #444; border-radius: 5px; cursor: pointer; }
+.field input[type=color]:disabled { opacity: .45; cursor: default; }
+.preview { position: relative; width: 100%; max-width: 640px; }
+.preview canvas { display: block; width: 100%; height: auto; aspect-ratio: 320 / 170; image-rendering: pixelated;
+                  background: #000; border: 1px solid var(--line); border-radius: 4px; }
+.preview .over { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+                 padding: 0 16px; color: #fff; background: rgba(0, 0, 0, .45); border-radius: 4px; font-size: 12.5px; }
+.file-btn { position: relative; display: inline-flex; }
+.file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.file-btn input[type=file]:disabled { cursor: default; }
+.staged { color: var(--warn); font-size: 12.5px; }
+#themeCard input:disabled, #themeCard select:disabled { opacity: .45; }
 </style>
 </head>
 <body>
@@ -217,8 +246,10 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     </div>
   </section>
 
-  <section>
-    <h2>Device configuration <span class="sub" id="cfgInfo"></span></h2>
+  <section id="cfgSection">
+    <h2 class="card-head"><button type="button" class="card-toggle" data-card="config" aria-expanded="false" aria-controls="cfgBody"><span class="chev" aria-hidden="true"></span>Device configuration</button>
+      <span class="sub" id="cfgInfo"></span></h2>
+    <div class="card-body" id="cfgBody" hidden>
     <div id="cfgMissing" class="muted">Loading the configuration...</div>
     <form id="cfg" class="hidden" autocomplete="off" onsubmit="return false">
       <div class="cols">
@@ -256,9 +287,68 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
         <span class="result" id="cfgResult"></span>
       </div>
       <p class="note">Apply changes the running configuration. Store to device memory keeps it after a power cycle.
-        Themes, colours and the background image are edited in the WireView app.</p>
+        Colors and the background image are in the Theme section below.</p>
     </form>
+    </div>
   </section>
+
+  <section id="themeSection">
+    <h2 class="card-head"><button type="button" class="card-toggle" data-card="theme" aria-expanded="false" aria-controls="themeCard"><span class="chev" aria-hidden="true"></span>Theme</button>
+      <span class="sub" id="thInfo">colors, background image and a preview of the device's main screen</span></h2>
+    <div class="card-body" id="themeCard" hidden>
+      <div class="hint hidden" id="thReason"></div>
+      <div class="theme-grid" id="thGrid">
+        <div>
+          <div class="field"><label for="thPreset">Preset</label><select id="thPreset"></select></div>
+          <div class="field"><label for="thInv">Display inversion</label><span><input type="checkbox" id="thInv"></span></div>
+          <div class="field"><label for="thPrimary">Primary text color</label><span><input type="color" id="thPrimary"></span></div>
+          <div class="field"><label for="thSecondary">Secondary text color</label><span><input type="color" id="thSecondary"></span></div>
+          <div class="field"><label for="thHighlight">Highlight color</label><span><input type="color" id="thHighlight"></span></div>
+          <div class="field"><label for="thBackground">Background color</label><span><input type="color" id="thBackground"></span></div>
+          <div class="field"><label for="thBg">Background</label><select id="thBg"></select></div>
+          <div class="field"><label for="thFan">Fan animation</label><select id="thFan"></select></div>
+          <h3>Custom background image</h3>
+          <div class="row">
+            <span class="file-btn"><button id="thPickBtn" tabindex="-1">Choose image...</button>
+              <input type="file" id="thPick" accept="image/*" aria-label="Choose a background image"></span>
+            <button id="thClear" class="hidden">Clear staged background</button>
+            <span class="staged" id="thStaged"></span>
+          </div>
+          <div class="field"><label for="thFit">Import fit</label><select id="thFit">
+            <option value="0">Stretch</option><option value="1">Fit (uniform)</option><option value="2" selected>Fill (uniform to fill)</option></select></div>
+          <div class="field"><label for="thScale">Import scale</label><input type="number" id="thScale" min="0.2" max="3" step="0.1" value="1" style="max-width:110px"></div>
+          <div class="field"><label for="thOx">Offset X</label><input type="number" id="thOx" min="-320" max="320" step="1" value="0" style="max-width:110px"></div>
+          <div class="field"><label for="thOy">Offset Y</label><input type="number" id="thOy" min="-170" max="170" step="1" value="0" style="max-width:110px"></div>
+        </div>
+        <div>
+          <h3 style="margin-top:4px">Preview</h3>
+          <div class="preview">
+            <canvas id="thCanvas" width="320" height="170" aria-label="Preview of the device's main screen"></canvas>
+            <div class="over hidden" id="thOver"></div>
+          </div>
+          <p class="note" id="thArtNote"></p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="primary" id="thApply" disabled>Apply</button>
+        <button id="thReload" title="Read the theme and the artwork the device has now">Reload from device</button>
+        <button id="thSave">Save theme file...</button>
+        <span class="file-btn"><button id="thLoadBtn" tabindex="-1">Load theme file...</button>
+          <input type="file" id="thLoad" accept=".wv2t,application/json" aria-label="Load a theme file (.wv2t)"></span>
+        <button class="danger" id="thRestore" title="Write the factory artwork back to the selected background slot and its fan frames">Restore factory artwork</button>
+      </div>
+      <div id="thRun" class="hidden">
+        <div class="bar"><i id="thBar"></i></div>
+        <div id="thState"></div>
+      </div>
+      <div class="result pre" id="thResult"></div>
+      <p class="note">Apply writes the colors, inversion and slots to the device like the configuration's Apply
+        (Store to device memory, under Device configuration, keeps them after a power cycle). A custom background image is scaled here, in the browser, and written
+        to the device's flash with matching highlight-tinted fan frames into the selected slot; the transfer takes a minute
+        or two. Theme files (.wv2t) are the WireView app's and the official Windows app's.</p>
+    </div>
+  </section>
+
 
   <div class="cols">
     <section>
@@ -289,6 +379,8 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       </div>
       <div id="daemonBox" class="hidden">
         <p class="daemon-state">On this PC, LAN publishing is done by wireviewd: <b id="dState">checking</b></p>
+        <h3 class="card-head"><button type="button" class="card-toggle" data-card="daemon" aria-expanded="false" aria-controls="dBody"><span class="chev" aria-hidden="true"></span>wireviewd settings</button></h3>
+        <div class="card-body" id="dBody" hidden>
         <div id="dLoading" class="muted">Reading the daemon settings...</div>
         <div id="dHint" class="hint hidden"></div>
         <div class="row hidden" id="dRetryRow"><button id="dRetry">Try again</button></div>
@@ -315,6 +407,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
           <p class="note">Saved to /etc/wireview/config with wireviewctl; wireviewd applies it without a restart.
             Other hosts sign their writes to this PC with the secret.</p>
         </form>
+        </div>
       </div>
       <h3>Remote hosts to watch</h3>
       <ul class="hosts" id="hosts"></ul>
@@ -337,7 +430,9 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   </div>
 
   <section id="fwSection">
-    <h2>Firmware <span class="sub">flash the firmware shipped with WireView Mini</span></h2>
+    <h2 class="card-head"><button type="button" class="card-toggle" data-card="firmware" aria-expanded="false" aria-controls="fwBody"><span class="chev" aria-hidden="true"></span>Firmware</button>
+      <span class="sub">flash the firmware shipped with WireView Mini</span> <span class="card-note" id="fwNote"></span></h2>
+    <div class="card-body" id="fwBody" hidden>
     <dl class="kv">
       <dt>Device</dt><dd id="fwDevice">-</dd>
       <dt>Bundled</dt><dd id="fwBundled">-</dd>
@@ -363,13 +458,14 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     </div>
     <div class="result pre" id="fwResult"></div>
     <p class="note" id="fwHint"></p>
+    </div>
   </section>
 
   <section>
     <h2>Tools</h2>
     <div class="row" id="appRow" hidden>
       <button id="openApp">Launch WireView Desktop</button>
-      <span class="muted">for the graphs, themes and the device log</span>
+      <span class="muted">for the graphs and the device log</span>
       <span class="result" id="appResult"></span>
     </div>
     <dl class="kv" style="margin-top:10px">
@@ -380,6 +476,110 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   </section>
 </main>
 
+<script>
+"use strict";
+// The theme editor's raster work, the app's (DeviceViewModel.Theme.cs) in canvas
+// terms. Device images are RGB565, little-endian, stored column-major and
+// horizontally mirrored: image pixel (x, y) is at ((W - 1 - x) * H + y) * 2.
+const WVPixels = (function () {
+  const BG_W = 320, BG_H = 170, FAN = 73, FAN_X = 239, FAN_Y = 47;
+  // C#'s Math.Round: halves go to the even neighbour.
+  function roundEven(v) {
+    const f = Math.floor(v), d = v - f;
+    return d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1);
+  }
+  // RGBA (ImageData.data order) to device RGB565.
+  function encode(rgba, w, h) {
+    const out = new Uint8Array(w * h * 2);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const s = (y * w + x) * 4;
+        const v = ((rgba[s] >> 3) << 11) | ((rgba[s + 1] >> 2) << 5) | (rgba[s + 2] >> 3);
+        const d = ((w - 1 - x) * h + y) * 2;
+        out[d] = v & 0xFF; out[d + 1] = v >> 8;
+      }
+    }
+    return out;
+  }
+  // Device RGB565 to opaque RGBA, the app's Rgb565ToImage (5 and 6 bits widened
+  // by repeating the top bits).
+  function decode(bytes, w, h) {
+    const out = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const s = (x * h + y) * 2;
+        const v = bytes[s] | (bytes[s + 1] << 8);
+        const r5 = (v >> 11) & 0x1F, g6 = (v >> 5) & 0x3F, b5 = v & 0x1F;
+        const d = (y * w + (w - 1 - x)) * 4;
+        out[d] = (r5 << 3) | (r5 >> 2); out[d + 1] = (g6 << 2) | (g6 >> 4); out[d + 2] = (b5 << 3) | (b5 >> 2); out[d + 3] = 255;
+      }
+    }
+    return out;
+  }
+  function toBase64(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function fromBase64(text) {
+    const s = atob(text), out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+  function solid(w, h, rgb) {
+    const out = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < out.length; i += 4) { out[i] = rgb[0]; out[i + 1] = rgb[1]; out[i + 2] = rgb[2]; out[i + 3] = 255; }
+    return out;
+  }
+  // The app's LoadImageFileAsRgb565: the image scaled by the fit mode (0 stretch,
+  // 1 uniform, 2 uniform to fill) and scale, centred plus the offsets, over black;
+  // returns the RGB565 bytes and the RGBA they decode to (what the app previews).
+  function importImage(source, srcW, srcH, fit, scale, ox, oy) {
+    const c = document.createElement("canvas");
+    c.width = BG_W; c.height = BG_H;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.fillStyle = "#000"; g.fillRect(0, 0, BG_W, BG_H);
+    if (srcW > 0 && srcH > 0) {
+      const sx = BG_W / srcW, sy = BG_H / srcH;
+      let fx, fy;
+      if (fit === 1) fx = fy = Math.min(sx, sy) * scale;
+      else if (fit === 2) fx = fy = Math.max(sx, sy) * scale;
+      else { fx = sx * scale; fy = sy * scale; }
+      const dw = Math.max(1, roundEven(srcW * fx)), dh = Math.max(1, roundEven(srcH * fy));
+      const x0 = roundEven((BG_W - dw) / 2) + ox, y0 = roundEven((BG_H - dh) / 2) + oy;
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(source, x0, y0, dw, dh);
+    }
+    const rgb565 = encode(g.getImageData(0, 0, BG_W, BG_H).data, BG_W, BG_H);
+    return { rgb565, rgba: decode(rgb565, BG_W, BG_H) };
+  }
+  // The app's CreateFanPreviewFramesFromBackground: the 73x73 crop of the
+  // background under the fan window with the highlight-tinted fan template
+  // blended on top. The app reads the template premultiplied (Skia), so the
+  // tint is computed on premultiplied values, as here.
+  function fanFrames(bgRgba, highlight, templates) {
+    return templates.map(t => {
+      const out = new Uint8ClampedArray(FAN * FAN * 4);
+      for (let y = 0; y < FAN; y++) {
+        for (let x = 0; x < FAN; x++) {
+          const s = ((FAN_Y + y) * BG_W + FAN_X + x) * 4, d = (y * FAN + x) * 4;
+          out[d] = bgRgba[s]; out[d + 1] = bgRgba[s + 1]; out[d + 2] = bgRgba[s + 2]; out[d + 3] = 255;
+          const a = t[d + 3];
+          if (a === 0) continue;
+          for (let k = 0; k < 3; k++) {
+            const pre = Math.round(t[d + k] * a / 255);
+            const tint = Math.floor(highlight[k] * pre / 255);
+            out[d + k] = Math.floor((tint * a + out[d + k] * (255 - a)) / 255);
+          }
+        }
+      }
+      return out;
+    });
+  }
+  return { BG_W, BG_H, FAN, FAN_X, FAN_Y, roundEven, encode, decode, toBase64, fromBase64, solid, importImage, fanFrames };
+})();
+</script>
 <script>
 "use strict";
 (function () {
@@ -514,6 +714,8 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     $("appRow").hidden = !s.gui.available;
     $("openApp").title = s.gui.location || "";
     renderFlash(s);
+    renderFlashNote(s);
+    renderThemeStatus(s);
     refreshButtons();
   }
 
@@ -529,6 +731,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     document.querySelectorAll("[data-screen]").forEach(b => b.disabled = busy > 0 || !usable);
     ["reload", "store", "load", "reset"].forEach(id => $(id).disabled = busy > 0 || !usable);
     $("apply").disabled = busy > 0 || !usable || !cfg || editedFields().length === 0;
+    refreshTheme();
   }
 
   async function poll() {
@@ -822,7 +1025,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     $("miniPub").classList.toggle("hidden", on);
     $("daemonBox").classList.toggle("hidden", !on);
     // The copy happens on the daemon form's Save: shown with the form only.
-    const form = on && !$("dForm").classList.contains("hidden");
+    const form = on && cardIsOpen("daemon") && !$("dForm").classList.contains("hidden");
     $("sameSecretRow").classList.toggle("hidden", !form);
     $("sameSecretNote").classList.toggle("hidden", !form);
     if (!on) return;
@@ -830,7 +1033,8 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     if (d.publishing === true) { st.textContent = "answering on port " + d.port; st.className = "on"; }
     else if (d.publishing === false) { st.textContent = "off"; st.className = "off"; }
     else { st.textContent = "checking"; st.className = ""; }
-    if (!daemonLoaded) { daemonLoaded = true; loadDaemon(); }
+    // Read (wireviewctl) once the card is open.
+    if (!daemonLoaded && cardIsOpen("daemon")) { daemonLoaded = true; loadDaemon(); }
   }
 
   function showDaemonHint(text) {
@@ -1026,6 +1230,493 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     }
   });
 
+  // ---- Theme ----
+
+  // The device side reads its artwork only when asked: on opening this card, on
+  // Reload, for a slot not seen yet, and after an upload. Never on the status poll.
+  const P = WVPixels;
+  const TH_COLORS = [["primary", "thPrimary", "primaryColor"], ["secondary", "thSecondary", "secondaryColor"],
+                     ["highlight", "thHighlight", "highlightColor"], ["background", "thBackground", "backgroundColor"]];
+  const BG_NONE = 255;
+  let th = null;             // last GET /api/theme answer
+  let thEdit = null;         // the editor's values
+  let thArt = { bg: {}, fan: {} }; // device artwork by slot: bg[id] = RGBA or null, fan[id] = [f1, f2] (RGB565)
+  let thStaged = null;       // { rgb565, rgba, fans: [f1, f2] | null, file: bool, name }
+  let thSource = null;       // the chosen image (ImageBitmap) and its size, for re-fitting
+  let thTemplates = null;    // the app's fan templates (RGBA)
+  let thFrame = 0, thTimer = null, thLoading = false, thArtLoading = false;
+  let thWasRunning = false, thKey = null;
+
+  function hexRgb(hex) { const v = parseInt(hex.slice(-6), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+  function invRgb(c) { return [255 - c[0], 255 - c[1], 255 - c[2]]; }
+  function css(c) { return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")"; }
+  const fanFor = (bg) => bg === 1 ? 100 : bg === 2 ? 117 : 152; // DeviceConfigEditor.FanBitmapFor
+
+  function themeRunning() { return !!(status && status.theme && status.theme.running); }
+
+  // Why the editor cannot write now, or "" when it can.
+  function themeReason() {
+    const d = status && status.device;
+    if (flashRunning()) return "A firmware update is running.";
+    if (d && d.serialSuspended) return "The serial port is lent to the WireView app. Try again when it hands the port back.";
+    if (!d || !d.connected) return "Not connected.";
+    if (th && th.unavailable) return th.unavailable;
+    if (!d.canWrite && !themeRunning()) return "The device is reached through hwmon without wireviewd, which is read only. Start wireviewd and try again.";
+    return "";
+  }
+
+  function loadTemplates() {
+    if (thTemplates) return Promise.resolve(thTemplates);
+    const one = (src) => new Promise((ok, fail) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas"); c.width = P.FAN; c.height = P.FAN;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0);
+        ok(g.getImageData(0, 0, P.FAN, P.FAN).data);
+      };
+      img.onerror = () => fail(new Error("the fan templates cannot be loaded"));
+      img.src = src;
+    });
+    return Promise.all([one("/panel/fan1.png"), one("/panel/fan2.png")]).then(t => (thTemplates = t));
+  }
+
+  function fillSelect(id, list, value) {
+    const known = list.some(o => o.value === value);
+    const opts = list.map(o => el("option", { value: o.value, text: o.label }));
+    if (!known && value !== undefined && value !== null) opts.push(el("option", { value, text: "Unknown (" + value + ")" }));
+    $(id).replaceChildren(...opts);
+    $(id).value = String(value);
+  }
+
+  function setEditor(v) {
+    thEdit = {
+      alpha: {}, inversion: !!v.displayInversion, bg: v.backgroundBitmapId, fan: v.fanBitmapId,
+    };
+    for (const [k, id, key] of TH_COLORS) {
+      const t = v[key] || "#000000";
+      thEdit[k] = "#" + t.slice(-6);
+      thEdit.alpha[k] = t.length === 9 ? t.slice(1, 3) : "";
+      $(id).value = thEdit[k];
+    }
+    $("thInv").checked = thEdit.inversion;
+    fillSelect("thBg", th.backgrounds, thEdit.bg);
+    fillSelect("thFan", th.fans, thEdit.fan);
+    syncPreset();
+  }
+
+  // The app's preset detection: the first preset that matches every field, else Custom.
+  function syncPreset() {
+    if (!th || !thEdit) return;
+    const now = editValues();
+    const hit = th.presets.find(p => ["primaryColor", "secondaryColor", "highlightColor", "backgroundColor"]
+      .every(k => p.values[k].toLowerCase() === now[k].toLowerCase())
+      && p.values.displayInversion === now.displayInversion
+      && p.values.backgroundBitmapId === now.backgroundBitmapId && p.values.fanBitmapId === now.fanBitmapId);
+    $("thPreset").value = hit ? hit.name : "Custom";
+  }
+
+  function editValues() {
+    const v = { displayInversion: thEdit.inversion, backgroundBitmapId: thEdit.bg, fanBitmapId: thEdit.fan };
+    for (const [k, , key] of TH_COLORS) v[key] = "#" + (thEdit.alpha[k] || "") + thEdit[k].slice(1);
+    return v;
+  }
+
+  function edited() {
+    if (!th || !th.values || !thEdit) return false;
+    const now = editValues(), was = th.values;
+    return !!thStaged || Object.keys(now).some(k => String(now[k]).toLowerCase() !== String(was[k]).toLowerCase());
+  }
+
+  async function loadTheme(artwork, message) {
+    if (thLoading) return;
+    thLoading = true;
+    if (artwork) { thArtLoading = true; renderThemePreview(); }
+    refreshTheme();
+    try {
+      const r = await api("GET", "/api/theme" + (artwork ? "" : "?artwork=0"));
+      th = r;
+      if (artwork) thArt = { bg: {}, fan: {} };
+      takeArtwork(r);
+      if (!$("thPreset").options.length || $("thPreset").dataset.filled !== "1") {
+        $("thPreset").replaceChildren(...r.presets.map(p => el("option", { value: p.name, text: p.label })),
+          el("option", { value: "Custom", text: "Custom" }));
+        $("thPreset").dataset.filled = "1";
+      }
+      if (r.values) setEditor(r.values);
+      else { thEdit = null; thStaged = null; thSource = null; }
+      $("thInfo").textContent = r.uiV2Supported ? "config V3, " + (r.preset === "Custom" ? "custom theme" : (r.presets.find(p => p.name === r.preset) || {}).label || r.preset)
+        : "colors, background image and a preview of the device's main screen";
+      if (message) say("thResult", true, message);
+      if (r.artworkError) say("thResult", false, r.artworkError);
+    } catch (e) {
+      say("thResult", false, "The theme cannot be read: " + e.message);
+    } finally {
+      thLoading = false;
+      thArtLoading = false;
+      refreshTheme();
+      renderThemePreview();
+    }
+  }
+
+  function takeArtwork(r) {
+    const a = r.artwork;
+    if (!a) return;
+    thArt.bg[a.backgroundSlot] = a.background ? P.decode(P.fromBase64(a.background), a.width, a.height) : null;
+    if (a.fanFrame1 && a.fanFrame2) thArt.fan[a.fanSlot] = [P.fromBase64(a.fanFrame1), P.fromBase64(a.fanFrame2)];
+  }
+
+  // A slot the editor switched to whose artwork has not been read yet.
+  async function loadSlotArtwork() {
+    if (!thEdit || thArtLoading || themeReason()) return;
+    const needBg = thEdit.bg !== BG_NONE && !(thEdit.bg in thArt.bg) && (thEdit.bg === 1 || thEdit.bg === 2);
+    const needFan = !(thEdit.fan in thArt.fan) && [100, 117, 152].includes(thEdit.fan);
+    if (!needBg && !needFan) return;
+    thArtLoading = true;
+    renderThemePreview();
+    try {
+      const r = await api("GET", "/api/theme?bg=" + thEdit.bg + "&fan=" + thEdit.fan);
+      takeArtwork(r);
+      if (r.artworkError) say("thResult", false, r.artworkError);
+    } catch (e) {
+      say("thResult", false, "The artwork cannot be read: " + e.message);
+    } finally {
+      thArtLoading = false;
+      renderThemePreview();
+    }
+  }
+
+  // The background the device would show: the staged image, the solid color
+  // for slot none, else the slot's artwork when read (null otherwise).
+  function previewBackground() {
+    if (thStaged) return thStaged.rgba;
+    if (thEdit.bg === BG_NONE) return P.solid(P.BG_W, P.BG_H, hexRgb(thEdit.background));
+    return thArt.bg[thEdit.bg] || null;
+  }
+
+  // The fan frames: a theme file's own, else the tinted frames that go with a
+  // staged image (what Apply uploads), else the device's frames for the slot,
+  // else the app's tinted template over the background.
+  function previewFans() {
+    if (thStaged && thStaged.fans) return thStaged.fans.map(f => P.decode(f, P.FAN, P.FAN));
+    if (!thStaged && thArt.fan[thEdit.fan]) return thArt.fan[thEdit.fan].map(f => P.decode(f, P.FAN, P.FAN));
+    if (!thTemplates) return null;
+    const bg = previewBackground() || P.solid(P.BG_W, P.BG_H, hexRgb(thEdit.background));
+    return P.fanFrames(bg, hexRgb(thEdit.highlight), thTemplates);
+  }
+
+  // The app's ComposeMainScreenPreview: background, the fan frame at (239, 47),
+  // a mock of the firmware's main screen chrome in the theme colors, and the
+  // whole picture inverted for display inversion.
+  let thFans = null, thLayer = null;
+  function renderThemePreview(keepFans) {
+    const cv = $("thCanvas"), g = cv.getContext("2d", { willReadFrequently: true });
+    const over = $("thOver");
+    if (!thEdit) {
+      g.fillStyle = "#000"; g.fillRect(0, 0, cv.width, cv.height);
+      over.textContent = thLoading ? "Reading theme from device..." : "";
+      over.classList.toggle("hidden", !thLoading);
+      return;
+    }
+    if (!keepFans || !thFans) thFans = previewFans();
+    const bgc = hexRgb(thEdit.background), pri = hexRgb(thEdit.primary), sec = hexRgb(thEdit.secondary), hi = hexRgb(thEdit.highlight);
+    g.fillStyle = css(bgc); g.fillRect(0, 0, P.BG_W, P.BG_H);
+    const bg = previewBackground();
+    if (!thLayer) { thLayer = document.createElement("canvas"); thLayer.width = P.BG_W; thLayer.height = P.BG_H; }
+    const layer = thLayer, lg = layer.getContext("2d");
+    if (bg) { lg.putImageData(new ImageData(new Uint8ClampedArray(bg), P.BG_W, P.BG_H), 0, 0); g.drawImage(layer, 0, 0); }
+    if (thFans) {
+      lg.clearRect(0, 0, P.BG_W, P.BG_H);
+      lg.putImageData(new ImageData(new Uint8ClampedArray(thFans[thFrame % 2]), P.FAN, P.FAN), 0, 0);
+      g.drawImage(layer, 0, 0, P.FAN, P.FAN, P.FAN_X, P.FAN_Y, P.FAN, P.FAN);
+    }
+    g.fillStyle = css(bgc); g.fillRect(182, 17, 195, 26);
+    g.strokeStyle = css(hi); g.lineWidth = 2; g.strokeRect(182, 17, 195, 26);
+    g.strokeStyle = "rgba(" + hi.join(",") + "," + (46 / 51) + ")";
+    g.beginPath(); g.moveTo(15, 16); g.lineTo(134, 16); g.moveTo(15, 104); g.lineTo(134, 104); g.stroke();
+    g.textBaseline = "top"; g.fillStyle = css(pri);
+    const text = (t, x, y, size) => { g.font = size + "px Inter, system-ui, sans-serif"; g.fillText(t, x, y); };
+    text("TEMP", 186, 20, 13); text("SENSE", 250, 20, 13); text("POWER", 126, 115, 26); text("FAN", 243, 126, 13);
+    for (let i = 0; i < 6; i++) {
+      const x = 15 + i * 20;
+      g.fillStyle = css(sec); g.fillRect(x, 20, 10, 80);
+      g.fillStyle = css(hi); g.fillRect(x, 70, 10, 30);
+    }
+    g.fillStyle = css(sec); g.fillRect(15, 120, 110, 30);
+    g.fillStyle = css(hi); g.fillRect(15, 120, 20, 30);
+    if (thEdit.inversion) {
+      const img = g.getImageData(0, 0, P.BG_W, P.BG_H), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
+      g.putImageData(img, 0, 0);
+    }
+    const missing = !thStaged && thEdit.bg !== BG_NONE && !thArt.bg[thEdit.bg];
+    over.textContent = thArtLoading ? "Reading theme from device..." : "";
+    over.classList.toggle("hidden", !thArtLoading);
+    $("thArtNote").textContent = thStaged ? "Staged background (" + thStaged.name + "): Apply writes it to the " +
+        ((th.backgrounds.find(b => b.value === thEdit.bg) || {}).label || "selected") + " slot."
+      : missing && !thArtLoading ? "This slot's artwork has not been read from the device: Reload from device shows it."
+      : "As the device would show the main screen (the readings are placeholders).";
+    $("thStaged").textContent = thStaged ? "staged: " + thStaged.name : "";
+    $("thClear").classList.toggle("hidden", !thStaged);
+  }
+
+  // The fan animation, only while the card is open and the page visible.
+  function animate() {
+    const on = cardIsOpen("theme") && !document.hidden && !!thEdit;
+    if (on && !thTimer) thTimer = setInterval(() => { thFrame++; renderThemePreview(true); }, 100);
+    if (!on && thTimer) { clearInterval(thTimer); thTimer = null; }
+  }
+
+  function refreshTheme() {
+    const reason = themeReason();
+    const running = themeRunning();
+    const can = !reason && !running && !thLoading && !!thEdit;
+    $("thReason").textContent = running ? "" : reason;
+    $("thReason").classList.toggle("hidden", running || !reason);
+    const inputs = ["thPreset", "thInv", "thPrimary", "thSecondary", "thHighlight", "thBackground", "thBg", "thFan",
+                    "thFit", "thScale", "thOx", "thOy", "thClear", "thSave", "thLoad", "thLoadBtn"];
+    const editable = !!thEdit && !running && !!(th && th.uiV2Supported);
+    // Nothing to edit (no device, older firmware): the reason and Reload only.
+    $("thGrid").classList.toggle("hidden", !thEdit && !thLoading);
+    [$("thApply"), $("thSave"), $("thRestore"), $("thLoadBtn").parentElement]
+      .forEach(e => e.classList.toggle("hidden", !thEdit && !thLoading));
+    inputs.forEach(id => $(id).disabled = !editable);
+    $("thPick").disabled = $("thPickBtn").disabled = !editable || thEdit.bg === BG_NONE;
+    $("thApply").disabled = !can || !edited();
+    $("thReload").disabled = running || thLoading || !!(reason && reason !== (th && th.unavailable));
+    $("thRestore").disabled = !can || thEdit.bg === BG_NONE || !(th && th.factoryArtwork);
+    $("thRestore").title = th && !th.factoryArtwork ? "The factory artwork image (ext_flash.bin) is not next to WireView Mini."
+      : "Write the factory artwork back to the selected background slot and its fan frames";
+  }
+
+  // The status poll: the upload's progress, the end of an upload, a device change.
+  function renderThemeStatus(s) {
+    const t = s.theme, running = !!(t && t.running);
+    $("thRun").classList.toggle("hidden", !running);
+    if (running) {
+      $("thBar").style.width = Math.round((t.progress || 0) * 100) + "%";
+      $("thState").textContent = (t.message || "") + "  " + Math.round((t.progress || 0) * 100) + " %";
+      $("thResult").textContent = "";
+    }
+    if (thWasRunning && !running) {
+      thWasRunning = false;
+      // The final line comes with the theme. Done: read the theme and the artwork
+      // the device has now. Failed: keep the edits and the staged image for a retry.
+      api("GET", "/api/theme?artwork=0").then(r => {
+        const u = r.upload || {};
+        const line = $("thResult");
+        line.className = "result pre " + (u.state === "Done" ? "ok" : "err");
+        line.textContent = u.message || "";
+        if (u.state !== "Done") { th = Object.assign(th || {}, { upload: r.upload, factoryArtwork: r.factoryArtwork }); refreshTheme(); return; }
+        thStaged = null; thSource = null; $("thPick").value = "";
+        return loadTheme(true);
+      }).catch(e => say("thResult", false, e.message));
+    }
+    if (running) thWasRunning = true;
+    const d = s.device;
+    const key = [d ? d.uniqueId : "", d ? d.connected : "", d ? d.canWrite : "", d ? d.serialSuspended : "", flashRunning()].join("|");
+    if (key !== thKey) {
+      const first = thKey === null;
+      thKey = key;
+      if (!first && cardIsOpen("theme") && !running && !thLoading && !themeReason())
+        loadTheme(Object.keys(thArt.bg).length === 0 && Object.keys(thArt.fan).length === 0);
+    }
+    refreshTheme();
+  }
+
+  function onThemeEdit() {
+    syncPreset();
+    renderThemePreview();
+    refreshTheme();
+  }
+
+  // Opening the card is what reads the theme and its artwork from the device.
+  function onThemeCard(open) {
+    animate();
+    if (!open) return;
+    // The templates tint the fan when the device's own frames are not shown.
+    loadTemplates().then(() => renderThemePreview()).catch(() => null);
+    if (!th && !thLoading) loadTheme(true);
+    else renderThemePreview();
+  }
+  document.addEventListener("visibilitychange", animate);
+
+  for (const [k, id] of TH_COLORS) {
+    $(id).addEventListener("input", () => {
+      thEdit[k] = $(id).value; thEdit.alpha[k] = "";
+      // The tint follows the highlight: the staged fan frames are regenerated on Apply.
+      onThemeEdit();
+    });
+  }
+  $("thInv").addEventListener("change", () => { thEdit.inversion = $("thInv").checked; onThemeEdit(); });
+  $("thBg").addEventListener("change", () => {
+    thEdit.bg = Number($("thBg").value);
+    // As the app: the fan animation follows the background.
+    thEdit.fan = fanFor(thEdit.bg);
+    fillSelect("thFan", th.fans, thEdit.fan);
+    if (thEdit.bg === BG_NONE && thStaged && !thStaged.file) { thStaged = null; thSource = null; $("thPick").value = ""; }
+    onThemeEdit();
+    loadSlotArtwork();
+  });
+  $("thFan").addEventListener("change", () => { thEdit.fan = Number($("thFan").value); onThemeEdit(); loadSlotArtwork(); });
+  $("thPreset").addEventListener("change", () => {
+    const p = th.presets.find(x => x.name === $("thPreset").value);
+    if (!p) return; // Custom: keep the values
+    setEditor(p.values);
+    onThemeEdit();
+    loadSlotArtwork();
+  });
+
+  function restage() {
+    if (!thSource) return;
+    const fit = Number($("thFit").value);
+    const scale = Math.min(5, Math.max(0.1, Number($("thScale").value) || 1));
+    const ox = Math.round(Number($("thOx").value) || 0), oy = Math.round(Number($("thOy").value) || 0);
+    const r = P.importImage(thSource.image, thSource.width, thSource.height, fit, scale, ox, oy);
+    thStaged = { rgb565: r.rgb565, rgba: r.rgba, fans: null, file: false, name: thSource.name };
+    onThemeEdit();
+  }
+  ["thFit", "thScale", "thOx", "thOy"].forEach(id => $(id).addEventListener("input", restage));
+  $("thPick").addEventListener("change", async () => {
+    const f = $("thPick").files && $("thPick").files[0];
+    if (!f) return;
+    try {
+      // createImageBitmap reads the file without a blob: URL (the page's CSP allows none).
+      const image = await createImageBitmap(f);
+      thSource = { image, width: image.width, height: image.height, name: f.name };
+      await loadTemplates().catch(() => null);
+      restage();
+      say("thResult", true, "Background staged (press Apply to upload).");
+    } catch (e) {
+      say("thResult", false, "Background import failed: " + (e && e.message ? e.message : "the file is not an image this browser can read"));
+    }
+  });
+  $("thClear").addEventListener("click", () => { thStaged = null; thSource = null; $("thPick").value = ""; onThemeEdit(); });
+
+  function editBody(withFans) {
+    const body = editValues();
+    if (thStaged) {
+      body.background = P.toBase64(thStaged.rgb565);
+      if (withFans) {
+        const frames = thStaged.fans || P.fanFrames(thStaged.rgba, hexRgb(thEdit.highlight), thTemplates).map(f => P.encode(f, P.FAN, P.FAN));
+        body.fanFrame1 = P.toBase64(frames[0]);
+        body.fanFrame2 = P.toBase64(frames[1]);
+      }
+    } else if (!withFans && thEdit.bg !== BG_NONE && thArt.bg[thEdit.bg]) {
+      // Save theme file: the slot's artwork as read, like the app's save.
+      body.background = P.toBase64(P.encode(thArt.bg[thEdit.bg], P.BG_W, P.BG_H));
+    }
+    return body;
+  }
+
+  $("thApply").addEventListener("click", () => run("thResult", async () => {
+    if (thStaged && !thStaged.fans) await loadTemplates();
+    const r = await fetchTheme("POST", "/api/theme", JSON.stringify(editBody(true)));
+    if (r.status === 202) {
+      if (status) { status.theme = r.data.upload; renderThemeStatus(status); }
+      return r.data.message;
+    }
+    th = r.data;
+    if (th.values) setEditor(th.values);
+    return th.message || "Theme applied.";
+  }, [$("thApply")]));
+
+  $("thReload").addEventListener("click", () => {
+    if (edited() && !confirm("Discard the theme changes on this page and read the device's theme?")) return;
+    thStaged = null; thSource = null; $("thPick").value = "";
+    loadTheme(true, "Theme read from the device.");
+  });
+
+  $("thSave").addEventListener("click", () => run("thResult", async () => {
+    const res = await fetch("/api/theme/file/export", { method: "POST", cache: "no-store",
+      headers: { "X-Mini-Token": token, "Content-Type": "application/json" }, body: JSON.stringify(editBody(false)) });
+    if (!res.ok) { let m = "HTTP " + res.status; try { m = (await res.json()).error || m; } catch (e) { } throw new Error(m); }
+    const blob = await res.blob();
+    const a = el("a", { href: URL.createObjectURL(blob), download: "wireview-theme.wv2t" });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    return "Theme saved: wireview-theme.wv2t";
+  }, [$("thSave")]));
+
+  $("thLoad").addEventListener("change", async () => {
+    const f = $("thLoad").files && $("thLoad").files[0];
+    $("thLoad").value = "";
+    if (!f) return;
+    await run("thResult", async () => {
+      if (f.size > 256 * 1024) throw new Error("Theme load failed: the file is larger than a theme file can be.");
+      const r = await fetchTheme("POST", "/api/theme/file", await f.text());
+      const v = r.data;
+      setEditor(v.values);
+      thSource = null;
+      $("thPick").value = "";
+      thStaged = v.background ? {
+        rgb565: P.fromBase64(v.background), rgba: P.decode(P.fromBase64(v.background), P.BG_W, P.BG_H),
+        fans: v.fanFrame1 && v.fanFrame2 ? [P.fromBase64(v.fanFrame1), P.fromBase64(v.fanFrame2)] : null,
+        file: true, name: f.name,
+      } : null;
+      if (thStaged) await loadTemplates().catch(() => null);
+      onThemeEdit();
+      loadSlotArtwork();
+      return v.message;
+    });
+  });
+
+  $("thRestore").addEventListener("click", () => {
+    if (!confirm("This will overwrite the selected background slot and its matching fan frames with factory defaults. Continue?")) return;
+    run("thResult", async () => {
+      const r = await fetchTheme("POST", "/api/theme/restore-defaults", JSON.stringify({ backgroundBitmapId: thEdit.bg }));
+      if (status) { status.theme = r.data.upload; renderThemeStatus(status); }
+      return r.data.message;
+    }, [$("thRestore")]);
+  });
+
+  // A theme request with a prepared body (the images are large): {status, data}.
+  async function fetchTheme(method, path, body) {
+    let res;
+    try {
+      res = await fetch(path, { method, cache: "no-store", body,
+        headers: { "X-Mini-Token": token, "Content-Type": "application/json" } });
+    } catch (e) { throw new Error("WireView Mini does not answer"); }
+    let data = null;
+    try { data = await res.json(); } catch (e) { }
+    if (!res.ok) throw new Error((data && data.error) || (res.status === 413 ? "the request is too large" : "HTTP " + res.status));
+    return { status: res.status, data };
+  }
+
+  // ---- Collapsible cards ----
+
+  // Closed by default; each card's state is remembered in this browser
+  // (localStorage, when there is one: the page works without it).
+  const CARD_KEY = "wvmini.card.";
+  function cardIsOpen(name) {
+    const b = document.querySelector('.card-toggle[data-card="' + name + '"]');
+    return !!b && b.getAttribute("aria-expanded") === "true";
+  }
+  function rememberedOpen(name) {
+    try { return localStorage.getItem(CARD_KEY + name) === "1"; } catch (e) { return false; }
+  }
+  const cardOpened = {
+    config: () => { if (!cfg) loadConfig(); },
+    theme: (open) => onThemeCard(open),
+    firmware: () => { renderFirmware(); },
+    daemon: () => { if (status) renderDaemon(status.daemon); },
+  };
+  function setCard(b, open, remember) {
+    const name = b.dataset.card;
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    $(b.getAttribute("aria-controls")).hidden = !open;
+    if (remember) { try { localStorage.setItem(CARD_KEY + name, open ? "1" : "0"); } catch (e) { } }
+    const f = cardOpened[name];
+    if (f && (open || name === "theme")) f(open);
+  }
+  // A short state line in the Firmware header, so a closed card still shows it.
+  function renderFlashNote(s) {
+    const f = s.firmware || {}, n = $("fwNote");
+    n.className = "card-note" + (f.running ? " warn" : "");
+    n.textContent = f.running ? "update running, " + Math.round((f.progress || 0) * 100) + " %"
+      : f.updateAvailable ? "update available" : "";
+  }
+
   // ---- Start ----
 
   if (!token) {
@@ -1033,8 +1724,11 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     $("cfgMissing").textContent = "Not available without the access token.";
     return;
   }
+  document.querySelectorAll(".card-toggle").forEach(b => {
+    b.addEventListener("click", () => setCard(b, b.getAttribute("aria-expanded") !== "true", true));
+    if (rememberedOpen(b.dataset.card)) setCard(b, true, false);
+  });
   poll();
-  loadConfig();
 })();
 </script>
 </body>

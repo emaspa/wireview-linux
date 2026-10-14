@@ -58,6 +58,10 @@ internal interface IFlashHost
 
     /// <summary>Ends <see cref="SuspendForFlash"/>: device discovery resumes.</summary>
     void ResumeAfterFlash();
+
+    /// <summary>WireView Mini is moving theme artwork over the serial port
+    /// (<see cref="ThemeService"/>): no flash may start meanwhile.</summary>
+    bool SerialTransferRunning => false;
 }
 
 /// <summary>The steps of a flash, in order; <see cref="Done"/> and
@@ -318,6 +322,7 @@ internal sealed class FirmwareService
         FlashVerdict? verdict, bool checkDfuUtil, string? dfuVersion)
     {
         if (Running) return "A firmware update is already running.";
+        if (_host.SerialTransferRunning) return SerialTransferText;
         if (_host.HandoverActive)
             return "The serial port is lent to the WireView app. Flash from the app, or try again when it hands the port back.";
         if (device == null || !device.Connected) return "Not connected.";
@@ -354,6 +359,7 @@ internal sealed class FirmwareService
         lock (_startLock)
         {
             if (Running) return new FlashStart(409, "A firmware update is already running.", State);
+            if (_host.SerialTransferRunning) return new FlashStart(409, SerialTransferText, State);
             if (_host.HandoverActive)
                 return new FlashStart(409,
                     "The serial port is lent to the WireView app. Flash from the app, or try again when it hands the port back.",
@@ -423,6 +429,7 @@ internal sealed class FirmwareService
     }
 
     private const string FailedPrefix = "Firmware update failed: ";
+    private const string SerialTransferText = "A theme transfer is using the serial port. Try again when it has finished.";
 
     private void Fail(int generation, string message)
     {

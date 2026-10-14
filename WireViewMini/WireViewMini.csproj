@@ -94,6 +94,10 @@
     <EmbeddedResource Include="..\WireView2\Assets\Icons\bear.ico" LogicalName="wireview-mini.ico" />
     <!-- The control panel page (ControlPanel.cs): one file, inline CSS and JS. -->
     <EmbeddedResource Include="ControlPanel.html" LogicalName="wireview-mini.ControlPanel.html" />
+    <!-- The fan templates the app tints with the highlight colour for a custom
+         background's fan frames (the page does the raster work in the browser). -->
+    <EmbeddedResource Include="..\WireView2\Assets\DeviceAssets\fan1.png" LogicalName="wireview-mini.fan1.png" />
+    <EmbeddedResource Include="..\WireView2\Assets\DeviceAssets\fan2.png" LogicalName="wireview-mini.fan2.png" />
   </ItemGroup>
 
   <!-- The bundled device firmware, the GUI's own file (not a copy in this
@@ -104,6 +108,12 @@
     <None Include="..\WireView2\Firmware\TG-WV-PRO2-FW.hex" Link="Firmware\TG-WV-PRO2-FW.hex"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
           ExcludeFromSingleFile="true" TargetPath="TG-WV-PRO2-FW.hex" />
+    <!-- The factory theme artwork (the app's file, 403 KB): read only when the
+         panel's Restore factory artwork is used (ThemeService). Also the Noctua
+         Edition's factory artwork. -->
+    <None Include="..\WireView2\Firmware\ext_flash.bin" Link="Firmware\ext_flash.bin"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" TargetPath="ext_flash.bin" />
   </ItemGroup>
 
   <ItemGroup>

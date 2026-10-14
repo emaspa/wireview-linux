@@ -23,7 +23,9 @@ namespace WireView2.Mini;
 /// API: GET /api/status, GET /api/config, POST /api/config, POST /api/command,
 /// POST /api/settings, POST /api/open-app, GET /api/firmware and POST
 /// /api/firmware/flash (the bundled firmware, see <see cref="FirmwareService"/>),
-/// and on Linux GET and POST /api/daemon-config (wireviewd's settings through
+/// GET and POST /api/theme, POST /api/theme/restore-defaults, GET and POST
+/// /api/theme/file and POST /api/theme/file/export (the display theme, see
+/// <see cref="ThemeService"/>), and on Linux GET and POST /api/daemon-config (wireviewd's settings through
 /// wireviewctl, see <see cref="DaemonConfigService"/>). Device writes go through the same
 /// relay as a LAN command (<see cref="LocalPublishHost.ExecuteCommand"/>), so
 /// they work over direct serial and over hwmon with wireviewd alike.
@@ -63,8 +65,9 @@ internal sealed class ControlPanel
     public HttpResponseInfo? Handle(HttpRequestInfo req)
     {
         bool page = req.Path is "/" or "/panel" or "/index.html";
+        bool image = req.Path is "/panel/fan1.png" or "/panel/fan2.png";
         bool api = req.Path.StartsWith("/api/", StringComparison.Ordinal);
-        if (!page && !api) return null;
+        if (!page && !image && !api) return null;
 
         if (!req.IsLoopback)
         {
@@ -74,6 +77,8 @@ internal sealed class ControlPanel
 
         if (page)
             return req.Method is "GET" or "HEAD" ? Page() : Error(405, "method not allowed");
+        if (image)
+            return req.Method is "GET" or "HEAD" ? Png(req.Path["/panel/".Length..]) : Error(405, "method not allowed");
 
         if (!TokenMatches(req.Header(TokenHeader)))
             return Error(401, "missing or wrong control panel token; open the panel from the tray or with wireview-mini --open");
@@ -90,10 +95,17 @@ internal sealed class ControlPanel
                 ("POST", "/api/open-app") => OpenApp(),
                 ("GET", "/api/firmware") => GetFirmware(),
                 ("POST", "/api/firmware/flash") => PostFlash(req.Body),
+                ("GET", "/api/theme") => GetTheme(req.Query),
+                ("POST", "/api/theme") => PostTheme(req.Body),
+                ("POST", "/api/theme/restore-defaults") => PostThemeRestore(req.Body),
+                ("GET", "/api/theme/file") => GetThemeFile(),
+                ("POST", "/api/theme/file") => PostThemeFile(req.Body),
+                ("POST", "/api/theme/file/export") => PostThemeExport(req.Body),
                 ("GET", "/api/daemon-config") => GetDaemonConfig(),
                 ("POST", "/api/daemon-config") => PostDaemonConfig(req.Body),
                 (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config"
-                    or "/api/firmware" or "/api/firmware/flash")
+                    or "/api/firmware" or "/api/firmware/flash" or "/api/theme" or "/api/theme/restore-defaults"
+                    or "/api/theme/file" or "/api/theme/file/export")
                     => Error(405, "method not allowed"),
                 _ => Error(404, "no such API"),
             };
@@ -103,6 +115,16 @@ internal sealed class ControlPanel
             return Error(400, $"bad JSON: {ex.Message}");
         }
     }
+
+    /// <summary>The publisher's body-limit hook: the theme routes take an image
+    /// (a 320x170 RGB565 background is 145 KB of base64), from this PC with the
+    /// token only; every other request keeps the publisher's size cap.</summary>
+    public int BodyLimit(HttpRequestInfo head) =>
+        head.IsLoopback && head.Method == "POST"
+        && head.Path is "/api/theme" or "/api/theme/file" or "/api/theme/file/export"
+        && TokenMatches(head.Header(TokenHeader))
+            ? ThemeFileFormat.MaxFileBytes
+            : 0;
 
     private bool TokenMatches(string? token)
     {
@@ -132,6 +154,20 @@ internal sealed class ControlPanel
                     "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
                     "connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
             ],
+        };
+    }
+
+    /// <summary>The app's fan templates (white on transparent), for the theme
+    /// editor's fan frames: static artwork, no token needed.</summary>
+    private static HttpResponseInfo Png(string name)
+    {
+        using var stream = typeof(ControlPanel).Assembly.GetManifestResourceStream("wireview-mini." + name);
+        if (stream == null) return Error(404, "no such image");
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return new HttpResponseInfo(200, "image/png", ms.ToArray())
+        {
+            Headers = [new("Cache-Control", "max-age=86400"), new("X-Content-Type-Options", "nosniff")],
         };
     }
 
@@ -167,7 +203,9 @@ internal sealed class ControlPanel
                 .ToList(),
             Settings: SettingsView(s),
             Gui: new PanelGui(Location: gui, Available: gui != null),
-            Firmware: FlashView(_mini.Firmware.State, _mini.Firmware.UpdateAvailable()));
+            Firmware: FlashView(_mini.Firmware.State, _mini.Firmware.UpdateAvailable()),
+            // Only while an upload runs: the progress needs no extra requests.
+            Theme: _mini.Theme.State is { Running: true } t ? ThemeUploadView(t) : null);
     }
 
     private static PanelSettings SettingsView(AppSettings s) => new(
@@ -214,7 +252,7 @@ internal sealed class ControlPanel
             Source: md.Source,
             Connected: dev.Connected,
             SerialSuspended: false,
-            CanWrite: MiniService.CanWrite(dev) && !_mini.Firmware.Running,
+            CanWrite: MiniService.CanWrite(dev) && !_mini.Firmware.Running && !_mini.Theme.UploadRunning,
             Readings: latest != null ? WireViewSensorDto.FromDevice(dev, latest) : null,
             FaultStatus: status,
             FaultLog: log,
@@ -302,6 +340,8 @@ internal sealed class ControlPanel
             return Error(409, "the serial port is lent to the WireView app; try again when it hands it back");
         if (_mini.Firmware.Running)
             return Error(409, "a firmware update is running; try again when it has finished");
+        if (_mini.Theme.Busy)
+            return Error(409, "a theme transfer is using the serial port; try again when it has finished");
         var md = _mini.PreferredLocal();
         if (md == null || !md.Device.Connected) return Error(503, "no device connected");
         if (!MiniService.CanWrite(md.Device))
@@ -663,6 +703,203 @@ internal sealed class ControlPanel
         return HttpResponseInfo.Json(202, JsonSerializer.Serialize(
             new PanelFlashStarted(true, start.State.Message ?? "Firmware update started.", FlashView(start.State, false)),
             MiniJsonContext.Default.PanelFlashStarted));
+    }
+
+    // ---- Theme ----
+
+    private static PanelThemeUpload ThemeUploadView(ThemeUploadState s) => new(
+        State: s.Phase switch
+        {
+            ThemePhase.Uploading => "Uploading",
+            ThemePhase.WritingConfig => "WritingConfig",
+            ThemePhase.Redrawing => "Redrawing",
+            ThemePhase.Done => "Done",
+            ThemePhase.Failed => "Failed",
+            _ => "Idle",
+        },
+        Progress: Math.Round(s.Progress, 3),
+        Message: s.Message,
+        Running: s.Running);
+
+    private static PanelThemeValues ValuesView(DeviceThemeValues v) => new(
+        PrimaryColor: DeviceThemePresets.FormatColor(v.PrimaryColor),
+        SecondaryColor: DeviceThemePresets.FormatColor(v.SecondaryColor),
+        HighlightColor: DeviceThemePresets.FormatColor(v.HighlightColor),
+        BackgroundColor: DeviceThemePresets.FormatColor(v.BackgroundColor),
+        DisplayInversion: v.DisplayInversion,
+        BackgroundBitmapId: v.BackgroundBitmapId,
+        FanBitmapId: v.FanBitmapId);
+
+    private static readonly List<PanelThemePreset> PresetViews = DeviceThemePresets.All
+        .Select(p => new PanelThemePreset(p.Name, p.Label, ValuesView(new DeviceThemeValues(
+            p.PrimaryColor, p.SecondaryColor, p.HighlightColor, p.BackgroundColor, p.DisplayInversion,
+            (byte)p.BackgroundBitmap, (byte)p.FanBitmap))))
+        .ToList();
+
+    private static readonly List<PanelOption> BackgroundViews =
+        DeviceThemePresets.Backgrounds.Select(b => new PanelOption(b.Value, b.Label)).ToList();
+
+    private static readonly List<PanelOption> FanViews =
+        DeviceThemePresets.Fans.Select(f => new PanelOption(f.Value, f.Label)).ToList();
+
+    private static string? B64(byte[]? b) => b == null ? null : Convert.ToBase64String(b);
+
+    /// <summary>?artwork=0 skips the SPI read (colours only); bg= and fan= read
+    /// another slot's artwork than the device's own (the editor's slot choice).</summary>
+    private HttpResponseInfo GetTheme(string query)
+    {
+        var q = ParseQuery(query);
+        bool artwork = !q.TryGetValue("artwork", out var a) || a is not ("0" or "false");
+        byte? bgSlot = q.TryGetValue("bg", out var b) && byte.TryParse(b, NumberStyles.None, CultureInfo.InvariantCulture, out byte bv) ? bv : null;
+        byte? fanSlot = q.TryGetValue("fan", out var f) && byte.TryParse(f, NumberStyles.None, CultureInfo.InvariantCulture, out byte fv) ? fv : null;
+        var r = _mini.Theme.Read(artwork, bgSlot, fanSlot);
+        // Busy states are transient: 409, so the page keeps what it shows.
+        if (r.Status == 409) return Error(409, r.Problem!);
+        return Ok(ThemeView(r, null), MiniJsonContext.Default.PanelTheme);
+    }
+
+    private PanelTheme ThemeView(ThemeRead r, string? message)
+    {
+        string? unavailable = r.Problem ?? (r.ConfigVersion is < 2 ? ThemeService.LayoutMessage : null);
+        var art = r.Artwork;
+        return new PanelTheme(
+            UiV2Supported: r.ConfigVersion >= 2,
+            Unavailable: unavailable,
+            ConfigVersion: r.ConfigVersion,
+            Values: r.Values is { } v ? ValuesView(v) : null,
+            Preset: r.Values is { } pv ? DeviceThemePresets.Detect(pv) : null,
+            Artwork: art == null ? null : new PanelThemeArtwork(
+                BackgroundSlot: art.BackgroundSlot,
+                FanSlot: art.FanSlot,
+                Width: WireViewPro2Device.ThemeBackgroundWidth,
+                Height: WireViewPro2Device.ThemeBackgroundHeight,
+                Background: B64(art.Background),
+                FanWidth: WireViewPro2Device.ThemeFanWidth,
+                FanHeight: WireViewPro2Device.ThemeFanHeight,
+                FanFrame1: B64(art.FanFrame1),
+                FanFrame2: B64(art.FanFrame2)),
+            ArtworkError: r.ArtworkError,
+            Presets: PresetViews,
+            Backgrounds: BackgroundViews,
+            Fans: FanViews,
+            FactoryArtwork: _mini.Theme.FactoryArtworkAvailable,
+            Upload: ThemeUploadView(_mini.Theme.State),
+            Message: message);
+    }
+
+    /// <summary>Body: <see cref="ThemeEdit"/>. 200 with the theme read back when
+    /// only the colours, inversion or slots change; 202 once a custom background's
+    /// upload started (the progress is in /api/status); 409 busy, 503 no device,
+    /// 400 invalid.</summary>
+    private HttpResponseInfo PostTheme(string body)
+    {
+        var edit = JsonSerializer.Deserialize(body.Length == 0 ? "{}" : body, MiniJsonContext.Default.ThemeEdit);
+        if (edit == null) return Error(400, "no theme in the request");
+        FileLog.Info("control panel: theme apply requested" + (string.IsNullOrEmpty(edit.Background) ? "" : " (with a custom background)"));
+        var start = _mini.Theme.Apply(edit);
+        if (start.Status == 202)
+            return HttpResponseInfo.Json(202, JsonSerializer.Serialize(
+                new PanelThemeStarted(true, start.Message ?? "Theme upload started.", ThemeUploadView(start.State)),
+                MiniJsonContext.Default.PanelThemeStarted));
+        if (start.Status != 200) return Error(start.Status, start.Error ?? "the theme was not applied");
+        var after = _mini.Theme.Read(artwork: false);
+        return Ok(ThemeView(after, start.Message), MiniJsonContext.Default.PanelTheme);
+    }
+
+    /// <summary>Body: {"backgroundBitmapId": 1 or 2}, the slot to restore (the
+    /// editor's choice, as in the app). 202 once started.</summary>
+    private HttpResponseInfo PostThemeRestore(string body)
+    {
+        using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("backgroundBitmapId", out var idEl)
+            || idEl.ValueKind != JsonValueKind.Number || !idEl.TryGetInt32(out int slot))
+            return Error(400, "backgroundBitmapId (the background slot to restore) is required");
+        FileLog.Info($"control panel: factory theme artwork restore requested for background slot {slot}");
+        var start = _mini.Theme.RestoreDefaults(slot);
+        if (start.Status != 202) return Error(start.Status, start.Error ?? "the restore did not start");
+        return HttpResponseInfo.Json(202, JsonSerializer.Serialize(
+            new PanelThemeStarted(true, start.Message ?? "Restore started.", ThemeUploadView(start.State)),
+            MiniJsonContext.Default.PanelThemeStarted));
+    }
+
+    /// <summary>The device's theme as a .wv2t file (the app's Save theme file for
+    /// what the device shows now): the background image read from its slot.</summary>
+    private HttpResponseInfo GetThemeFile()
+    {
+        var r = _mini.Theme.Read(artwork: true, fans: false);
+        if (r.Status != 200) return Error(r.Status, r.Problem!);
+        if (r.Values is not { } v) return Error(400, "Theme files are only supported on config v2+ devices.");
+        // As the app: without the artwork (denied, failed) a colours-only file is still useful.
+        return ThemeFileAnswer(ThemeService.BuildFile(v, r.Artwork?.Background));
+    }
+
+    /// <summary>Body: <see cref="ThemeEdit"/>, the editor's state; answers it as a
+    /// .wv2t file written by the shared code (the app's Save theme file). Fan
+    /// frames are not written, as in the app.</summary>
+    private static HttpResponseInfo PostThemeExport(string body)
+    {
+        var edit = JsonSerializer.Deserialize(body.Length == 0 ? "{}" : body, MiniJsonContext.Default.ThemeEdit);
+        if (edit == null) return Error(400, "no theme in the request");
+        if (!ThemeService.TryParse(edit, out var values, out byte[]? bg, out _, out _, out string? error, requireFans: false))
+            return Error(400, error!);
+        return ThemeFileAnswer(ThemeService.BuildFile(values, bg));
+    }
+
+    private static HttpResponseInfo ThemeFileAnswer(byte[] file) =>
+        new(200, "application/octet-stream", file)
+        {
+            Headers =
+            [
+                new("Cache-Control", "no-store"),
+                new("Content-Disposition", "attachment; filename=\"wireview-theme.wv2t\""),
+                new("X-Content-Type-Options", "nosniff"),
+            ],
+        };
+
+    /// <summary>Body: a .wv2t file. Parsed with the shared code and answered as
+    /// the editor's state (the app's Load theme file); nothing is written until
+    /// the page applies it.</summary>
+    private static HttpResponseInfo PostThemeFile(string body)
+    {
+        ThemeDocument doc;
+        byte[]? bg;
+        (byte[] Frame1, byte[] Frame2)? fans;
+        try
+        {
+            doc = ThemeFileFormat.Parse(body);
+            bg = ThemeFileFormat.TryDecodeBackgroundRgb565(doc, WireViewPro2Device.ThemeBackgroundSizeBytes);
+            fans = ThemeFileFormat.TryDecodeFanFrames(doc, WireViewPro2Device.ThemeFanFrameSizeBytes);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
+        {
+            return Error(400, "Theme load failed: " + ex.Message);
+        }
+        // The app's reading: an unknown background is Disabled, an unknown fan the background's.
+        var background = DeviceThemePresets.KnownBackground(doc.BackgroundBitmapId);
+        var fan = DeviceThemePresets.KnownFan(doc.FanBitmapId, background);
+        var values = ThemeFileFormat.Values(doc) with { BackgroundBitmapId = (byte)background, FanBitmapId = (byte)fan };
+        FileLog.Info($"control panel: theme file read ({(bg != null ? "with" : "without")} a background image)");
+        return Ok(new PanelThemeFile(
+            Values: ValuesView(values),
+            Preset: DeviceThemePresets.Detect(values),
+            Background: B64(bg),
+            FanFrame1: B64(fans?.Frame1),
+            FanFrame2: B64(fans?.Frame2),
+            Message: bg != null
+                ? "Theme loaded and background staged (press Apply to upload)."
+                : "Theme loaded (press Apply to upload colors)."), MiniJsonContext.Default.PanelThemeFile);
+    }
+
+    private static Dictionary<string, string> ParseQuery(string query)
+    {
+        var d = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = part.IndexOf('=');
+            d[Uri.UnescapeDataString(eq < 0 ? part : part[..eq])] = eq < 0 ? "" : Uri.UnescapeDataString(part[(eq + 1)..]);
+        }
+        return d;
     }
 
     // ---- App ----
