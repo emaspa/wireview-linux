@@ -119,26 +119,11 @@ public static class DeviceProfileService
         return true;
     }
 
-    /// <summary>Why <paramref name="name"/> cannot name a profile file, or null
-    /// when it can. The app turns such characters into '_' (<see cref="SaveProfile"/>);
-    /// WireView Mini, whose names also come in URLs, refuses them instead so a
-    /// name never reaches outside the profiles folder.</summary>
-    public static string? NameProblem(string? name)
-    {
-        string n = (name ?? string.Empty).Trim();
-        if (n.Length == 0) return "Enter a profile name.";
-        // Both separators on every OS: a name with either is never a plain file name.
-        var invalid = Path.GetInvalidFileNameChars().Concat(['/', '\\']).ToHashSet();
-        if (n.Any(c => invalid.Contains(c) || char.IsControl(c)))
-            return "A profile name cannot contain / or \\ or other characters a file name cannot hold.";
-        if (n is "." or "..") return "A profile name cannot be . or ..";
-        if (n.Length > 200) return "A profile name can have at most 200 characters.";
-        return null;
-    }
+    private static string PathFor(string name) => Path.Combine(GetProfilesDir(), FileName(name) + ".json");
 
-    private static string PathFor(string name) => Path.Combine(GetProfilesDir(), SanitizeName(name) + ".json");
-
-    private static string SanitizeName(string name)
+    /// <summary>The name a profile is listed under: <paramref name="name"/> with
+    /// every character a file name cannot hold replaced by '_'.</summary>
+    public static string FileName(string name)
     {
         foreach (char c in Path.GetInvalidFileNameChars())
             name = name.Replace(c, '_');

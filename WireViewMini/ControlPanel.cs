@@ -29,7 +29,7 @@ namespace WireView2.Mini;
 /// history, see <see cref="HistoryBuffer"/>), POST /api/devicelog/read, GET
 /// /api/devicelog, /api/devicelog/cycle/N and /api/devicelog/cycle/N.csv (the
 /// on-device log, see <see cref="DeviceLogService"/>), GET and POST /api/profiles and GET and DELETE
-/// /api/profiles/NAME (the app's device profiles, see <see cref="DeviceProfileService"/>),
+/// /api/profile?name=NAME (the app's device profiles, see <see cref="DeviceProfileService"/>),
 /// and on Linux GET and POST /api/daemon-config (wireviewd's settings through
 /// wireviewctl, see <see cref="DaemonConfigService"/>). Device writes go through the same
 /// relay as a LAN command (<see cref="LocalPublishHost.ExecuteCommand"/>), so
@@ -115,13 +115,12 @@ internal sealed class ControlPanel
                 ("GET", var cycle) when cycle.StartsWith(CyclePrefix, StringComparison.Ordinal) => GetCycle(cycle[CyclePrefix.Length..], req.Query),
                 ("GET", "/api/profiles") => GetProfiles(),
                 ("POST", "/api/profiles") => PostProfile(req.Body),
-                ("GET", var prof) when prof.StartsWith(ProfilePrefix, StringComparison.Ordinal) => GetProfile(prof[ProfilePrefix.Length..], req.Query),
-                ("DELETE", var prof) when prof.StartsWith(ProfilePrefix, StringComparison.Ordinal) => DeleteProfile(prof[ProfilePrefix.Length..]),
-                (_, var prof) when prof.StartsWith(ProfilePrefix, StringComparison.Ordinal) => Error(405, "method not allowed"),
+                ("GET", "/api/profile") => GetProfile(ParseQuery(req.Query)),
+                ("DELETE", "/api/profile") => DeleteProfile(ParseQuery(req.Query)),
                 (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config"
                     or "/api/firmware" or "/api/firmware/flash" or "/api/theme" or "/api/theme/restore-defaults"
                     or "/api/theme/file" or "/api/theme/file/export" or "/api/history" or "/api/history.csv"
-                    or "/api/devicelog" or "/api/devicelog/read" or "/api/profiles")
+                    or "/api/devicelog" or "/api/devicelog/read" or "/api/profiles" or "/api/profile")
                     => Error(405, "method not allowed"),
                 _ => Error(404, "no such API"),
             };
@@ -361,8 +360,6 @@ internal sealed class ControlPanel
     // app, saving takes the form's values (unsaved edits included) and loading only
     // fills the form: nothing reaches the device until Apply. No device I/O here.
 
-    private const string ProfilePrefix = "/api/profiles/";
-
     private static HttpResponseInfo GetProfiles() => ProfilesAnswer(null, null);
 
     private static HttpResponseInfo ProfilesAnswer(string? message, string? name)
@@ -378,28 +375,27 @@ internal sealed class ControlPanel
         }
     }
 
-    /// <summary>A profile name from the URL (percent-encoded), checked like a
-    /// saved one so it cannot reach outside the profiles folder.</summary>
-    private static string? ProfileNameFromPath(string segment, out HttpResponseInfo? problem)
+    /// <summary>The profile name from the query's <c>name</c>, reduced to the file
+    /// name it is listed under, so it never reaches outside the profiles folder. A
+    /// query rather than a path segment: a browser folds "." and ".." out of a path,
+    /// and both are names the app accepts.</summary>
+    private static string? ProfileNameFromQuery(Dictionary<string, string> q, out HttpResponseInfo? problem)
     {
         problem = null;
-        string name;
-        try { name = Uri.UnescapeDataString(segment).Trim(); }
-        catch (UriFormatException) { problem = Error(400, "bad profile name in the URL"); return null; }
-        if (DeviceProfileService.NameProblem(name) is { } why) { problem = Error(400, why); return null; }
+        string name = DeviceProfileService.FileName(q.TryGetValue("name", out var v) ? v : "");
+        if (name.Length == 0) { problem = Error(400, "Enter a profile name."); return null; }
         return name;
     }
 
     /// <summary>The profile as config values. The query's version (config layout)
     /// and firmware are the form's, so the answer matches the device it was read
     /// from without reading it again.</summary>
-    private static HttpResponseInfo GetProfile(string segment, string query)
+    private static HttpResponseInfo GetProfile(Dictionary<string, string> q)
     {
-        if (ProfileNameFromPath(segment, out var problem) is not { } name) return problem!;
+        if (ProfileNameFromQuery(q, out var problem) is not { } name) return problem!;
         if (!DeviceProfileService.ProfileExists(name)) return Error(404, $"no profile \"{name}\"");
         var profile = DeviceProfileService.LoadProfile(name);
         if (profile == null) return Error(500, $"the profile \"{name}\" cannot be read (not a profile file?)");
-        var q = ParseQuery(query);
         int? Int(string key) => q.TryGetValue(key, out var v)
             && int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : null;
         var (values, fields, notes) = DeviceProfileMapping.ToModel(profile, Int("version"), Int("firmware"));
@@ -407,27 +403,33 @@ internal sealed class ControlPanel
     }
 
     /// <summary>Saves {"name", "config"} (the form's values, as POST /api/config
-    /// takes them), replacing a profile of that name, as the app does.</summary>
+    /// takes them), replacing a profile of that name, as the app does. Characters a
+    /// file name cannot hold become '_' in the file name, as in the app; the answer
+    /// names the profile as it is listed.</summary>
     private static HttpResponseInfo PostProfile(string body)
     {
         using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
         var root = doc.RootElement;
-        string name = root.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString()!.Trim() : "";
-        if (DeviceProfileService.NameProblem(name) is { } why) return Error(400, why);
+        string typed = root.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString()!.Trim() : "";
+        string name = DeviceProfileService.FileName(typed);
+        if (name.Length == 0) return Error(400, "Enter a profile name.");
         if (!root.TryGetProperty("config", out var c) || c.ValueKind != JsonValueKind.Object)
             return Error(400, "no config in the request");
         var model = c.Deserialize(MiniJsonContext.Default.DeviceConfigModel);
         if (model == null) return Error(400, "no config in the request");
 
         DeviceProfile profile;
-        try { profile = DeviceProfileMapping.FromModel(name, model); }
+        // The file holds the name as typed, the file name the cleaned one, as in the app.
+        try { profile = DeviceProfileMapping.FromModel(typed, model); }
         catch (DeviceConfigException ex) { return Error(400, ex.Message); }
         try
         {
             bool replaced = DeviceProfileService.ProfileExists(name);
             DeviceProfileService.SaveProfile(profile);
             FileLog.Info($"control panel: profile \"{name}\" {(replaced ? "replaced" : "saved")}");
-            return ProfilesAnswer(replaced ? $"Profile \"{name}\" saved (replaced the earlier one)." : $"Profile \"{name}\" saved.", name);
+            string msg = replaced ? $"Profile \"{name}\" saved (replaced the earlier one)." : $"Profile \"{name}\" saved.";
+            if (name != typed) msg += " Characters a file name cannot hold became _.";
+            return ProfilesAnswer(msg, name);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -436,9 +438,9 @@ internal sealed class ControlPanel
         }
     }
 
-    private static HttpResponseInfo DeleteProfile(string segment)
+    private static HttpResponseInfo DeleteProfile(Dictionary<string, string> q)
     {
-        if (ProfileNameFromPath(segment, out var problem) is not { } name) return problem!;
+        if (ProfileNameFromQuery(q, out var problem) is not { } name) return problem!;
         try
         {
             if (!DeviceProfileService.DeleteProfile(name)) return Error(404, $"no profile \"{name}\"");

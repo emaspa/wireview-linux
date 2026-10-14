@@ -102,7 +102,7 @@ Grouped like the app's Device page: General (friendly name, backlight), Fan (mod
 
 **Apply** writes only the fields you changed, the way the app does; **Store to device memory** keeps them after a power cycle; **Reload from device**, **Reload from device memory** and **Reset to defaults** (asks first) are there too. Out-of-range values are refused with a message.
 
-**Profiles** at the top of the card are the app's device profiles, the same files (`~/.config/PowerMonitor/profiles/`, `%APPDATA%\PowerMonitor\profiles\` on Windows), so a profile saved in the app shows here and the other way round. **Save current as profile** saves the form's values, unsaved edits included; **Load** fills the form and nothing reaches the device until you press **Apply**, as in the app. A profile field the device's configuration does not have (the legacy theme on firmware with the color theme, averaging on the oldest firmware) is left out, as in the app, and an averaging window older firmware does not have becomes its longest one.
+**Profiles** at the top of the card are the app's device profiles, the same files (`~/.config/PowerMonitor/profiles/`, `%APPDATA%\PowerMonitor\profiles\` on Windows), so a profile saved in the app shows here and the other way round. **Save current as profile** saves the form's values, unsaved edits included, and like the app turns characters a file name cannot hold into `_`; **Load** fills the form and nothing reaches the device until you press **Apply**, as in the app. A profile field the device's configuration does not have (the legacy theme on firmware with the color theme, averaging on the oldest firmware) is left out, as in the app, and an averaging window older firmware does not have becomes its longest one.
 
 ### Theme
 

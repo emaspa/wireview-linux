@@ -1177,7 +1177,8 @@ const WVPixels = (function () {
     $("profConfirm").classList.add("hidden");
     $("profDelete").classList.remove("hidden");
   }
-  const profilePath = (name) => "/api/profiles/" + encodeURIComponent(name);
+  // The name travels in the query: a browser folds "." and ".." out of a path.
+  const profilePath = (name) => "/api/profile?name=" + encodeURIComponent(name);
 
   // Puts one profile value in its form control; false when the form cannot show it.
   function setField(key, value) {
@@ -1195,7 +1196,7 @@ const WVPixels = (function () {
   $("profName").addEventListener("input", refreshProfileButtons);
   $("profLoad").addEventListener("click", () => run("profResult", async () => {
     const name = selectedProfile();
-    const r = await api("GET", profilePath(name) + "?version=" + cfg.version + (cfg.firmware ? "&firmware=" + cfg.firmware : ""));
+    const r = await api("GET", profilePath(name) + "&version=" + cfg.version + (cfg.firmware ? "&firmware=" + cfg.firmware : ""));
     const skipped = [];
     for (const key of r.fields) {
       if (key === "faultAlarms") {
