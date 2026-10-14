@@ -129,7 +129,9 @@ input[type=text], input[type=number], input[type=password], select {
 }
 input:focus, select:focus { outline: none; border-color: var(--accent); }
 input:invalid { border-color: var(--bad); }
-input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+/* margin 0: browsers give a checkbox uneven default margins (Firefox 3px above, none below),
+   which puts it off the text beside it in a centred flex row. */
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; flex: none; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .checks label { color: var(--text); display: inline-flex; align-items: center; gap: 4px; }
 .alarms th, .alarms td { text-align: center; }

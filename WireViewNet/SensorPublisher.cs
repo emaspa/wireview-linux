@@ -13,7 +13,8 @@ namespace WireView2.Net
     /// Windows). Serves read-only <c>GET /sensors</c> (open) and, when a secret +
     /// command sink are supplied, authenticated <c>POST /command</c> (HMAC-signed,
     /// see <see cref="HmacAuth"/>). Flood-protected: a concurrency cap, a request
-    /// size cap (413), and a per-IP rate limit (429). Binds all interfaces unless
+    /// size cap (413), and a per-IP rate limit (429) for hosts other than this PC.
+    /// Binds all interfaces unless
     /// a bind address is given (the WireView Mini binds loopback only while LAN
     /// publishing is off). Commands from this machine may also be signed with a
     /// local-only secret (WireView Mini's key file), and <see cref="WireViewCommand.LocalOnly"/>
@@ -121,7 +122,10 @@ namespace WireView2.Net
                     var peer = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
                     string ip = peer?.ToString() ?? "?";
                     bool loopback = peer != null && IPAddress.IsLoopback(peer);
-                    if (RateLimited(ip)) { await WriteJson(stream, 429, "Too Many Requests", "").ConfigureAwait(false); return; }
+                    // The rate limit is for the LAN. This PC's own clients (the control
+                    // panel page at one request a second, --status, the app's probe) all
+                    // share 127.0.0.1 and would starve each other at the limit.
+                    if (!loopback && RateLimited(ip)) { await WriteJson(stream, 429, "Too Many Requests", "").ConfigureAwait(false); return; }
 
                     using var readCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                     var ct = readCts.Token;
