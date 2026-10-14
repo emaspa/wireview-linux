@@ -17,12 +17,26 @@ public enum DeviceLogStep
 /// Mini's control panel. A cycle ends at an explicit POWER_ON marker or when the
 /// MCU tick counter wraps backwards (the counter resets on power-up). Timestamps
 /// are synthetic: each cycle restarts at <see cref="DeviceLogCycles.CycleStart"/>
-/// and advances 4 ms per tick. Feed the entries in flash order.
+/// with its first sample, and advances 4 ms per tick from there. Feed the
+/// entries in flash order.
 /// </summary>
 public sealed class DeviceLogTimeline
 {
     private DateTime _timestamp = DeviceLogCycles.CycleStart;
     private uint _prevTick;
+    // Samples placed since the cycle started: 0 before its first, 1 after it.
+    // The first sample of a cycle is the origin whatever its tick says, and the
+    // second may re-base (see MaxGapTicks).
+    private int _placed;
+
+    /// <summary>The longest gap taken as time between two samples of one cycle:
+    /// one hour at 4 ms a tick. The device logs a sample a minute. Its first
+    /// sample after power-up carries the time since boot (about a second), and
+    /// from the second sample on the tick is its cumulative operating time, so
+    /// the second sample jumps by that total (days). That jump is a change of
+    /// counter, not time, and the cycle re-bases on it; a jump this long later in
+    /// a cycle is a power cycle whose boot sample is missing.</summary>
+    public const int MaxGapTicks = 60 * 60 * 1000 / 4;
 
     /// <summary>The time of the last <see cref="DeviceLogStep.Sample"/>.</summary>
     public DateTime Timestamp => _timestamp;
@@ -34,20 +48,32 @@ public sealed class DeviceLogTimeline
         {
             case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
                 _timestamp = DeviceLogCycles.CycleStart;
+                _placed = 0;
                 return DeviceLogStep.Break; // boundary marker, not a sample
 
             case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
                 uint tick30 = DeviceLogParser.DecodeTimestamp30(data);
                 var step = DeviceLogStep.Sample;
-                int delta = (int)(tick30 - _prevTick);
-                if (delta < 0)
+                int delta = _placed == 0 ? 0 : (int)(tick30 - _prevTick);
+                if (delta < 0 || (delta > MaxGapTicks && _placed > 1))
                 {
+                    // The counter went back (power-up), or jumped with no boot
+                    // sample before it: a new cycle, this sample its origin.
                     step |= DeviceLogStep.Break;
                     _timestamp = DeviceLogCycles.CycleStart;
+                    _placed = 0;
+                    delta = 0;
+                }
+                else if (delta > MaxGapTicks)
+                {
+                    // The second sample: the counter changed from time since
+                    // boot to cumulative operating time. Same instant as far as
+                    // the cycle's clock knows.
                     delta = 0;
                 }
                 _timestamp = _timestamp.AddMilliseconds(delta * 4);
                 _prevTick = tick30;
+                _placed++;
                 return step;
 
             default: // SYSTEM_TIME, EMPTY
