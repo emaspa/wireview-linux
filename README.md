@@ -22,11 +22,25 @@ Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.therm
 
 | | Desktop app (`WireView2`, WireView Plus on Windows) | WireView Mini (`wireview-mini`) |
 |---|---|---|
-| What it is | The full window: Overview, Monitoring, Logging, Device and Settings pages | A program with no window: a tray icon and a control panel in the browser, about 40 MB resident on Linux |
+| What it is | The full window: Overview, Monitoring, Logging, Device and Settings pages | A program with no window: a tray icon and a control panel in the browser |
 | When it runs | When you want to look at the device | All the time, started at login |
 | What it does | Monitoring, charts, device log, configuration and profiles, theme editor, firmware updates, LAN monitoring | Monitoring, fault alerts, shutdown on fault, device configuration, firmware updates, theme editor, charts, device log, CSV export, LAN publishing |
 
 Both read the same `settings.json`. While WireView Mini runs, the app connects through it instead of opening the serial port. Details: [docs/wireview-mini.md](docs/wireview-mini.md).
+
+### Footprint
+
+Why there are two clients, and which to leave running. Measured on Linux with wireview-hwmon alongside, device connected, one reading a second (the full method and history is in [docs/footprint-plan.md](docs/footprint-plan.md)):
+
+| Process | Memory (RSS / PSS) | Idle CPU, one core | Notes |
+|---|---|---|---|
+| Desktop app, window visible | 150 MB / 138 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
+| Desktop app, minimized | 126 MB / 115 MB | 0.6 % | |
+| WireView Mini (Linux, NativeAOT) | 50 MB / 43 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
+| WireView Mini (Windows, JIT) | about 85 MB | 0.4 % | The Windows build is not NativeAOT yet |
+| wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
+
+In short: the app is for looking at the device, WireView Mini for watching it, and the daemon for machines without a desktop at all.
 
 ## Install
 
