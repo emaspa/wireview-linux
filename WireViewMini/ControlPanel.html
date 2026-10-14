@@ -818,6 +818,9 @@ const WVPixels = (function () {
     let res;
     try { res = await fetch(path, opts); }
     catch (e) { const err = new Error("WireView Mini does not answer"); err.offline = true; throw err; }
+    // An answer without WireView Mini's header comes from whatever took its port
+    // (wireviewd, back on 9876): as good as no answer, so the page looks for it.
+    if (!res.headers.get("X-Mini-Panel")) { const err = new Error("WireView Mini does not answer"); err.offline = true; throw err; }
     let data = null;
     try { data = await res.json(); } catch (e) { }
     if (res.status === 401) { $("noToken").classList.remove("hidden"); }

@@ -66,8 +66,18 @@ internal sealed class ControlPanel
 
     public ControlPanel(MiniService mini) => _mini = mini;
 
+    /// <summary>Marks every answer of ours: the page knows an answer without it
+    /// (wireviewd's 404 once it took port 9876 back) is not WireView Mini's.</summary>
+    private const string PanelHeader = "X-Mini-Panel";
+
     /// <summary>The publisher's extra-routes hook; null for paths that are not ours.</summary>
     public HttpResponseInfo? Handle(HttpRequestInfo req)
+    {
+        var r = Route(req);
+        return r == null ? null : r with { Headers = [.. r.Headers, new(PanelHeader, _mini.Instance)] };
+    }
+
+    private HttpResponseInfo? Route(HttpRequestInfo req)
     {
         bool page = req.Path is "/" or "/panel" or "/index.html";
         bool image = req.Path is "/panel/fan1.png" or "/panel/fan2.png";
