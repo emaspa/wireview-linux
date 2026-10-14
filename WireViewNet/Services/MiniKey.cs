@@ -3,19 +3,19 @@ using System.Security.Cryptography;
 namespace WireView2.Services;
 
 /// <summary>
-/// The headless agent's local command key: a random secret in <c>agent.key</c>
-/// next to settings.json, readable by its owner only. The agent creates it at
+/// WireView Mini's local command key: a random secret in <c>mini.key</c>
+/// next to settings.json, readable by its owner only. WireView Mini creates it at
 /// start and accepts it, for commands from this machine only, in addition to the
-/// network secret. The GUI signs its commands to the agent with it, so the serial
-/// handover and device writes work through the agent with no network secret set.
+/// network secret. The GUI signs its commands to WireView Mini with it, so the serial
+/// handover and device writes work through WireView Mini with no network secret set.
 /// </summary>
-public static class AgentKey
+public static class MiniKey
 {
     /// <summary>Full path of the key file.</summary>
     public static string KeyPath =>
-        Path.Combine(Path.GetDirectoryName(AppSettings.GetSettingsPath())!, "agent.key");
+        Path.Combine(Path.GetDirectoryName(AppSettings.GetSettingsPath())!, "mini.key");
 
-    /// <summary>The key, or null when there is none (no agent ever ran).</summary>
+    /// <summary>The key, or null when there is none (no mini ever ran).</summary>
     public static string? Read()
     {
         try

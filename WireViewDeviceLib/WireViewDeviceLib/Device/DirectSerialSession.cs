@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace WireView2.Device
 {
     /// <summary>
-    /// Borrows the serial port from wireviewd (or the headless agent, any
+    /// Borrows the serial port from wireviewd (or the WireView Mini, any
     /// <see cref="ISerialPortOwner"/>) for one bulk operation. The daemon
     /// owns the port while it is attached (concurrent I/O corrupts both sides), but
     /// SPI-flash transfers — log readback, theme assets — only exist on the direct

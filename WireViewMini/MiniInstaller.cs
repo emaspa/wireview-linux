@@ -1,26 +1,26 @@
 using System.Runtime.Versioning;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
-/// <c>--install</c> / <c>--uninstall</c>: starts the agent at login.
+/// <c>--install</c> / <c>--uninstall</c>: starts WireView Mini at login.
 /// Linux (and other Unix desktops): an XDG autostart entry,
-/// <c>~/.config/autostart/wireview-agent.desktop</c>.
+/// <c>~/.config/autostart/wireview-mini.desktop</c>.
 /// Windows: the per-user Run key (<c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c>,
-/// value "WireView Agent"). The Run key needs no administrator rights, unlike a
+/// value "WireView Mini"). The Run key needs no administrator rights, unlike a
 /// Task Scheduler logon trigger, and since the Windows build is a windowless
 /// program it starts with no console window.
 /// </summary>
-internal static class AgentInstaller
+internal static class MiniInstaller
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string RunValueName = "WireView Agent";
+    private const string RunValueName = "WireView Mini";
 
     private static readonly XdgAutostart Xdg = new(
-        "wireview-agent.desktop",
-        "WireView Agent",
-        "WireView Pro II headless agent: fault alerts, shutdown on fault, LAN publishing");
+        "wireview-mini.desktop",
+        "WireView Mini",
+        "WireView Pro II WireView Mini: fault alerts, shutdown on fault, LAN publishing");
 
     /// <summary>Whether the login entry exists (the tray's "Start at login").</summary>
     public static bool IsInstalled()
@@ -59,13 +59,13 @@ internal static class AgentInstaller
         try
         {
             string where = SetInstalled(true);
-            Console.WriteLine($"Installed: wireview-agent starts at login ({where}).");
-            Console.WriteLine("Run wireview-agent now to start it without logging out.");
+            Console.WriteLine($"Installed: wireview-mini starts at login ({where}).");
+            Console.WriteLine("Run wireview-mini now to start it without logging out.");
             return Program.ExitOk;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"wireview-agent: install failed: {ex.Message}");
+            Console.Error.WriteLine($"wireview-mini: install failed: {ex.Message}");
             return Program.ExitError;
         }
     }
@@ -78,7 +78,7 @@ internal static class AgentInstaller
             {
                 bool removed = UninstallRunKey();
                 Console.WriteLine(removed
-                    ? "Uninstalled: wireview-agent no longer starts at login."
+                    ? "Uninstalled: wireview-mini no longer starts at login."
                     : "Nothing to uninstall: no login entry found.");
             }
             else
@@ -89,12 +89,12 @@ internal static class AgentInstaller
                     ? $"Uninstalled: removed {Xdg.DesktopFilePath}."
                     : "Nothing to uninstall: no login entry found.");
             }
-            Console.WriteLine("A running agent keeps running; stop it with Ctrl+C, kill or Task Manager.");
+            Console.WriteLine("A running WireView Mini keeps running; stop it with Ctrl+C, kill or Task Manager.");
             return Program.ExitOk;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"wireview-agent: uninstall failed: {ex.Message}");
+            Console.Error.WriteLine($"wireview-mini: uninstall failed: {ex.Message}");
             return Program.ExitError;
         }
     }

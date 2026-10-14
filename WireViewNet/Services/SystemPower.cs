@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace WireView2.Services;
 
 /// <summary>Powers the machine off for the shutdown-on-fault option. Shared by
-/// the GUI and the headless agent.</summary>
+/// the GUI and the WireView Mini.</summary>
 public static class SystemPower
 {
     /// <summary>Starts an immediate shutdown: <c>shutdown /s /t 0</c> on Windows,

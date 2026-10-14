@@ -3,7 +3,7 @@ namespace WireView2.Services;
 /// <summary>
 /// An XDG autostart entry (<c>~/.config/autostart/&lt;file&gt;.desktop</c>) that
 /// starts the running executable at login. Used by the GUI's auto-start option
-/// and by the agent's <c>--install</c> on Linux.
+/// and by WireView Mini's <c>--install</c> on Linux.
 /// </summary>
 public sealed class XdgAutostart
 {

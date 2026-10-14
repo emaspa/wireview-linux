@@ -30,13 +30,13 @@ The app supports two ways of communicating with the device:
 |------|-------------|----------|
 | **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
-| **Through the agent** | App reads and controls the device through [`wireview-agent`](#headless-agent) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
+| **Through WireView Mini** | App reads and controls the device through [`wireview-mini`](#wireview-mini) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
 
 The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands - configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
 
 Commands that change the device through the daemon (configuration writes, NVM store/reset, firmware flashing, and the serial handover used by log reads and the theme editor) need root or membership of the `wireview` group, which the wireview-hwmon packages create: `sudo usermod -aG wireview $USER`. Reading sensors needs no group. Without it the app reports the refused action with that hint, and the automatic theme preview is skipped. Use wireview-hwmon 1.7.0 or later: 1.6.0 refused `wireview` group members when wireviewd ran under systemd, and only 1.7.0 reports the product, so with an older daemon a Noctua Edition is shown as a WireView Pro II.
 
-If the kernel module is not loaded, the app looks for the [headless agent](#headless-agent) on this PC, then falls back to direct serial communication.
+If the kernel module is not loaded, the app looks for the [WireView Mini](#wireview-mini) on this PC, then falls back to direct serial communication.
 
 ## LAN monitoring
 
@@ -58,7 +58,7 @@ another copy of this app with publishing enabled (Windows).
 **Settings → Publish this host on the LAN** opens a listener (default port
 `9876`, configurable) so other instances can read this machine's device. **Off
 by default.** On Linux the `wireviewd` daemon owns publishing, so the toggle is
-hidden there. While the [headless agent](#headless-agent) runs, it publishes
+hidden there. While the [WireView Mini](#wireview-mini) runs, it publishes
 instead of the app, and this toggle decides whether it listens on the LAN or on
 this PC only.
 
@@ -75,9 +75,9 @@ precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
 > Publishing is independent of reading - you can read remote hosts without
 > exposing your own. There is no TLS; this targets a trusted LAN.
 
-## Headless agent
+## WireView Mini
 
-`wireview-agent` is a small program with no window that does the always-on
+`wireview-mini` is a small program with no window that does the always-on
 jobs, so the app only needs to run when you want to look at it:
 
 - it owns the device (hwmon through wireviewd when that runs, otherwise the
@@ -89,7 +89,7 @@ jobs, so the app only needs to run when you want to look at it:
 - it publishes the device on port `9876` (the app's publish port): on the LAN
   when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
 
-The agent plus its control panel are a minimal client: everything except the
+WireView Mini plus its control panel are a minimal client: everything except the
 graphs, firmware updates, themes and the device log, which stay in the app. With
 the tray menu and the control panel you can watch the device, switch its screen,
 clear faults, edit its configuration and alarms, and set up LAN monitoring and
@@ -102,32 +102,32 @@ rule in `udev/99-wireview.rules` gives (the packages install it; see the Flatpak
 section below for installing it by hand).
 
 It reads the app's own `settings.json`, so the app and the control panel
-configure the same settings, and changes apply without restarting the agent. It is meant for Windows and for
+configure the same settings, and changes apply without restarting WireView Mini. It is meant for Windows and for
 Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it
 still gives alerts and shutdown, and leaves publishing to the daemon: its own
 listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on
 the LAN** says (it logs this once).
 
 ```bash
-wireview-agent              # run in the foreground (Ctrl+C to stop), logs to stderr
-wireview-agent --install    # start it at login
-wireview-agent --uninstall  # stop starting it at login
-wireview-agent --status     # connected device, fault state and agent version
-wireview-agent --open       # print the control panel's address and open it in the browser
-wireview-agent --no-tray    # run without the tray icon
-wireview-agent --version
-wireview-agent --help
+wireview-mini              # run in the foreground (Ctrl+C to stop), logs to stderr
+wireview-mini --install    # start it at login
+wireview-mini --uninstall  # stop starting it at login
+wireview-mini --status     # connected device, fault state and version
+wireview-mini --open       # print the control panel's address and open it in the browser
+wireview-mini --no-tray    # run without the tray icon
+wireview-mini --version
+wireview-mini --help
 ```
 
-`--install` writes `~/.config/autostart/wireview-agent.desktop` on Linux and the
-`WireView Agent` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the
+`WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
 on Windows (no administrator rights needed). It logs to
-`wireview-agent-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`.
+`wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`.
 `--status` exits with 0 when a device is connected with no active fault, 3 when
-the agent is not running, 4 when it runs without a connected device, and 5 on an
+WireView Mini is not running, 4 when it runs without a connected device, and 5 on an
 active fault. A second copy says it is already running and exits with 1.
 
-**Tray icon.** The agent puts the WireView icon in the notification area. Its
+**Tray icon.** WireView Mini puts the WireView icon in the notification area. Its
 menu, top to bottom:
 
 - the live state (`WireView Pro II: 123.4 W`, the fault while one is active,
@@ -153,18 +153,18 @@ open at the same time, its next settings save writes back its own copy of those
 two switches, so change them in one place while both run. On Linux the icon is a
 StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it out of the box, GNOME
 needs the AppIndicator/KStatusNotifierItem extension. On a desktop without a tray
-(or with no session bus) the agent logs one line, keeps running without the
+(or with no session bus) WireView Mini logs one line, keeps running without the
 icon and adds it when a tray shows up later. `--no-tray` turns it off.
 
-**Control panel.** A single page served by the agent on its own port, opened in
+**Control panel.** A single page served by WireView Mini on its own port, opened in
 the default browser by the tray's **Settings and controls...** or by
-`wireview-agent --open` (which also prints the address, for desktops without a
+`wireview-mini --open` (which also prints the address, for desktops without a
 tray). It works offline and answers this PC only: from any other address it
-returns 403, even while the port is open on the LAN. Each run of the agent makes
+returns 403, even while the port is open on the LAN. Each run of WireView Mini makes
 a new random access token; the tray and `--open` put it in the address (after
 `#t=`), and the page sends it with every request, so other web pages and other
 users cannot use it. When the publish port is taken (on Linux wireviewd holds
-`9876`), the agent serves the panel, `/sensors` and the app's connection on a
+`9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a
 loopback-only fallback port instead (the next free one of the publish port +1
 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`,
 and moves back to the publish port once it is free (it retries every 30 s); the
@@ -187,11 +187,11 @@ refreshed every second:
   first) are there too. Out-of-range values are refused with a message,
 - **Alerts and shutdown**: Shutdown on fault, Start at login (fault
   notifications are always on),
-- **LAN monitoring**: Publish on the LAN, the port (the page follows the agent to
+- **LAN monitoring**: Publish on the LAN, the port (the page follows WireView Mini to
   a new port), the remote hosts to watch, and the network secret; with
   wireviewd, the daemon's own settings instead of the first two (below),
 - **Tools**: Open WireView app (graphs, firmware updates, themes, device log) and
-  where the agent's log is.
+  where WireView Mini's log is.
 
 Settings changed on the page are saved to `settings.json` and applied at once,
 the same path as the tray's switches (and, as with those, an app that is open
@@ -203,7 +203,7 @@ direct serial alike. `GET /sensors` on the same port is unchanged.
 wireviewd, the daemon does the LAN publishing, so the **LAN monitoring** card
 says so with what answers on the daemon's port (*answering on port 9876* or
 *off*) and edits the daemon's settings in `/etc/wireview/config` in place of
-the agent's own switch and port: **Publish on the LAN** (`remote_enabled`),
+WireView Mini's own switch and port: **Publish on the LAN** (`remote_enabled`),
 **Port**, **Bind address** (empty for all addresses), **Secret** (the passphrase
 other hosts sign their writes to this PC with) and **Log retention** (days, 0
 keeps every log). **Save** writes only the changed keys through
@@ -211,41 +211,41 @@ keeps every log). **Save** writes only the changed keys through
 line) and wireviewd reloads them without a restart; the result line shows the
 daemon's answer, such as `config reloaded: listener on [::]:9876`, or
 wireviewctl's message when a value is refused or the file is not writable.
-**Use the same secret for remote hosts**, under the agent's network secret,
+**Use the same secret for remote hosts**, under WireView Mini's network secret,
 copies the daemon's secret there on Save, so this PC signs its writes to the
 other hosts with the same one. This needs wireview-hwmon 1.8 or newer (older
 versions have no `wireviewctl config`, and the card says so) and membership of
 the `wireview` group (`sudo usermod -aG wireview $USER`, then log in again).
-The agent moves its own loopback listener off a port you give the daemon, and
+WireView Mini moves its own loopback listener off a port you give the daemon, and
 the page follows it. `WIREVIEW_CTL` overrides which `wireviewctl` is run.
 
-On Windows the agent has no console window, so starting it at login shows
+On Windows WireView Mini has no console window, so starting it at login shows
 nothing. Its options still print in a terminal; to wait for the output and get
-the exit code, use `start /wait wireview-agent --status` in cmd, or
-`wireview-agent --status | Out-Host` in PowerShell.
+the exit code, use `start /wait wireview-mini --status` in cmd, or
+`wireview-mini --status | Out-Host` in PowerShell.
 
 **How the app uses it.** At startup the app asks `http://127.0.0.1:9876/sensors`
-before it opens the serial port (after hwmon on Linux). When the agent answers,
-the app connects through it, shown as `agent` in the device picker and
-*Connected via agent* in the status bar, and does not open the port itself:
+before it opens the serial port (after hwmon on Linux). When WireView Mini answers,
+the app connects through it, shown as `mini` in the device picker and
+*Connected via WireView Mini* in the status bar, and does not open the port itself:
 two programs on one serial port corrupt each other's data. The app signs its
-commands to the agent with a key the agent keeps next to `settings.json`
-(`agent.key`), so writes work with no network secret set. The app does not show
-a second fault notification while the agent runs.
+commands to WireView Mini with a key WireView Mini keeps next to `settings.json`
+(`mini.key`), so writes work with no network secret set. The app does not show
+a second fault notification while WireView Mini runs.
 
 **Serial handover.** Firmware flashing, reading the device log and the theme
-editor need the serial port itself. For those the app asks the agent to let go
+editor need the serial port itself. For those the app asks WireView Mini to let go
 of the port, does the transfer and hands the port back, like the handover with
-wireviewd. Meanwhile the agent keeps publishing the last reading, marked not
-connected. If the app never hands the port back (it crashed), the agent takes it
+wireviewd. Meanwhile WireView Mini keeps publishing the last reading, marked not
+connected. If the app never hands the port back (it crashed), WireView Mini takes it
 back on its own after at most 10 minutes. The handover is accepted only from
 this PC.
 
 Build it from source with:
 
 ```bash
-dotnet publish WireViewAgent -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
-dotnet publish WireViewAgent -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish WireViewMini -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish WireViewMini -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 ## Requirements

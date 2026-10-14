@@ -63,14 +63,14 @@ namespace WireView2.Device
             _probes.Add(probe ?? DefaultProbe);
         }
 
-        // A local process that owns the hardware (the headless wireview-agent): its
+        // A local process that owns the hardware (the headless wireview-mini): its
         // probe runs after hwmon and before serial, and while it reports the owner
         // as present, serial ports are not offered (see SetLocalOwnerProbe).
         private Func<ISet<string>, IEnumerable<(IWireViewDevice device, string source)>>? _ownerProbe;
         private Func<bool>? _ownerPresent;
 
         /// <summary>Registers the probe for a local process that owns the WireView's
-        /// serial port (the headless agent). It runs after hwmon and ahead of the
+        /// serial port (the WireView Mini). It runs after hwmon and ahead of the
         /// serial probe on every platform; while <paramref name="ownerPresent"/> is
         /// true no serial port is opened, and serial entries already open are
         /// retired, for the same reason as with a daemon-backed hwmon device: a
@@ -213,7 +213,7 @@ namespace WireView2.Device
 
         /// <summary>Stops discovery and closes every device, waiting up to
         /// <paramref name="workerWait"/> for a discovery pass in flight (a serial
-        /// handshake can take longer than the default half second; the agent waits
+        /// handshake can take longer than the default half second; WireView Mini waits
         /// for it before handing the port over).</summary>
         public void Stop(TimeSpan workerWait)
         {
@@ -393,7 +393,7 @@ namespace WireView2.Device
                     dead.AddRange(_byId.Values.Where(m =>
                         m.Device is WireViewPro2Device && !dead.Contains(m)));
             }
-            // Same once the headless agent is up: it owns the port now.
+            // Same once the WireView Mini is up: it owns the port now.
             if (LocalOwnerPresent())
                 lock (_gate)
                     dead.AddRange(_byId.Values.Where(m =>

@@ -485,9 +485,9 @@ public partial class OverviewViewModel : ViewModelBase, IDisposable
             }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
-        else if (_connector.Device is NetworkDevice { IsLocalAgent: true } agent)
+        else if (_connector.Device is NetworkDevice { IsLocalMini: true } mini)
         {
-            _ = ConnectionStatus.ClearFaultsViaAgentAsync(agent, keep, keep);
+            _ = ConnectionStatus.ClearFaultsViaMiniAsync(mini, keep, keep);
         }
     }
 }

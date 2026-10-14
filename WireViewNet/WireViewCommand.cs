@@ -8,7 +8,7 @@ namespace WireView2.Net
     /// the JSON body with <see cref="ToJson"/> and signs those exact bytes; the
     /// server HMAC-verifies the received bytes and parses them with
     /// <see cref="Parse"/>. Mirrors the daemon's command schema (no bootloader).
-    /// Two more ops exist for the headless agent's serial handover
+    /// Two more ops exist for the WireView Mini's serial handover
     /// (<see cref="SuspendSerial"/>, <see cref="ResumeSerial"/>); the publisher
     /// accepts those from this machine only (<see cref="LocalOnly"/>).
     /// </summary>
@@ -27,7 +27,7 @@ namespace WireView2.Net
         public int ConfigVersion { get; init; }         // writeConfig
         public byte[]? ConfigData { get; init; }        // writeConfig (raw bytes)
         /// <summary>suspendSerial: how long the port stays handed over before the
-        /// agent takes it back on its own (sent as "seconds"; 0 means the agent's
+        /// mini takes it back on its own (sent as "seconds"; 0 means WireView Mini's
         /// default). Re-sending extends the window, like wireviewd's SUSPEND_SERIAL.</summary>
         public int Seconds { get; init; }
 
@@ -48,11 +48,11 @@ namespace WireView2.Net
             => new() { DeviceId = deviceId, Op = "clearFaults", StatusMask = keepStatusMask, LogMask = keepLogMask };
         public static WireViewCommand WriteConfig(string deviceId, int version, byte[] data)
             => new() { DeviceId = deviceId, Op = "writeConfig", ConfigVersion = version, ConfigData = data };
-        /// <summary>Asks the agent to close its serial port(s) for
+        /// <summary>Asks WireView Mini to close its serial port(s) for
         /// <paramref name="seconds"/> so a local client can use the port directly.</summary>
         public static WireViewCommand SuspendSerial(string deviceId, int seconds)
             => new() { DeviceId = deviceId, Op = SuspendSerialOp, Seconds = seconds };
-        /// <summary>Hands the port back to the agent before the window runs out.</summary>
+        /// <summary>Hands the port back to WireView Mini before the window runs out.</summary>
         public static WireViewCommand ResumeSerial(string deviceId)
             => new() { DeviceId = deviceId, Op = ResumeSerialOp };
 

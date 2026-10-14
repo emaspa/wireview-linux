@@ -1,14 +1,14 @@
 #if WINDOWS
 using System.Runtime.InteropServices;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// The Windows build is a GUI-subsystem program (OutputType WinExe), so the
 /// logon start opens no console window. Run from cmd or PowerShell, it attaches
 /// to that console so --status, --help and a foreground run can print. The shell
-/// does not wait for a GUI-subsystem program: use <c>start /wait wireview-agent --status</c>
-/// in cmd, or pipe it (<c>wireview-agent --status | Out-Host</c>) in PowerShell, to
+/// does not wait for a GUI-subsystem program: use <c>start /wait wireview-mini --status</c>
+/// in cmd, or pipe it (<c>wireview-mini --status | Out-Host</c>) in PowerShell, to
 /// see the output before the next prompt and get the exit code.
 /// </summary>
 internal static class WindowsConsole

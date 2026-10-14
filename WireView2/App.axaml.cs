@@ -81,7 +81,7 @@ public class App : Application
             }
             ApplyTheme(AppSettings.Current.ThemePreference);
             // Before the tray starts the device manager: the probe for
-            // wireview-agent must be in place before the first serial probe.
+            // wireview-mini must be in place before the first serial probe.
             WireViewDiscoveryService.Shared.Start();
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;

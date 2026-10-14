@@ -108,13 +108,13 @@ namespace WireView2.Net
         public string AppVersion { get; set; } = "";
         public List<WireViewSensorDto> Devices { get; set; } = new();
 
-        /// <summary>The headless agent's version when the publisher is wireview-agent;
+        /// <summary>WireView Mini's version when the publisher is wireview-mini;
         /// absent for the GUI and wireviewd. The GUI's localhost probe uses it to tell
-        /// the agent from any other publisher on the port.</summary>
+        /// WireView Mini from any other publisher on the port.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? Agent { get; set; }
+        public string? Mini { get; set; }
 
-        /// <summary>wireview-agent only: true while the agent has handed its serial
+        /// <summary>wireview-mini only: true while WireView Mini has handed its serial
         /// port to a local client (the devices are then its last readings, with
         /// <c>connected</c> false).</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

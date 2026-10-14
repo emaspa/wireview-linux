@@ -4,7 +4,7 @@ using System.Text;
 using Tmds.DBus.Protocol;
 using WireView2.Net;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// Linux tray icon: a StatusNotifierItem (org.kde.StatusNotifierItem at
@@ -19,7 +19,7 @@ namespace WireView2.Agent;
 /// watcher owns that name (again after the watcher restarts). With no session
 /// bus or no watcher it logs one line and keeps trying (connection every 30 s,
 /// registration as soon as a watcher appears and every 30 s after a refusal), so
-/// the icon shows up when the desktop's tray comes up after the agent.
+/// the icon shows up when the desktop's tray comes up after WireView Mini.
 /// Behaviour follows Avalonia.FreeDesktop's DBusTrayIconImpl/DBusMenuExporter
 /// (property set, name before registration); the code is written from the specs.
 /// </summary>
@@ -505,7 +505,7 @@ internal sealed class SniTrayIcon : ITrayIcon
     }
 
     /// <summary>Runs a menu command off the bus's dispatch thread (it may start a
-    /// process or stop the agent).</summary>
+    /// process or stop WireView Mini).</summary>
     private void Dispatch(TrayCommand command)
     {
         ThreadPool.QueueUserWorkItem(_ =>
@@ -657,7 +657,7 @@ internal sealed class SniTrayIcon : ITrayIcon
         switch (name)
         {
             case "Category": w.WriteVariantString("Hardware"); return true;
-            case "Id": w.WriteVariantString("wireview-agent"); return true;
+            case "Id": w.WriteVariantString("wireview-mini"); return true;
             case "Title": w.WriteVariantString(s.Title); return true;
             case "Status": w.WriteVariantString(StatusOf(s)); return true;
             case "WindowId": w.WriteVariantInt32(0); return true;

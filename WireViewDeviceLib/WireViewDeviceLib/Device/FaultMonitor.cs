@@ -18,7 +18,7 @@ namespace WireView2.Device
 
     /// <summary>
     /// Fault edge detection for one device's reading stream, shared by the GUI and
-    /// the headless agent so both alert on exactly the same readings.
+    /// the WireView Mini so both alert on exactly the same readings.
     ///
     /// Debounce: the serial protocol has no framing/CRC, so a desynced read can
     /// pulse garbage into the fault fields for a single poll. Real faults persist

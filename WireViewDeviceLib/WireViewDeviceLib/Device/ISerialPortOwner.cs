@@ -3,7 +3,7 @@ namespace WireView2.Device
     /// <summary>
     /// Another process that owns the WireView's serial port and can lend it out
     /// for a while: wireviewd (through <see cref="HwmonDevice"/>) or the headless
-    /// wireview-agent (through its LAN device on localhost). Used by
+    /// wireview-mini (through its LAN device on localhost). Used by
     /// <see cref="DirectSerialSession"/> for transfers that only exist on the
     /// direct serial protocol (device log, theme assets).
     /// </summary>

@@ -1,17 +1,17 @@
 using System.Buffers.Binary;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// The GUI's icon (WireView2/Assets/Icons/bear.ico), embedded as
-/// "wireview-agent.ico". An .ico file is a directory of images, each a PNG or a
+/// "wireview-mini.ico". An .ico file is a directory of images, each a PNG or a
 /// DIB (BITMAPINFOHEADER, bottom-up pixel rows, then a 1-bit AND mask). Windows
 /// hands an entry to CreateIconFromResourceEx as is; Linux converts the 32-bit
 /// DIB entries to the ARGB32 big-endian pixmaps StatusNotifierItem wants.
 /// </summary>
 internal static class TrayIconImage
 {
-    private const string ResourceName = "wireview-agent.ico";
+    private const string ResourceName = "wireview-mini.ico";
 
     internal readonly record struct Entry(int Width, int Height, int Offset, int Size);
 

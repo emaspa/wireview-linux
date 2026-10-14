@@ -1,27 +1,27 @@
 namespace WireView2.Services;
 
 /// <summary>
-/// The headless agent's single-instance lock: a named mutex the agent holds
-/// while it runs. The GUI checks it to leave fault alerts to the agent when the
-/// agent runs, also where its port is not reachable (wireviewd holds it).
+/// WireView Mini's single-instance lock: a named mutex WireView Mini holds
+/// while it runs. The GUI checks it to leave fault alerts to WireView Mini when the
+/// mini runs, also where its port is not reachable (wireviewd holds it).
 /// </summary>
-public static class AgentInstance
+public static class MiniInstance
 {
-    // Unix scopes an unprefixed name to the login session (setsid), so an agent
+    // Unix scopes an unprefixed name to the login session (setsid), so a WireView Mini
     // started by autostart and one started in a terminal would not see each
     // other; Global\ is machine wide there. On Windows the default (Local\) is
     // the logon session, which is what we want.
     private static string MutexName => OperatingSystem.IsWindows()
-        ? "WireViewAgent_SingleInstance"
-        : @"Global\WireViewAgent_SingleInstance";
+        ? "WireViewMini_SingleInstance"
+        : @"Global\WireViewMini_SingleInstance";
 
-    /// <summary>Takes the lock; null when another agent holds it. Keep the
+    /// <summary>Takes the lock; null when another mini holds it. Keep the
     /// returned mutex alive (and owned) for the life of the process.</summary>
     public static Mutex? TryAcquire()
     {
         var mutex = new Mutex(true, MutexName, out bool createdNew);
         if (createdNew) return mutex;
-        // An abandoned lock (the previous agent crashed) can be taken over.
+        // An abandoned lock (the previous mini crashed) can be taken over.
         try
         {
             if (mutex.WaitOne(0)) return mutex;
@@ -34,7 +34,7 @@ public static class AgentInstance
         return null;
     }
 
-    /// <summary>True when an agent holds the lock on this machine. Best-effort.</summary>
+    /// <summary>True when WireView Mini holds the lock on this machine. Best-effort.</summary>
     public static bool IsRunning()
     {
         try
@@ -44,7 +44,7 @@ public static class AgentInstance
             {
                 try
                 {
-                    // Getting it means nobody holds it: a stale name, no agent.
+                    // Getting it means nobody holds it: a stale name, no mini.
                     if (mutex.WaitOne(0))
                     {
                         mutex.ReleaseMutex();

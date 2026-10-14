@@ -8,15 +8,15 @@ using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// The control panel: a single page (the embedded <c>ControlPanel.html</c>) and
-/// its JSON API, served on the agent's publish port through
+/// its JSON API, served on WireView Mini's publish port through
 /// <see cref="LocalPublishHost.ExtraRoutes"/>. Everything here answers loopback
 /// peers only (403 "local only" from any other address, even while the port is
 /// open on the LAN), and every <c>/api/</c> request must carry the run's token
-/// (<see cref="AgentService.PanelToken"/>) in <c>X-Agent-Token</c> (401 without
+/// (<see cref="MiniService.PanelToken"/>) in <c>X-Mini-Token</c> (401 without
 /// it). No CORS headers, so other web pages cannot read the answers.
 ///
 /// API: GET /api/status, GET /api/config, POST /api/config, POST /api/command,
@@ -28,8 +28,8 @@ namespace WireView2.Agent;
 /// </summary>
 internal sealed class ControlPanel
 {
-    public const string TokenHeader = "X-Agent-Token";
-    private const string PageResource = "wireview-agent.ControlPanel.html";
+    public const string TokenHeader = "X-Mini-Token";
+    private const string PageResource = "wireview-mini.ControlPanel.html";
 
     private static readonly JsonSerializerOptions Json = WireViewJson.Options;
 
@@ -54,10 +54,10 @@ internal sealed class ControlPanel
         [(int)WireViewPro2Device.NVM_CMD.NVM_CMD_RESET] = "reset to defaults",
     };
 
-    private readonly AgentService _agent;
+    private readonly MiniService _mini;
     private readonly object _writeGate = new(); // one device write at a time
 
-    public ControlPanel(AgentService agent) => _agent = agent;
+    public ControlPanel(MiniService mini) => _mini = mini;
 
     /// <summary>The publisher's extra-routes hook; null for paths that are not ours.</summary>
     public HttpResponseInfo? Handle(HttpRequestInfo req)
@@ -76,7 +76,7 @@ internal sealed class ControlPanel
             return req.Method is "GET" or "HEAD" ? Page() : Error(405, "method not allowed");
 
         if (!TokenMatches(req.Header(TokenHeader)))
-            return Error(401, "missing or wrong control panel token; open the panel from the tray or with wireview-agent --open");
+            return Error(401, "missing or wrong control panel token; open the panel from the tray or with wireview-mini --open");
 
         try
         {
@@ -104,7 +104,7 @@ internal sealed class ControlPanel
     private bool TokenMatches(string? token)
     {
         if (string.IsNullOrEmpty(token)) return false;
-        byte[] want = Encoding.ASCII.GetBytes(_agent.PanelToken);
+        byte[] want = Encoding.ASCII.GetBytes(_mini.PanelToken);
         byte[] got = Encoding.ASCII.GetBytes(token.Trim());
         return want.Length == got.Length && CryptographicOperations.FixedTimeEquals(want, got);
     }
@@ -137,18 +137,18 @@ internal sealed class ControlPanel
     private object Status()
     {
         var s = AppSettings.Current;
-        var ep = _agent.Publisher.Endpoint;
+        var ep = _mini.Publisher.Endpoint;
         return new
         {
-            agent = new
+            mini = new
             {
-                version = _agent.Version,
-                uptimeSeconds = (long)_agent.Uptime.TotalSeconds,
+                version = _mini.Version,
+                uptimeSeconds = (long)_mini.Uptime.TotalSeconds,
                 os = OsName,
                 host = Environment.MachineName,
                 logPath = FileLog.CurrentPath,
                 settingsPath = AppSettings.GetSettingsPath(),
-                noShutdown = _agent.NoShutdown,
+                noShutdown = _mini.NoShutdown,
             },
             publish = new
             {
@@ -156,15 +156,15 @@ internal sealed class ControlPanel
                 address = ep?.Address.ToString(),
                 port = ep?.Port,
                 lan = ep is { } e && !IPAddress.IsLoopback(e.Address),
-                error = _agent.PublishError,
+                error = _mini.PublishError,
                 // The wanted port is taken: the panel and /sensors are on a loopback fallback.
-                fallback = _agent.OnFallback,
-                wantedPort = _agent.PublishWanted?.Port,
-                wantedLan = _agent.PublishWanted?.Lan,
+                fallback = _mini.OnFallback,
+                wantedPort = _mini.PublishWanted?.Port,
+                wantedLan = _mini.PublishWanted?.Lan,
             },
             device = LocalDevice(),
             daemon = DaemonView(),
-            remoteHosts = _agent.GetRemoteHosts().Select(h => new
+            remoteHosts = _mini.GetRemoteHosts().Select(h => new
             {
                 host = h.Host,
                 endpoint = h.Endpoint,
@@ -181,7 +181,7 @@ internal sealed class ControlPanel
     private static object SettingsView(AppSettings s) => new
     {
         shutdownOnFault = s.SoftwareShutdownOnFault,
-        startAtLogin = AgentInstaller.IsInstalled(),
+        startAtLogin = MiniInstaller.IsInstalled(),
         publishEnabled = s.PublishEnabled,
         publishPort = s.PublishPort,
         remoteHosts = s.RemoteHosts ?? new List<string>(),
@@ -191,9 +191,9 @@ internal sealed class ControlPanel
 
     private object? LocalDevice()
     {
-        if (_agent.HandoverActive)
+        if (_mini.HandoverActive)
         {
-            var frozen = _agent.Publisher.BuildSnapshot().Devices.FirstOrDefault();
+            var frozen = _mini.Publisher.BuildSnapshot().Devices.FirstOrDefault();
             return new
             {
                 name = frozen?.Name,
@@ -231,7 +231,7 @@ internal sealed class ControlPanel
             faultStatus = status,
             faultLog = log,
             // The debounced state the alerts use, else the raw bits.
-            faultText = _agent.LocalFaultText(md.Id) ?? (status != 0 ? FaultMonitor.FormatFaults((ushort)status) : null),
+            faultText = _mini.LocalFaultText(md.Id) ?? (status != 0 ? FaultMonitor.FormatFaults((ushort)status) : null),
             faultLogText = log != 0 ? FaultNames((ushort)log) : null,
         };
     }
@@ -241,7 +241,7 @@ internal sealed class ControlPanel
     /// hwmon entry and the serial port, so prefer a device that takes commands,
     /// then a connected one, then one with readings.</summary>
     private ManagedDevice? PreferredLocal() =>
-        _agent.LocalDevices.Devices
+        _mini.LocalDevices.Devices
             .Where(d => d.Device is not NetworkDevice)
             .OrderByDescending(d => CanWrite(d.Device))
             .ThenByDescending(d => d.Device.Connected)
@@ -265,7 +265,7 @@ internal sealed class ControlPanel
     private HttpResponseInfo GetConfig()
     {
         if (DeviceProblem() is { } problem) return problem;
-        var snap = _agent.Publisher.ReadLocalConfig(null);
+        var snap = _mini.Publisher.ReadLocalConfig(null);
         if (snap == null) return Error(503, "could not read the device configuration");
         return ConfigAnswer(snap, extra: null);
     }
@@ -275,7 +275,7 @@ internal sealed class ControlPanel
         DeviceConfigModel model;
         try { model = DeviceConfigModel.Decode(snap.Version, snap.Data); }
         catch (DeviceConfigException ex) { return Error(500, ex.Message); }
-        var md = _agent.LocalDevices.Devices.FirstOrDefault(d => d.Device.UniqueId == snap.DeviceId);
+        var md = _mini.LocalDevices.Devices.FirstOrDefault(d => d.Device.UniqueId == snap.DeviceId);
         int? fw = int.TryParse(md?.Device.FirmwareVersion, NumberStyles.Integer, CultureInfo.InvariantCulture, out int f) ? f : null;
         return Ok(new
         {
@@ -299,7 +299,7 @@ internal sealed class ControlPanel
         if (DeviceProblem() is { } problem) return problem;
         lock (_writeGate)
         {
-            var current = _agent.Publisher.ReadLocalConfig(null);
+            var current = _mini.Publisher.ReadLocalConfig(null);
             if (current == null) return Error(503, "could not read the device configuration to apply the changes to");
             if (current.Version != model.Version)
                 return Error(409, $"the device's config layout is {current.Version}, the edit was made for {model.Version}; reload");
@@ -311,13 +311,13 @@ internal sealed class ControlPanel
 
             bool changed = !bytes.AsSpan().SequenceEqual(current.Data);
             // As the app's Apply: write the merged bytes, then redraw the screen.
-            var r = _agent.RunLocalCommand(WireViewCommand.WriteConfig(current.DeviceId, current.Version, bytes));
+            var r = _mini.RunLocalCommand(WireViewCommand.WriteConfig(current.DeviceId, current.Version, bytes));
             if (r != DaemonResult.Ok) return CommandError("Apply", r);
-            _agent.RunLocalCommand(WireViewCommand.Screen(current.DeviceId, (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
+            _mini.RunLocalCommand(WireViewCommand.Screen(current.DeviceId, (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
             FileLog.Info($"control panel: config applied ({(changed ? "changed" : "no field changed")}, {bytes.Length} bytes)");
 
             Thread.Sleep(150); // let the device take the frames before reading back
-            var after = _agent.Publisher.ReadLocalConfig(null);
+            var after = _mini.Publisher.ReadLocalConfig(null);
             if (after == null) return Error(500, "the config was written but could not be read back");
             return ConfigAnswer(after, new
             {
@@ -330,7 +330,7 @@ internal sealed class ControlPanel
     /// <summary>An answer for a state where the device cannot be used, or null.</summary>
     private HttpResponseInfo? DeviceProblem()
     {
-        if (_agent.HandoverActive)
+        if (_mini.HandoverActive)
             return Error(409, "the serial port is lent to the WireView app; try again when it hands it back");
         var md = PreferredLocal();
         if (md == null || !md.Device.Connected) return Error(503, "no device connected");
@@ -353,18 +353,18 @@ internal sealed class ControlPanel
         {
             case "screen":
                 if (!ScreenCommands.Contains(cmd)) return Error(400, $"unknown screen command {cmd}");
-                return Done("Screen change", _agent.RunLocalCommand(WireViewCommand.Screen("", cmd)), ScreenText(cmd));
+                return Done("Screen change", _mini.RunLocalCommand(WireViewCommand.Screen("", cmd)), ScreenText(cmd));
             case "nvm":
                 if (!NvmCommands.TryGetValue(cmd, out var what))
                     return Error(400, $"NVM command {cmd} is not available here (config load, store and reset only)");
                 lock (_writeGate)
                 {
-                    var r = _agent.RunLocalCommand(WireViewCommand.Nvm("", cmd));
+                    var r = _mini.RunLocalCommand(WireViewCommand.Nvm("", cmd));
                     if (r == DaemonResult.Ok) FileLog.Info($"control panel: config {what}");
                     return Done("Device memory", r, $"Config {what}.");
                 }
             case "clearFaults":
-                return Done("Clearing the faults", _agent.ClearLocalFaults(), "Faults cleared.");
+                return Done("Clearing the faults", _mini.ClearLocalFaults(), "Faults cleared.");
             default:
                 return Error(400, "op must be screen, nvm or clearFaults");
         }
@@ -426,7 +426,7 @@ internal sealed class ControlPanel
             if (port != s.PublishPort)
             {
                 bool lan = Bool("publishEnabled") ?? s.PublishEnabled;
-                if (_agent.Publisher.Endpoint?.Port != port && PortProblem(port, lan) is { } why)
+                if (_mini.Publisher.Endpoint?.Port != port && PortProblem(port, lan) is { } why)
                     return Error(400, $"port {port} cannot be used: {why}");
                 changes.Add(($"publish port set to {port}", x => x.PublishPort = port));
                 note = "moved";
@@ -468,11 +468,11 @@ internal sealed class ControlPanel
         }
 
         // Start at login is the login entry, not a setting.
-        if (Bool("startAtLogin") is { } sal && sal != AgentInstaller.IsInstalled())
+        if (Bool("startAtLogin") is { } sal && sal != MiniInstaller.IsInstalled())
         {
             try
             {
-                string where = AgentInstaller.SetInstalled(sal);
+                string where = MiniInstaller.SetInstalled(sal);
                 FileLog.Info(sal
                     ? $"control panel: start at login turned on ({where})"
                     : $"control panel: start at login turned off (removed {where})");
@@ -486,10 +486,10 @@ internal sealed class ControlPanel
         if (changes.Count > 0)
         {
             var list = changes.ToArray();
-            bool applied = _agent.RequestSettingsChange(string.Join(", ", list.Select(c => c.What)),
+            bool applied = _mini.RequestSettingsChange(string.Join(", ", list.Select(c => c.What)),
                 x => { foreach (var c in list) c.Change(x); },
                 source: "control panel", wait: TimeSpan.FromSeconds(6));
-            if (!applied) return Error(500, "the agent did not apply the settings in time; reload the page");
+            if (!applied) return Error(500, "WireView Mini did not apply the settings in time; reload the page");
         }
 
         return Ok(new
@@ -497,9 +497,9 @@ internal sealed class ControlPanel
             ok = true,
             message = changes.Count == 0 ? "Nothing changed." : "Saved.",
             settings = SettingsView(AppSettings.Current),
-            panelUrl = note == "moved" ? _agent.PanelUrl : null,
+            panelUrl = note == "moved" ? _mini.PanelUrl : null,
             // With wireviewd the loopback fallback is the expected state, not an error.
-            publishError = _agent.DaemonMode ? null : _agent.PublishError,
+            publishError = _mini.DaemonMode ? null : _mini.PublishError,
         });
     }
 
@@ -510,13 +510,13 @@ internal sealed class ControlPanel
     /// the first look); editable: wireviewctl has a config command (null while not known).</summary>
     private object DaemonView()
     {
-        var seen = _agent.Daemon.Observed;
+        var seen = _mini.Daemon.Observed;
         return new
         {
-            present = _agent.DaemonMode,
+            present = _mini.DaemonMode,
             publishing = seen?.Publishing,
             port = seen?.Port,
-            editable = _agent.Daemon.Supported,
+            editable = _mini.Daemon.Supported,
         };
     }
 
@@ -533,7 +533,7 @@ internal sealed class ControlPanel
     private HttpResponseInfo GetDaemonConfig()
     {
         if (!OperatingSystem.IsLinux()) return Error(404, "wireviewd runs on Linux only");
-        var r = _agent.Daemon.Read(showSecret: true);
+        var r = _mini.Daemon.Read(showSecret: true);
         return Ok(new
         {
             ok = r.Ok,
@@ -548,7 +548,7 @@ internal sealed class ControlPanel
 
     /// <summary>Body: {"config": {remoteEnabled, port, bind, secret, logDays},
     /// "copySecret": bool}; fields left out stay as they are. copySecret also sets
-    /// the agent's network secret (for the remote hosts) to the daemon's after a
+    /// WireView Mini's network secret (for the remote hosts) to the daemon's after a
     /// successful save. wireviewctl checks the values: its message comes back as error.</summary>
     private HttpResponseInfo PostDaemonConfig(string body)
     {
@@ -561,20 +561,20 @@ internal sealed class ControlPanel
         var edit = element.Deserialize<DaemonConfigEdit>(Json) ?? new DaemonConfigEdit();
         bool copySecret = root.TryGetProperty("copySecret", out var cs) && cs.ValueKind == JsonValueKind.True;
 
-        string? panelBefore = _agent.PanelUrl;
-        var w = _agent.Daemon.Write(edit);
+        string? panelBefore = _mini.PanelUrl;
+        var w = _mini.Daemon.Write(edit);
 
         if (w.Ok && copySecret && w.Config is { } now)
         {
             string? secret = string.IsNullOrEmpty(now.Secret) ? null : now.Secret;
             string? mine = string.IsNullOrEmpty(AppSettings.Current.NetworkSecret) ? null : AppSettings.Current.NetworkSecret;
             if (secret != mine &&
-                !_agent.RequestSettingsChange(secret == null ? "network secret cleared (as wireviewd's)" : "network secret set to wireviewd's",
+                !_mini.RequestSettingsChange(secret == null ? "network secret cleared (as wireviewd's)" : "network secret set to wireviewd's",
                     x => x.NetworkSecret = secret, source: "control panel", wait: TimeSpan.FromSeconds(6)))
-                return Error(500, "the agent did not apply the settings in time; reload the page");
+                return Error(500, "WireView Mini did not apply the settings in time; reload the page");
         }
 
-        string? panelAfter = _agent.PanelUrl;
+        string? panelAfter = _mini.PanelUrl;
         return Ok(new
         {
             ok = w.Ok,
@@ -584,7 +584,7 @@ internal sealed class ControlPanel
             changed = w.Changed,
             config = ConfigView(w.Config),
             settings = SettingsView(AppSettings.Current),
-            // The agent's listener moved off the daemon's new port: the page follows it.
+            // WireView Mini's listener moved off the daemon's new port: the page follows it.
             panelUrl = panelAfter != null && panelAfter != panelBefore ? panelAfter : null,
             daemon = DaemonView(),
         });

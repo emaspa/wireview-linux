@@ -3,34 +3,34 @@ using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
-/// <summary><c>--status</c>: asks the running agent on localhost and prints its
+/// <summary><c>--status</c>: asks the running WireView Mini on localhost and prints its
 /// version, each device and its fault state. The exit code sums it up.</summary>
 internal static class StatusCommand
 {
     public static int Run()
     {
         AppSettings.Reload();
-        var (port, snap) = FindAgent();
+        var (port, snap) = FindMini();
 
-        if (snap?.Agent == null)
+        if (snap?.Mini == null)
         {
-            bool running = AgentInstance.IsRunning();
+            bool running = MiniInstance.IsRunning();
             string who = snap == null
                 ? "nothing answers"
                 : $"it is served by {(string.IsNullOrEmpty(snap.AppVersion) ? "another publisher" : snap.AppVersion)}";
             if (running)
             {
-                Console.WriteLine($"wireview-agent is running but not publishing on 127.0.0.1:{port} ({who}).");
+                Console.WriteLine($"wireview-mini is running but not publishing on 127.0.0.1:{port} ({who}).");
                 Console.WriteLine("Alerts and shutdown on fault work; see its log for details.");
                 return Program.ExitNoDevice;
             }
-            Console.WriteLine($"wireview-agent is not running (127.0.0.1:{port}: {who}).");
+            Console.WriteLine($"wireview-mini is not running (127.0.0.1:{port}: {who}).");
             return Program.ExitNotRunning;
         }
 
-        Console.WriteLine($"wireview-agent {snap.Agent} on {snap.Host}, port {port}");
+        Console.WriteLine($"wireview-mini {snap.Mini} on {snap.Host}, port {port}");
         if (port != AppSettings.Current.PublishPort)
             Console.WriteLine($"publish port {AppSettings.Current.PublishPort} is taken: serving on the loopback fallback 127.0.0.1:{port} (not on the LAN)");
         if (snap.SerialSuspended)
@@ -61,18 +61,18 @@ internal static class StatusCommand
         return anyConnected ? Program.ExitOk : Program.ExitNoDevice;
     }
 
-    /// <summary>The running agent: the port it wrote next to its panel token (its
+    /// <summary>The running mini: the port it wrote next to its panel token (its
     /// fallback port while the publish port is taken), else the publish port.
     /// Returns the port asked and the snapshot (null when nothing answers there,
-    /// or a non-agent snapshot when another publisher holds the port).</summary>
-    internal static (int Port, WireViewHostSnapshot? Snapshot) FindAgent()
+    /// or a non-mini snapshot when another publisher holds the port).</summary>
+    internal static (int Port, WireViewHostSnapshot? Snapshot) FindMini()
     {
         int settingsPort = AppSettings.Current.PublishPort;
         WireViewHostSnapshot? first = null;
-        foreach (int port in new[] { AgentPanelToken.ReadPort() ?? settingsPort, settingsPort }.Distinct())
+        foreach (int port in new[] { MiniPanelToken.ReadPort() ?? settingsPort, settingsPort }.Distinct())
         {
-            var snap = LocalAgentProbe.TryFetch(port, TimeSpan.FromSeconds(3));
-            if (snap?.Agent != null) return (port, snap);
+            var snap = LocalMiniProbe.TryFetch(port, TimeSpan.FromSeconds(3));
+            if (snap?.Mini != null) return (port, snap);
             if (port == settingsPort) first = snap;
         }
         return (settingsPort, first);

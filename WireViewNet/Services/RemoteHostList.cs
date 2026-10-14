@@ -7,7 +7,7 @@ namespace WireView2.Services;
 /// <summary>
 /// The remote hosts to read over the LAN, from <see cref="AppSettings.RemoteHosts"/>,
 /// minus blanks and any endpoint that points back at this machine (its devices
-/// are already local). Shared by the GUI's discovery and the headless agent.
+/// are already local). Shared by the GUI's discovery and the WireView Mini.
 /// </summary>
 public static class RemoteHostList
 {

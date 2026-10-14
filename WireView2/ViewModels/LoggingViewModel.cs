@@ -248,10 +248,10 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
     {
         var serialDevice = _connector.Device as WireViewPro2Device;
         var hwmonDevice = _connector.Device as HwmonDevice;
-        // wireviewd (hwmon) or wireview-agent: both lend the port for the read.
+        // wireviewd (hwmon) or wireview-mini: both lend the port for the read.
         ISerialPortOwner? portOwner =
             hwmonDevice is { Connected: true, DaemonAvailable: true } ? hwmonDevice :
-            _connector.Device is NetworkDevice { Connected: true, IsLocalAgent: true } agent ? agent :
+            _connector.Device is NetworkDevice { Connected: true, IsLocalMini: true } mini ? mini :
             null;
         if (serialDevice is not { Connected: true } && portOwner == null)
         {
@@ -273,8 +273,8 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
             // (the daemon pauses its polling and resumes afterwards). The session
             // token also fires if the daemon's suspension cannot be re-armed, which
             // stops the read and surfaces the reason.
-            // Off the UI thread: the agent's handover is an HTTP round trip that
-            // waits for the agent to close its port.
+            // Off the UI thread: WireView Mini's handover is an HTTP round trip that
+            // waits for WireView Mini to close its port.
             _deviceLogBuffer = serialDevice != null
                 ? await serialDevice.ReadDeviceLogAsync(progress, token).ConfigureAwait(false)
                 : await Task.Run(() => DirectSerialSession.RunAsync(portOwner!,

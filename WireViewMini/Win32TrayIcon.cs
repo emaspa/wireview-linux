@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using WireView2.Net;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// Windows tray icon through raw Win32: Shell_NotifyIcon on a hidden window
@@ -20,7 +20,7 @@ namespace WireView2.Agent;
 /// </summary>
 internal sealed class Win32TrayIcon : ITrayIcon
 {
-    private const string ClassName = "WireViewAgentTrayWindow";
+    private const string ClassName = "WireViewMiniTrayWindow";
     private const int IconId = 1;
 
     private const uint WM_NULL = 0x0000, WM_DESTROY = 0x0002, WM_CLOSE = 0x0010, WM_CONTEXTMENU = 0x007B;
@@ -61,7 +61,7 @@ internal sealed class Win32TrayIcon : ITrayIcon
     {
         _state = initial;
         _onCommand = onCommand;
-        _thread = new Thread(MessageLoop) { IsBackground = true, Name = "wireview-agent tray" };
+        _thread = new Thread(MessageLoop) { IsBackground = true, Name = "wireview-mini tray" };
         _thread.SetApartmentState(ApartmentState.STA);
     }
 

@@ -18,7 +18,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     private string _faultIcon = "?";
     private ushort _lastFaultStatus;
     private ushort _lastFaultLog;
-    // Debounce, edge detection and toast cooldown (shared with wireview-agent).
+    // Debounce, edge detection and toast cooldown (shared with wireview-mini).
     private readonly FaultMonitor _faultMonitor = new();
 
     // --------------- Connection state ---------------
@@ -36,10 +36,10 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     public string ConnectionText => IsConnected ? ConnectedText : "Disconnected";
     public string StatusText => IsConnected ? ConnectedText : "Disconnected";
 
-    /// <summary>"Connected", or "Connected via agent" when the selected device is
-    /// reached through wireview-agent on this machine.</summary>
+    /// <summary>"Connected", or "Connected via WireView Mini" when the selected device is
+    /// reached through wireview-mini on this machine.</summary>
     private string ConnectedText =>
-        _connector.Device is NetworkDevice { IsLocalAgent: true } ? "Connected via agent" : "Connected";
+        _connector.Device is NetworkDevice { IsLocalMini: true } ? "Connected via WireView Mini" : "Connected";
 
     // --------------- Fault state ---------------
 
@@ -152,10 +152,10 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             }
             hwmon.ScreenCmd(WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME);
         }
-        else if (_connector.Device is NetworkDevice { IsLocalAgent: true } agent)
+        else if (_connector.Device is NetworkDevice { IsLocalMini: true } mini)
         {
-            // The agent owns the port: relay the clear through it.
-            _ = ClearFaultsViaAgentAsync(agent, keepNoActive, keepWholeLog);
+            // WireView Mini owns the port: relay the clear through it.
+            _ = ClearFaultsViaMiniAsync(mini, keepNoActive, keepWholeLog);
         }
 
         if (Dispatcher.UIThread.CheckAccess())
@@ -168,18 +168,18 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
         }
     }
 
-    /// <summary>Clears faults on a device the local agent owns (keep-masks as for
+    /// <summary>Clears faults on a device WireView Mini owns (keep-masks as for
     /// the direct paths), then refreshes its screen. A failure is reported with
     /// the same notification as a wireviewd failure.</summary>
-    public async System.Threading.Tasks.Task ClearFaultsViaAgentAsync(NetworkDevice agent, int keepStatusMask, int keepLogMask)
+    public async System.Threading.Tasks.Task ClearFaultsViaMiniAsync(NetworkDevice mini, int keepStatusMask, int keepLogMask)
     {
-        var r = await agent.SendCommandAsync(WireViewCommand.Faults(agent.UniqueId, keepStatusMask, keepLogMask));
+        var r = await mini.SendCommandAsync(WireViewCommand.Faults(mini.UniqueId, keepStatusMask, keepLogMask));
         if (!r.Ok)
         {
             _toast.Show("WireView", r.FailureText("Clearing the fault"));
             return;
         }
-        await agent.SendCommandAsync(WireViewCommand.Screen(agent.UniqueId, (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
+        await mini.SendCommandAsync(WireViewCommand.Screen(mini.UniqueId, (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
     }
 
     // --------------- Event handlers ---------------
@@ -214,21 +214,21 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
 
         if (fault.Raised)
         {
-            // wireview-agent raises its own alert for every device it watches
+            // wireview-mini raises its own alert for every device it watches
             // (this machine's and the remote hosts') and shuts down for this
             // machine's device: one notification, one shutdown. A remote device
             // selected here keeps the GUI's own shutdown, as before.
-            bool agentRunning = _connector.Device is NetworkDevice { IsLocalAgent: true }
-                || WireViewDiscoveryService.Shared.AgentPresent
-                || AgentInstance.IsRunning();
-            bool localDevice = _connector.Device is not NetworkDevice { IsLocalAgent: false };
+            bool miniRunning = _connector.Device is NetworkDevice { IsLocalMini: true }
+                || WireViewDiscoveryService.Shared.MiniPresent
+                || MiniInstance.IsRunning();
+            bool localDevice = _connector.Device is not NetworkDevice { IsLocalMini: false };
 
             // Format from the data directly: the FaultText property is set
             // via a UI-thread post and may not be updated yet on this thread.
-            if (!agentRunning)
+            if (!miniRunning)
                 _toast.Show("WireView Fault", fault.Text);
 
-            if (AppSettings.Current.SoftwareShutdownOnFault && !(agentRunning && localDevice))
+            if (AppSettings.Current.SoftwareShutdownOnFault && !(miniRunning && localDevice))
                 SystemPower.Shutdown();
         }
     }

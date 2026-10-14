@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text;
 using WireView2.Net;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>wireviewd's settings (<c>/etc/wireview/config</c>) as
 /// <c>wireviewctl config show</c> prints them.</summary>
@@ -45,7 +45,7 @@ internal sealed record DaemonConfigWrite(bool Ok, string? Reply, string? Error, 
                                          IReadOnlyList<string> Changed, DaemonConfig? Config);
 
 /// <summary>What answers on wireviewd's port: <paramref name="Publishing"/> when
-/// a WireView publisher that is not an agent (wireviewd) serves /sensors there.</summary>
+/// a WireView publisher that is not WireView Mini (wireviewd) serves /sensors there.</summary>
 internal readonly record struct DaemonObservation(bool Publishing, int Port);
 
 /// <summary>
@@ -57,11 +57,11 @@ internal readonly record struct DaemonObservation(bool Publishing, int Port);
 /// <c>wireviewctl</c> on PATH, else <c>/usr/bin/wireviewctl</c>. The secret goes
 /// to it on stdin (<c>secret=-</c>), never on a command line, and is never logged.
 ///
-/// Also keeps what the agent knows of the daemon for the status line and the
+/// Also keeps what WireView Mini knows of the daemon for the status line and the
 /// tray: its port (from the last read, 9876 until then), whether wireviewctl
 /// supports <c>config</c> (probed once, again on a read after it did not), and
-/// what answers on that port (<see cref="LocalAgentProbe.TryFetch(int, TimeSpan, string)"/>
-/// every few seconds). <see cref="IsReserved"/> is the port(s) the agent keeps
+/// what answers on that port (<see cref="LocalMiniProbe.TryFetch(int, TimeSpan, string)"/>
+/// every few seconds). <see cref="IsReserved"/> is the port(s) WireView Mini keeps
 /// its own listener off. Runs wireviewctl on the caller's thread (the panel's
 /// request thread, never the accept loop or the tick); the probe and the
 /// observation run on the thread pool.
@@ -94,7 +94,7 @@ internal sealed class DaemonConfigService
     private DateTime _nextObserve = DateTime.MinValue;
     private DateTime _lastReread = DateTime.MinValue;
 
-    /// <param name="settle">Blocks until the agent's tick has run once (its
+    /// <param name="settle">Blocks until WireView Mini's tick has run once (its
     /// listener moves off a reserved port there).</param>
     public DaemonConfigService(Action settle) => _settle = settle;
 
@@ -148,7 +148,7 @@ internal sealed class DaemonConfigService
     }
 
     /// <summary>Asks wireviewd's port for /sensors now. A snapshot without an
-    /// agent field is wireviewd's.</summary>
+    /// mini field is wireviewd's.</summary>
     public DaemonObservation Observe()
     {
         int port;
@@ -156,8 +156,8 @@ internal sealed class DaemonConfigService
         lock (_gate) { port = _port; bind = _bind; }
         // A daemon bound to one address answers there only.
         string host = bind.Length == 0 || bind == "0.0.0.0" || bind == "::" ? "127.0.0.1" : bind;
-        var snap = LocalAgentProbe.TryFetch(port, TimeSpan.FromSeconds(1), host);
-        var now = new DaemonObservation(snap != null && snap.Agent == null, port);
+        var snap = LocalMiniProbe.TryFetch(port, TimeSpan.FromSeconds(1), host);
+        var now = new DaemonObservation(snap != null && snap.Mini == null, port);
         DaemonObservation? was;
         bool reread;
         lock (_gate)
@@ -213,7 +213,7 @@ internal sealed class DaemonConfigService
 
     /// <summary><c>wireviewctl config set</c> with the keys <paramref name="edit"/>
     /// changes against a fresh read (the secret on stdin), then a read back. A
-    /// new port is reserved first and the agent's listener moved off it, so the
+    /// new port is reserved first and WireView Mini's listener moved off it, so the
     /// daemon can bind it on its reload.</summary>
     public DaemonConfigWrite Write(DaemonConfigEdit edit)
     {
@@ -251,7 +251,7 @@ internal sealed class DaemonConfigService
             if (moving)
             {
                 lock (_gate) _pendingPort = edit.Port;
-                _settle(); // the agent's listener leaves the new port
+                _settle(); // WireView Mini's listener leaves the new port
             }
 
             string tool = Locate() ?? "wireviewctl"; // found by the read above
@@ -287,7 +287,7 @@ internal sealed class DaemonConfigService
             else
                 FileLog.Warn($"control panel: wireviewd settings ({string.Join(", ", changed)}) not changed: {result.Error?.Replace('\n', ' ')}");
 
-            _settle(); // the agent may take the port the daemon left
+            _settle(); // WireView Mini may take the port the daemon left
             Observe();
             return result;
         }

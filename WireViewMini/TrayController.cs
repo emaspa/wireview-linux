@@ -2,21 +2,21 @@ using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
-/// Glue between <see cref="AgentService"/> and the tray icon: builds the
-/// <see cref="TrayState"/> from the agent's status, the settings and the login
+/// Glue between <see cref="MiniService"/> and the tray icon: builds the
+/// <see cref="TrayState"/> from WireView Mini's status, the settings and the login
 /// entry (at most once per second, plus right after a menu action), and turns
-/// menu clicks into agent actions. Settings toggles go through
-/// <see cref="AgentService.RequestSettingsChange"/>, so they are saved and applied
-/// on the agent's tick like a GUI edit.
+/// menu clicks into actions. Settings toggles go through
+/// <see cref="MiniService.RequestSettingsChange"/>, so they are saved and applied
+/// on WireView Mini's tick like a GUI edit.
 /// </summary>
 internal sealed class TrayController : IDisposable
 {
     private static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(1);
 
-    private readonly AgentService _service;
+    private readonly MiniService _service;
     private readonly IToastNotifier _toast;
     private readonly Action _requestStop;
     private readonly object _lock = new();
@@ -25,7 +25,7 @@ internal sealed class TrayController : IDisposable
     private DateTime _lastPush = DateTime.MinValue;
     private bool _forceNext;
 
-    private TrayController(AgentService service, IToastNotifier toast, Action requestStop)
+    private TrayController(MiniService service, IToastNotifier toast, Action requestStop)
     {
         _service = service;
         _toast = toast;
@@ -34,7 +34,7 @@ internal sealed class TrayController : IDisposable
 
     /// <summary>Creates the tray icon for this platform; null when there is none
     /// (unsupported platform or it failed to come up, which is logged).</summary>
-    public static TrayController? Start(AgentService service, IToastNotifier toast, Action requestStop)
+    public static TrayController? Start(MiniService service, IToastNotifier toast, Action requestStop)
     {
         var controller = new TrayController(service, toast, requestStop);
         var initial = controller.BuildState();
@@ -70,7 +70,7 @@ internal sealed class TrayController : IDisposable
             Fault: status.FaultText != null,
             PublishEnabled: settings.PublishEnabled,
             ShutdownOnFault: settings.SoftwareShutdownOnFault,
-            StartAtLogin: AgentInstaller.IsInstalled(),
+            StartAtLogin: MiniInstaller.IsInstalled(),
             DeviceCommands: status.DeviceName != null && !status.Handover,
             RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()),
             DaemonLine: _service.DaemonMode ? TrayState.DaemonLineFor(_service.Daemon.Observed) : null);
@@ -114,7 +114,7 @@ internal sealed class TrayController : IDisposable
                     var r = _service.RunLocalCommand(WireViewCommand.Screen("", cmd));
                     string text = ControlPanel.ScreenText(cmd);
                     FileLog.Write(r == DaemonResult.Ok ? "INFO" : "WARN", $"tray: {text.TrimEnd('.')} -> {r}");
-                    if (r != DaemonResult.Ok) _toast.Show("WireView agent", CommandFailure("The screen change", r));
+                    if (r != DaemonResult.Ok) _toast.Show("WireView Mini", CommandFailure("The screen change", r));
                     break;
                 }
 
@@ -124,7 +124,7 @@ internal sealed class TrayController : IDisposable
                     if (r != DaemonResult.Ok)
                     {
                         FileLog.Warn($"tray: Clear faults -> {r}");
-                        _toast.Show("WireView agent", CommandFailure("Clearing the faults", r));
+                        _toast.Show("WireView Mini", CommandFailure("Clearing the faults", r));
                     }
                     break;
                 }
@@ -150,7 +150,7 @@ internal sealed class TrayController : IDisposable
                 case TrayCommand.ToggleStartAtLogin:
                 {
                     bool on = !shown.StartAtLogin;
-                    string where = AgentInstaller.SetInstalled(on);
+                    string where = MiniInstaller.SetInstalled(on);
                     FileLog.Info(on
                         ? $"tray: start at login turned on ({where})"
                         : $"tray: start at login turned off (removed {where})");
@@ -166,7 +166,7 @@ internal sealed class TrayController : IDisposable
         catch (Exception ex)
         {
             FileLog.Warn($"tray: {command} failed: {ex.Message}");
-            _toast.Show("WireView agent", $"That did not work: {ex.Message}");
+            _toast.Show("WireView Mini", $"That did not work: {ex.Message}");
         }
 
         lock (_lock) _forceNext = true;
@@ -177,15 +177,15 @@ internal sealed class TrayController : IDisposable
     {
         if (_service.PanelUrl is not { } url)
         {
-            string why = _service.PublishError ?? "the agent is not listening on its port";
+            string why = _service.PublishError ?? "WireView Mini is not listening on its port";
             FileLog.Warn($"tray: Settings and controls: no listener ({why})");
-            _toast.Show("WireView agent", $"The control panel is not available: {why}.");
+            _toast.Show("WireView Mini", $"The control panel is not available: {why}.");
             return;
         }
         if (GuiLauncher.OpenUrl(url) is { } error)
         {
             FileLog.Warn($"tray: Settings and controls: cannot open the browser: {error}");
-            _toast.Show("WireView agent", $"Cannot open the browser ({error}). Run wireview-agent --open for the address.");
+            _toast.Show("WireView Mini", $"Cannot open the browser ({error}). Run wireview-mini --open for the address.");
             return;
         }
         FileLog.Info("tray: Settings and controls: opened the control panel in the browser");

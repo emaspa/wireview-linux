@@ -3,12 +3,12 @@ using System.Runtime.InteropServices;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
-/// wireview-agent: the headless WireView process. With no arguments it runs in
+/// wireview-mini: the headless WireView process. With no arguments it runs in
 /// the foreground until SIGINT/SIGTERM (Ctrl+C), logging to stderr and to
-/// <c>logs/wireview-agent-YYYY-MM-DD.log</c> next to settings.json.
+/// <c>logs/wireview-mini-YYYY-MM-DD.log</c> next to settings.json.
 /// </summary>
 internal static class Program
 {
@@ -16,14 +16,14 @@ internal static class Program
     internal const int ExitOk = 0;
     internal const int ExitError = 1;        // already running, install failure, crash
     internal const int ExitUsage = 2;
-    internal const int ExitNotRunning = 3;   // --status: no agent
-    internal const int ExitNoDevice = 4;     // --status: agent up, no live device (or not publishing)
+    internal const int ExitNotRunning = 3;   // --status: not running
+    internal const int ExitNoDevice = 4;     // --status: running, no live device (or not publishing)
     internal const int ExitFault = 5;        // --status: a device reports an active fault
 
     private const string Usage =
-        "Usage: wireview-agent [option]\n" +
+        "Usage: wireview-mini [option]\n" +
         "\n" +
-        "Headless WireView Pro II agent: owns the device, publishes it on the LAN,\n" +
+        "WireView Mini, the headless WireView Pro II client: owns the device, publishes it on the LAN,\n" +
         "raises fault alerts and, when set in the app, shuts the PC down on a fault.\n" +
         "The WireView app connects through it while it runs. Its tray icon shows the\n" +
         "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
@@ -31,11 +31,11 @@ internal static class Program
         "and LAN monitoring: open it from the tray or with --open.\n" +
         "\n" +
         "  (no option)    run in the foreground until Ctrl+C or SIGTERM\n" +
-        "  --install      start the agent at login (Linux: XDG autostart entry,\n" +
+        "  --install      start WireView Mini at login (Linux: XDG autostart entry,\n" +
         "                 Windows: HKCU Run key)\n" +
         "  --uninstall    remove that login entry\n" +
-        "  --status       ask the running agent and print device and fault state\n" +
-        "  --open         print the running agent's control panel address and open it\n" +
+        "  --status       ask the running WireView Mini and print device and fault state\n" +
+        "  --open         print the running WireView Mini's control panel address and open it\n" +
         "                 in the browser\n" +
         "  --no-shutdown  run, but never power off (for testing shutdown on fault)\n" +
         "  --no-tray      run without the tray icon (combines with --no-shutdown)\n" +
@@ -48,7 +48,7 @@ internal static class Program
         "\n" +
         "Exit codes: 0 ok, 1 error or already running, 2 bad usage,\n" +
         "--status only: 3 not running, 4 no device connected, 5 active fault.\n" +
-        "--open: 3 when no agent is running.";
+        "--open: 3 when WireView Mini is not running.";
 
     public static int Main(string[] args)
     {
@@ -71,11 +71,11 @@ internal static class Program
             case "--open":
                 return OpenPanel();
             case "--install":
-                return AgentInstaller.Install();
+                return MiniInstaller.Install();
             case "--uninstall":
-                return AgentInstaller.Uninstall();
+                return MiniInstaller.Uninstall();
             case "--version":
-                Console.WriteLine($"wireview-agent {Version}");
+                Console.WriteLine($"wireview-mini {Version}");
                 return ExitOk;
             case "--help":
             case "-h":
@@ -87,41 +87,41 @@ internal static class Program
         }
     }
 
-    /// <summary><c>--open</c>: the running agent's control panel. The token and the
+    /// <summary><c>--open</c>: the running WireView Mini's control panel. The token and the
     /// port it listens on (the publish port, or its loopback fallback while that is
-    /// taken) are in the owner-only file the agent writes.</summary>
+    /// taken) are in the owner-only file WireView Mini writes.</summary>
     private static int OpenPanel()
     {
         AppSettings.Reload();
-        var (port, snap) = StatusCommand.FindAgent();
-        string? token = AgentPanelToken.Read();
-        if (snap?.Agent == null || token == null)
+        var (port, snap) = StatusCommand.FindMini();
+        string? token = MiniPanelToken.Read();
+        if (snap?.Mini == null || token == null)
         {
-            Console.Error.WriteLine(AgentInstance.IsRunning()
-                ? $"wireview-agent is running but its control panel does not answer on 127.0.0.1:{port}; see its log."
-                : "wireview-agent is not running. Start it first (wireview-agent, or --install to start it at login).");
+            Console.Error.WriteLine(MiniInstance.IsRunning()
+                ? $"wireview-mini is running but its control panel does not answer on 127.0.0.1:{port}; see its log."
+                : "wireview-mini is not running. Start it first (wireview-mini, or --install to start it at login).");
             return ExitNotRunning;
         }
         string url = $"http://127.0.0.1:{port}/#t={token}";
         Console.WriteLine(url);
         if (GuiLauncher.OpenUrl(url) is { } error)
-            Console.Error.WriteLine($"wireview-agent: cannot open the browser ({error}); open the address above.");
+            Console.Error.WriteLine($"wireview-mini: cannot open the browser ({error}); open the address above.");
         return ExitOk;
     }
 
     private static int UsageError(string message)
     {
-        Console.Error.WriteLine($"wireview-agent: {message}");
-        Console.Error.WriteLine("Try wireview-agent --help.");
+        Console.Error.WriteLine($"wireview-mini: {message}");
+        Console.Error.WriteLine("Try wireview-mini --help.");
         return ExitUsage;
     }
 
     private static int Run(bool noShutdown, bool noTray)
     {
-        using var instance = AgentInstance.TryAcquire();
+        using var instance = MiniInstance.TryAcquire();
         if (instance == null)
         {
-            Console.Error.WriteLine("wireview-agent: already running");
+            Console.Error.WriteLine("wireview-mini: already running");
             return ExitError;
         }
 
@@ -130,7 +130,7 @@ internal static class Program
         FileLog.Init(
             Path.Combine(Path.GetDirectoryName(AppSettings.GetSettingsPath())!, "logs"),
             AppSettings.Current.LogRetentionDays,
-            "wireview-agent");
+            "wireview-mini");
 
         using var stop = new CancellationTokenSource();
         void RequestStop(PosixSignalContext ctx)
@@ -147,7 +147,7 @@ internal static class Program
         try
         {
             var notifier = CreateNotifier();
-            using var service = new AgentService(Version, notifier, noShutdown);
+            using var service = new MiniService(Version, notifier, noShutdown);
             // The tray's Quit takes the same way out as a signal.
             using var tray = noTray ? null : TrayController.Start(service, notifier, () =>
             {

@@ -10,8 +10,8 @@ namespace WireView2.Net
     /// endpoint. Implements <see cref="IWireViewDevice"/> so it lives in the same
     /// <c>DeviceManager</c> collection as local devices — the rest of the app
     /// treats it identically. Writes go through <see cref="SendCommandAsync"/>.
-    /// The headless agent on this machine is reached the same way
-    /// (<see cref="IsLocalAgent"/>); for it, the device also lends out the serial
+    /// WireView Mini on this machine is reached the same way
+    /// (<see cref="IsLocalMini"/>); for it, the device also lends out the serial
     /// port (<see cref="ISerialPortOwner"/>).
     /// </summary>
     public sealed class NetworkDevice : IWireViewDevice, ISerialPortOwner, IDisposable
@@ -42,15 +42,15 @@ namespace WireView2.Net
         public string UniqueId { get; }
         public int PollIntervalMs { get; set; } = 1000;
 
-        /// <summary>True for the headless wireview-agent on this machine: the device
-        /// is local hardware that the agent owns, reached over localhost.</summary>
-        public bool IsLocalAgent { get; init; }
+        /// <summary>True for the headless wireview-mini on this machine: the device
+        /// is local hardware that WireView Mini owns, reached over localhost.</summary>
+        public bool IsLocalMini { get; init; }
 
         /// <summary>When set, read before every poll instead of <see cref="PollIntervalMs"/>
-        /// (the agent's device follows the GUI's local poll rate).</summary>
+        /// (WireView Mini's device follows the GUI's local poll rate).</summary>
         public Func<int>? PollIntervalProvider { get; init; }
 
-        /// <summary>True while the agent has handed its serial port to a local
+        /// <summary>True while WireView Mini has handed its serial port to a local
         /// client (from the last snapshot).</summary>
         public bool SerialSuspended { get; private set; }
 
@@ -113,8 +113,8 @@ namespace WireView2.Net
 
                 DeviceName = string.IsNullOrWhiteSpace(dto.Name) ? DeviceName : dto.Name;
                 // Same convention as HwmonDevice's "(hwmon + daemon)" suffix.
-                if (IsLocalAgent && !DeviceName.EndsWith(AgentSuffix, StringComparison.Ordinal))
-                    DeviceName += AgentSuffix;
+                if (IsLocalMini && !DeviceName.EndsWith(MiniSuffix, StringComparison.Ordinal))
+                    DeviceName += MiniSuffix;
                 HardwareRevision = dto.HwRev;
                 UpdateIdentity(dto.HwRev, dto.Name);
                 FirmwareVersion = dto.FwVer;
@@ -259,22 +259,22 @@ namespace WireView2.Net
             catch { return null; }
         }
 
-        private const string AgentSuffix = " (agent)";
+        private const string MiniSuffix = " (mini)";
 
-        // ---- Serial handover (local agent only) ----
+        // ---- Serial handover (local mini only) ----
 
         /// <inheritdoc/>
-        public string SerialOwnerName => "the WireView agent";
+        public string SerialOwnerName => "the WireView Mini";
 
         /// <inheritdoc/>
         public DaemonResult RequestSuspendSerial(int seconds)
-            => IsLocalAgent ? SendSync(WireViewCommand.SuspendSerial(UniqueId, seconds)) : DaemonResult.Unavailable;
+            => IsLocalMini ? SendSync(WireViewCommand.SuspendSerial(UniqueId, seconds)) : DaemonResult.Unavailable;
 
         /// <inheritdoc/>
         public DaemonResult ResumeSerial()
-            => IsLocalAgent ? SendSync(WireViewCommand.ResumeSerial(UniqueId)) : DaemonResult.Unavailable;
+            => IsLocalMini ? SendSync(WireViewCommand.ResumeSerial(UniqueId)) : DaemonResult.Unavailable;
 
-        // The agent keeps serving its last reading while suspended, so the
+        // WireView Mini keeps serving its last reading while suspended, so the
         // device stays connected; nothing to mark.
         void ISerialPortOwner.BeginSerialSession() { }
         void ISerialPortOwner.EndSerialSession() { }

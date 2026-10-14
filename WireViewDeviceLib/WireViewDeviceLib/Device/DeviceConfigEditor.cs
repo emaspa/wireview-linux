@@ -24,7 +24,7 @@ namespace WireView2.Device
 
     /// <summary>
     /// The config editor's pure logic, shared by the app's Device page and the
-    /// agent's control panel (<see cref="DeviceConfigModel"/>): device strings,
+    /// mini's control panel (<see cref="DeviceConfigModel"/>): device strings,
     /// the theme's fan bitmap, and <see cref="ApplyChanges"/>, which writes only
     /// the fields that were edited.
     /// </summary>

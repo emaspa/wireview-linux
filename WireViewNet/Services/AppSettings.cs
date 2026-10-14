@@ -10,8 +10,8 @@ namespace WireView2.Services;
 /// The user's settings, persisted as <c>settings.json</c> in the
 /// <c>PowerMonitor</c> folder under the user's application-data directory
 /// (<c>~/.config/PowerMonitor</c> on Linux, <c>%APPDATA%\PowerMonitor</c> on
-/// Windows). Shared by the GUI and the headless agent: the GUI edits and saves
-/// it, the agent only reads it and follows changes with <see cref="ReloadIfChanged"/>.
+/// Windows). Shared by the GUI and the WireView Mini: the GUI edits and saves
+/// it, WireView Mini only reads it and follows changes with <see cref="ReloadIfChanged"/>.
 /// </summary>
 public class AppSettings
 {

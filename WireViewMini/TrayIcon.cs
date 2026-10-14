@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>The menu entries a tray click acts on. The values are the menu item
 /// ids on both platforms (Win32 command ids, dbusmenu item ids).</summary>
@@ -53,7 +53,7 @@ internal sealed record TrayState(
     string RemoteLines = "",
     string? DaemonLine = null)
 {
-    public const string AppTitle = "WireView agent";
+    public const string AppTitle = "WireView Mini";
 
     /// <summary>First id of the remote host lines (one per host or device).</summary>
     public const int RemoteLineIdBase = 100;
@@ -129,8 +129,8 @@ internal sealed record TrayState(
         }
     }
 
-    /// <summary>The header line for an agent status.</summary>
-    public static string HeaderFor(AgentStatus status)
+    /// <summary>The header line for the WireView Mini status.</summary>
+    public static string HeaderFor(MiniStatus status)
     {
         if (status.Handover) return "Serial port lent to the app";
         if (status.DeviceName is not { } name) return "No device";
@@ -168,7 +168,7 @@ internal sealed record TrayState(
     }
 }
 
-/// <summary>A notification-area icon with the agent's menu. Created by
+/// <summary>A notification-area icon with WireView Mini's menu. Created by
 /// <see cref="TrayIconFactory"/>; menu clicks arrive through the callback given
 /// there, on the implementation's own thread.</summary>
 internal interface ITrayIcon : IDisposable
@@ -181,7 +181,7 @@ internal static class TrayIconFactory
 {
     /// <summary>Win32 notification icon on Windows, StatusNotifierItem on Linux,
     /// none elsewhere. Never throws: a tray that cannot come up logs and the
-    /// agent runs without one.</summary>
+    /// it runs without one.</summary>
     public static ITrayIcon? Create(TrayState initial, Action<TrayCommand> onCommand)
     {
         try

@@ -143,7 +143,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 </head>
 <body>
 <header>
-  <div class="brand"><span>WireView</span> agent</div>
+  <div class="brand"><span>WireView</span> Mini</div>
   <div class="ver" id="ver"></div>
   <div class="spacer"></div>
   <div class="pill" id="state">Connecting</div>
@@ -151,10 +151,10 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
 <main>
   <div class="banner hidden" id="noToken">
-    This page needs the agent's access token. Open it from the tray menu (<b>Settings and controls...</b>)
-    or run <span class="mono">wireview-agent --open</span>.
+    This page needs WireView Mini's access token. Open it from the tray menu (<b>Settings and controls...</b>)
+    or run <span class="mono">wireview-mini --open</span>.
   </div>
-  <div class="banner hidden" id="offline">The agent does not answer. It may have stopped, or its port changed. Retrying.</div>
+  <div class="banner hidden" id="offline">WireView Mini does not answer. It may have stopped, or its port changed. Retrying.</div>
 
   <section id="status">
     <h2>Status <span class="sub" id="devSource"></span></h2>
@@ -261,17 +261,17 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
         <input type="checkbox" id="sShutdown">
       </div>
       <div class="switch">
-        <div class="what">Start at login<small>Run the agent when you log in.</small></div>
+        <div class="what">Start at login<small>Run WireView Mini when you log in.</small></div>
         <input type="checkbox" id="sLogin">
       </div>
-      <p class="note">Fault notifications are always on while the agent runs, for this PC and for the remote hosts.</p>
-      <p class="note hidden" id="noShutdownNote">This agent was started with --no-shutdown: it logs instead of powering off.</p>
+      <p class="note">Fault notifications are always on while WireView Mini runs, for this PC and for the remote hosts.</p>
+      <p class="note hidden" id="noShutdownNote">WireView Mini was started with --no-shutdown: it logs instead of powering off.</p>
       <div class="result" id="alertResult"></div>
     </section>
 
     <section>
       <h2>LAN monitoring</h2>
-      <div id="agentPub">
+      <div id="miniPub">
         <div class="switch">
           <div class="what">Publish on the LAN<small id="pubState"></small></div>
           <input type="checkbox" id="sPublish">
@@ -337,9 +337,9 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       <span class="result" id="appResult"></span>
     </div>
     <dl class="kv" style="margin-top:10px">
-      <dt>Agent log</dt><dd class="mono" id="logPath"></dd>
+      <dt>Log file</dt><dd class="mono" id="logPath"></dd>
       <dt>Settings</dt><dd class="mono" id="settingsPath"></dd>
-      <dt>Agent</dt><dd id="agentInfo"></dd>
+      <dt>WireView Mini</dt><dd id="miniInfo"></dd>
     </dl>
   </section>
 </main>
@@ -371,11 +371,11 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   const tempText = (t) => (typeof t === "number" && t > -99) ? t.toFixed(1) + " °C" : "no probe";
 
   async function api(method, path, body) {
-    const opts = { method, headers: { "X-Agent-Token": token }, cache: "no-store" };
+    const opts = { method, headers: { "X-Mini-Token": token }, cache: "no-store" };
     if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
     let res;
     try { res = await fetch(path, opts); }
-    catch (e) { const err = new Error("the agent does not answer"); err.offline = true; throw err; }
+    catch (e) { const err = new Error("WireView Mini does not answer"); err.offline = true; throw err; }
     let data = null;
     try { data = await res.json(); } catch (e) { }
     if (res.status === 401) { $("noToken").classList.remove("hidden"); }
@@ -408,7 +408,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   function renderStatus(s) {
     status = s;
     $("offline").classList.add("hidden");
-    $("ver").textContent = "v" + s.agent.version + " on " + s.agent.host;
+    $("ver").textContent = "v" + s.mini.version + " on " + s.mini.host;
     const d = s.device;
     const pill = $("state");
     if (!d) { pill.className = "pill bad"; pill.textContent = "No device"; }
@@ -466,11 +466,11 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
         el("div", { class: h.faultText ? "bad" : "muted", text: !h.online ? "offline" : (h.faultText || "no fault") }));
     }));
 
-    renderSettings(s.settings, s.publish, s.agent);
+    renderSettings(s.settings, s.publish, s.mini);
     renderDaemon(s.daemon);
-    $("logPath").textContent = s.agent.logPath || "-";
-    $("settingsPath").textContent = s.agent.settingsPath || "-";
-    $("agentInfo").textContent = "wireview-agent " + s.agent.version + ", " + s.agent.os + ", up " + uptime(s.agent.uptimeSeconds);
+    $("logPath").textContent = s.mini.logPath || "-";
+    $("settingsPath").textContent = s.mini.settingsPath || "-";
+    $("miniInfo").textContent = "wireview-mini " + s.mini.version + ", " + s.mini.os + ", up " + uptime(s.mini.uptimeSeconds);
     $("openApp").title = s.gui.location || "the WireView app was not found";
     refreshButtons();
   }
@@ -492,7 +492,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
   async function poll() {
     try { renderStatus(await api("GET", "/api/status")); }
     catch (e) {
-      if (e.offline) { $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Agent unreachable"; }
+      if (e.offline) { $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Mini unreachable"; }
       if (e.status === 401) { setTimeout(poll, 5000); return; }
     }
     setTimeout(poll, 1000);
@@ -685,9 +685,9 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
     run("cfgResult", () => nvm(3));
   });
 
-  // ---- Agent settings ----
+  // ---- Mini settings ----
 
-  function renderSettings(st, pub, agent) {
+  function renderSettings(st, pub, mini) {
     if (document.activeElement !== $("sShutdown")) $("sShutdown").checked = st.shutdownOnFault;
     $("sLogin").checked = st.startAtLogin;
     $("sPublish").checked = st.publishEnabled;
@@ -696,7 +696,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       : pub.listening ? (pub.lan ? "Listening on all interfaces, port " + pub.port : "Off: listening on 127.0.0.1:" + pub.port + " only")
       : "Not listening";
     $("pubState").style.color = pub.error ? "var(--warn)" : "";
-    $("noShutdownNote").classList.toggle("hidden", !agent.noShutdown);
+    $("noShutdownNote").classList.toggle("hidden", !mini.noShutdown);
     if (hostsDraft === null) renderHosts(st.remoteHosts);
     const sec = $("secret");
     if (document.activeElement !== sec && !sec._dirty) sec.value = st.networkSecret || "";
@@ -715,7 +715,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       setTimeout(() => { location.href = r.panelUrl; }, 600);
       return null;
     }
-    if (status) { status.settings = r.settings; renderSettings(r.settings, status.publish, status.agent); }
+    if (status) { status.settings = r.settings; renderSettings(r.settings, status.publish, status.mini); }
     if (r.publishError) throw new Error("Saved, but " + r.publishError);
     return r.message;
   }
@@ -777,7 +777,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 
   function renderDaemon(d) {
     const on = !!(d && d.present);
-    $("agentPub").classList.toggle("hidden", on);
+    $("miniPub").classList.toggle("hidden", on);
     $("daemonBox").classList.toggle("hidden", !on);
     // The copy happens on the daemon form's Save: shown with the form only.
     const form = on && !$("dForm").classList.contains("hidden");
@@ -819,7 +819,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
       $("dRetryRow").classList.add("hidden");
       $("dForm").classList.remove("hidden");
       fillDaemon(r.config);
-      // Same secret for the remote hosts: on when they already match or the agent has none.
+      // Same secret for the remote hosts: on when they already match or WireView Mini has none.
       const mine = (status && status.settings.networkSecret) || "";
       $("sameSecret").checked = mine === "" || mine === (r.config.secret || "");
       if (message) say("dResult", true, message);

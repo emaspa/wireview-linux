@@ -11,7 +11,7 @@ namespace WireView2.Services
     /// <see cref="DeviceManager.Shared"/> through a <see cref="LocalPublishHost"/>
     /// (GET /sensors, GET /config, and with a network secret the signed
     /// POST /command). Remote instances reach this endpoint via their configured
-    /// host list; there is no mDNS advertisement. Skipped when wireview-agent
+    /// host list; there is no mDNS advertisement. Skipped when wireview-mini
     /// already publishes on the port (it owns the device then).
     /// </summary>
     public sealed class WireViewPublishService : IDisposable
@@ -34,13 +34,13 @@ namespace WireView2.Services
             if (OperatingSystem.IsLinux()) return;
 
             int port = AppSettings.Current.PublishPort;
-            // The agent publishes this machine's device itself (on all interfaces
+            // WireView Mini publishes this machine's device itself (on all interfaces
             // when publishing is on); a second listener on its port would fail or,
             // on Windows, could share the port with it.
-            int agentPort = LocalAgentProbe.AgentPort();
-            if (LocalAgentProbe.IsAgentRunning(agentPort))
+            int miniPort = LocalMiniProbe.MiniPort();
+            if (LocalMiniProbe.IsMiniRunning(miniPort))
             {
-                FileLog.Info($"LAN publishing left to wireview-agent, which already listens on port {agentPort}");
+                FileLog.Info($"LAN publishing left to wireview-mini, which already listens on port {miniPort}");
                 return;
             }
             try

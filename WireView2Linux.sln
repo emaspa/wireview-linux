@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewDeviceLib", "WireVi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewNet", "WireViewNet\WireViewNet.csproj", "{A38621C7-58F1-4E79-9CB6-E70B8336852B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewAgent", "WireViewAgent\WireViewAgent.csproj", "{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireViewMini", "WireViewMini\WireViewMini.csproj", "{5C1F2A7E-3B8D-4E6F-9A0B-7D2C4E8F1A3B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

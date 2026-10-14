@@ -7,7 +7,7 @@ namespace WireView2.Net
     /// <summary>
     /// Minimal daily-rotating audit log. Writes timestamped lines to
     /// <c>wireview2-YYYY-MM-DD.log</c> in the configured directory (a new file per
-    /// day; the headless agent uses its own <c>wireview-agent-</c> prefix so the two
+    /// day; the WireView Mini uses its own <c>wireview-mini-</c> prefix so the two
     /// processes never append to one file), and prunes files older than the
     /// retention window. Used to record
     /// remote command activity (sent / received / executed) now that writes cross
@@ -21,7 +21,7 @@ namespace WireView2.Net
         private static DateTime _lastDay = DateTime.MinValue;
         private static string _prefix = "wireview2-";
 
-        /// <summary>Also copy every line here (the agent echoes to stderr).</summary>
+        /// <summary>Also copy every line here (WireView Mini echoes to stderr).</summary>
         public static TextWriter? Echo { get; set; }
 
         /// <summary>Point the log at a directory and set retention (call once at startup).</summary>

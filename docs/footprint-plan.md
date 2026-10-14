@@ -58,7 +58,7 @@ largely copy-and-adapt today because both sides are C#. With a Rust codebase eve
 becomes a translation.
 
 **Recommendation: do not port the GUI.** Spend the effort on (a) shrinking the GUI where the memory
-actually is and (b) a headless agent so the GUI no longer needs to run all the time. Rust has a
+actually is and (b) WireView Mini, so the GUI no longer needs to run all the time. Rust has a
 place in (b), as an optional later step with a small, well-defined scope.
 
 ## 3. Phase 1: shrink the existing GUI (no rewrite)
@@ -101,7 +101,7 @@ measured separately before it is kept; the ones that do not pay for themselves a
    mapping and tiered compilation memory, starts instantly and yields the single native binary that
    is half of the Rust pitch. Risks: `System.Text.Json` DTOs in WireViewNet need a source-generated
    `JsonSerializerContext`; the ColorPicker and any reflection binding must be checked (compiled
-   bindings are already on). Do it after the agent (section 4) has proven the toolchain on a
+   bindings are already on). Do it after WireView Mini (section 4) has proven the toolchain on a
    smaller surface. COPR and Nix builds compile from source, so the ILCompiler package must be
    restorable there; the PPA repacks the release binary and is unaffected.
 
@@ -135,7 +135,7 @@ Single knobs on the "before" build, minimized (RSS / PSS):
 
 Items dropped from the list above: 6 (loose-only layout) gives no memory back, the extracted
 bundle is memory-mapped like loose files would be; it stays a packaging decision. Item 7
-(trimming / NativeAOT) is deferred to after the agent, as planned. The remaining 37 MB of
+(trimming / NativeAOT) is deferred to after WireView Mini, as planned. The remaining 37 MB of
 anonymous memory in the visible state is the GC heap plus Skia surfaces; the 33 MB
 `memfd:doublemapper` line is JIT code counted twice.
 
@@ -167,7 +167,7 @@ for these measurements and is documented for launchers.
 Not pursued: decoding the background at the exact window size for a 1:1 blit (at most the
 1.1 % above), and tray-hidden cache dropping beyond the compacting GC on hide.
 
-## 4. Phase 2: a headless agent, so the GUI runs only when wanted
+## 4. Phase 2: WireView Mini, so the GUI runs only when wanted
 
 The always-on jobs (fault alerts, shutdown-on-fault, LAN publishing, remote-host monitoring, the
 tray power number) are what keep the GUI resident. Linux has wireviewd for publishing but not for
@@ -185,42 +185,42 @@ alerts or shutdown; Windows has nothing. Proposal:
 - The GUI keeps its own alert path for direct-serial mode and defers to the daemon when connected
   through hwmon (one notification, not two).
 
-### 4.2 Windows: `WireViewAgent`, a .NET console app with no Avalonia
+### 4.2 Windows: `WireViewMini`, a .NET console app with no Avalonia
 
-New project `WireViewAgent/` referencing only `WireViewDeviceLib` and `WireViewNet`. Both are already
+New project `WireViewMini/` referencing only `WireViewDeviceLib` and `WireViewNet`. Both are already
 free of Avalonia, and almost everything it needs exists:
 
-| Agent job | Already in the code |
+| Mini job | Already in the code |
 |---|---|
 | find and poll the device | `DeviceManager`, `WireViewPro2Device`, `WindowsSetupApi`, `WindowsDriverHelper` |
 | LAN publishing with HMAC | `SensorPublisher`, `HmacAuth`, `WireViewSensorDto` (carries `FaultStatus`/`FaultLog`) |
 | watch remote hosts | `NetworkDevice`, `RemoteDeviceProbe` |
-| fault edge detection, cooldown, text | `ConnectionStatusViewModel.cs:195-230`: move into a `FaultMonitor` class in WireViewNet shared by GUI and agent |
+| fault edge detection, cooldown, text | `ConnectionStatusViewModel.cs:195-230`: move into a `FaultMonitor` class in WireViewNet shared by GUI and mini |
 | shutdown | `shutdown /s /t 0` (Windows), `systemctl poweroff` (Linux) |
-| settings | `AppSettings` moved to a shared library so the GUI configures and the agent follows the same `settings.json` |
+| settings | `AppSettings` moved to a shared library so the GUI configures and WireView Mini follows the same `settings.json` |
 
 New code: a console host (~150 lines), Windows toast notifications
 (`Microsoft.Toolkit.Uwp.Notifications` works for unpackaged apps on the `net8.0-windows10.0.17763`
 target; `notify-send` on Linux), an `--install`/`--uninstall` pair that registers a logon task
 (extend `AutoStartService`), and a serial handover command mirroring wireviewd's `SUSPEND_SERIAL`
-so the GUI can still read logs, flash firmware and edit themes while the agent owns the COM port.
+so the GUI can still read logs, flash firmware and edit themes while WireView Mini owns the COM port.
 
 **GUI integration, the key design point.** The GUI already speaks the LAN protocol to wireviewd and
 to other copies of itself. Add a probe for `localhost:9876` ahead of the serial probe in
-`DeviceManager`: when the agent is running the GUI connects through it, exactly like hwmon+daemon
+`DeviceManager`: when WireView Mini is running the GUI connects through it, exactly like hwmon+daemon
 mode on Linux, with full remote control over HMAC (the local secret is read from the shared
-settings file, so nothing to type). When the agent is not running, direct serial as today. Both
+settings file, so nothing to type). When WireView Mini is not running, direct serial as today. Both
 platforms then have the same shape: a small always-on process owns the device, the GUI is a
 viewer/editor you open when you want it.
 
-What stays GUI-only: the live power number drawn as the tray icon itself. The agent has a plain
+What stays GUI-only: the live power number drawn as the tray icon itself. WireView Mini has a plain
 tray icon (the app's icon) with a small menu, and shows the live power in its tooltip and in the
-menu's first line; drawing a power glyph into the icon needs a rasteriser the agent does not
+menu's first line; drawing a power glyph into the icon needs a rasteriser WireView Mini does not
 carry. Users who want the glyph keep the GUI resident, now at Phase 1 size.
 
-Expected footprint for the .NET agent, trimmed and invariant: 25 to 40 MB RSS on Windows, idle CPU
-~0. Effort: about a week for the agent, two to three days for the GUI probe, handover and
-packaging (one zip with both executables). The agent also runs on Linux as-is, which gives Flatpak
+Expected footprint for the .NET mini, trimmed and invariant: 25 to 40 MB RSS on Windows, idle CPU
+~0. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 
 ### Phase 2 status (2026-10-13): 4.2 implemented
@@ -228,16 +228,16 @@ and immutable-distro users headless alerts and shutdown without the DKMS module.
 Done, in this repo:
 
 - `AppSettings` moved to `WireViewNet/Services/` (namespace unchanged, same path and JSON),
-  with `ReloadIfChanged()` (compares the file's write time) so the agent follows GUI edits.
+  with `ReloadIfChanged()` (compares the file's write time) so WireView Mini follows GUI edits.
 - `FaultMonitor` in `WireViewDeviceLib` (debounce, edge, 10 s cooldown, `FormatFaults`);
   `ConnectionStatusViewModel` uses it with the same behaviour. `SystemPower.Shutdown()`,
   `IToastNotifier`, `LinuxToastNotifier`, `NullToastNotifier`, `XdgAutostart` and the remote
   host filter (`RemoteHostList`) are shared too.
 - `LocalPublishHost` in `WireViewNet`: the snapshot, `/config` and command relay that
-  `WireViewPublishService` had, now used by both the GUI and the agent. `SensorPublisher`
+  `WireViewPublishService` had, now used by both the GUI and WireView Mini. `SensorPublisher`
   takes a bind address, a local-only second secret, refuses local-only ops from other
   addresses, and asks for exclusive use of the port on Windows.
-- `WireViewAgent/` (`wireview-agent`): `net8.0` plus `net8.0-windows10.0.17763.0` (WinExe,
+- `WireViewMini/` (`wireview-mini`): `net8.0` plus `net8.0-windows10.0.17763.0` (WinExe,
   WinRT toasts through Microsoft.Toolkit.Uwp.Notifications, `AttachConsole` for the CLI). Runs
   the local `DeviceManager` (hwmon first, then serial), a second one for the remote hosts,
   publishes always (all interfaces with LAN publishing on, loopback otherwise), alerts, shuts
@@ -250,25 +250,25 @@ Done, in this repo:
   (device and power, fault, handover or no device), Open WireView, the *Publish on the LAN* and
   *Shutdown on fault* switches (saved to `settings.json`, applied on the next tick like a GUI
   edit), *Start at login* (`--install`/`--uninstall`), Quit. The power is also in the tooltip.
-  No tray on the desktop: one log line, the agent runs on and registers when a watcher
+  No tray on the desktop: one log line, WireView Mini runs on and registers when a watcher
   appears. `--no-tray` turns it off. Cost on Linux: about +5 MB RSS, +4.5 MB PSS, +1.5 MB
   anonymous; +0.4 MB on the Linux single file, +0.25 MB on the Windows one.
-- The agent as a mini client (everything but the graphs, firmware updates, themes and the
+- WireView Mini as a mini client (everything but the graphs, firmware updates, themes and the
   device log). Tray menu: *Settings and controls...*, a *Screen* submenu (the five screens,
   pause, resume), *Clear faults* (enabled during a fault; clears the active faults, keeps the
   log, like the app's banner), a *Remote hosts* submenu (one line per host: power, fault or
   offline). Submenus in the shared menu model and both backends (Win32 `MF_POPUP`, dbusmenu
   `children-display`).
-- Control panel: one embedded page (`WireViewAgent/ControlPanel.html`, inline CSS and JS)
+- Control panel: one embedded page (`WireViewMini/ControlPanel.html`, inline CSS and JS)
   and a JSON API under `/api/` (status, config read and write, screen/NVM/clear-faults
-  commands, agent settings, open the app), served on the publish port through a new
+  commands, mini settings, open the app), served on the publish port through a new
   extra-routes hook in `SensorPublisher` (same connection, size and rate limits). Loopback
   peers only (403 otherwise, also with LAN publishing on); `/api/` needs the per-run random
-  token in `X-Agent-Token` (401 otherwise); no CORS. Opened by the tray or `--open`, which
-  reads the token from the owner-only `agent-panel.token` the agent writes at start.
+  token in `X-Mini-Token` (401 otherwise); no CORS. Opened by the tray or `--open`, which
+  reads the token from the owner-only `mini-panel.token` WireView Mini writes at start.
   When the publish port is taken (wireviewd's 9876), a loopback-only fallback listener on
   PublishPort+1 to +10, else an ephemeral port, serves the same routes; its port is the
-  token file's second line (read by `--open` and `--status`), and the agent moves back to the
+  token file's second line (read by `--open` and `--status`), and WireView Mini moves back to the
   publish port when the 30 s retry finds it free.
 - `DeviceConfigModel` in `WireViewDeviceLib`: the config decoded in the Device page's units,
   layouts V1, V2 and V3, with an encode that writes only the edited fields onto the device's
@@ -282,18 +282,18 @@ Done, in this repo:
   `wireviewctl config show --show-secret` / `config set` (changed keys only, the secret on stdin,
   wireview-hwmon 1.8 or newer), `GET`/`POST /api/daemon-config`, `daemon` in `/api/status` (what
   answers on the daemon's port, looked at every 3 s) and a disabled *LAN publishing: wireviewd* tray
-  line; in that mode the agent's listener stays on loopback and off the daemon's port. Tested with a
+  line; in that mode WireView Mini's listener stays on loopback and off the daemon's port. Tested with a
   fake wireviewctl and against 1.8's permission hint; the real write waits for the daemon upgrade.
 - Serial handover: `suspendSerial`/`resumeSerial` commands (loopback only, signed with the
-  agent's `agent.key` or the network secret). The agent closes the port, keeps publishing the
+  mini's `mini.key` or the network secret). WireView Mini closes the port, keeps publishing the
   last readings with `connected: false` and `serialSuspended: true`, and takes the port back on
   resume or when the window (at most 600 s) runs out.
-- GUI: the localhost probe (`LocalAgentProbe`, registered with
+- GUI: the localhost probe (`LocalMiniProbe`, registered with
   `DeviceManager.SetLocalOwnerProbe`) runs after hwmon and before serial on every platform;
-  while the agent answers, serial is not opened and open serial entries are retired. Through
-  the agent: firmware flashing, device log read, theme transfers (via `DirectSerialSession`,
+  while WireView Mini answers, serial is not opened and open serial entries are retired. Through
+  WireView Mini: firmware flashing, device log read, theme transfers (via `DirectSerialSession`,
   now on `ISerialPortOwner`), fault clearing, config and screen commands. No GUI fault toast
-  while the agent runs; the GUI publisher steps aside when the agent holds the port.
+  while WireView Mini runs; the GUI publisher steps aside when WireView Mini holds the port.
 
 Measured on Linux (self-contained single file, not trimmed, hwmon device, 1 s poll, one
 unreachable remote host): RSS 51 to 69 MB, PSS 45 to 58 MB, anonymous 10 to 17 MB, 15 threads,
@@ -305,27 +305,27 @@ Left:
 
 - 4.1 (wireviewd `shutdown-on-fault`, fault events, `wireviewctl watch --notify`) lives in the
   wireview-hwmon repo and is not part of this change.
-- Packaging: the agent is in no package or zip yet.
+- Packaging: WireView Mini is in no package or zip yet.
 - Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
   through the handover, the tray icon and its menu (including the submenus) and the control
   panel's browser launch. Built and published for win-x64 from Linux only.
 - Direct serial on Linux verified on hardware (2026-10-14) with wireviewd stopped, both with the
-  kernel module unloaded and loaded: the agent opens `/dev/ttyACM0`, the panel reads and writes
+  kernel module unloaded and loaded: WireView Mini opens `/dev/ttyACM0`, the panel reads and writes
   the config byte-exact, screen commands work. With the module loaded but the daemon stopped
   the manager can list a read-only hwmon entry next to the serial port; the panel and the
   command relay prefer the device that takes commands.
 - The control panel's memory after use: source-generated JSON and a collection once the page
   closes could take back most of the +17 MB.
-- After a flash through the agent the Device page shows the old firmware version until the
-  device is selected again (the agent's device never disconnects from the GUI's side).
-- Trimming or NativeAOT for the agent.
+- After a flash through WireView Mini the Device page shows the old firmware version until the
+  device is selected again (WireView Mini's device never disconnects from the GUI's side).
+- Trimming or NativeAOT for WireView Mini.
 
-## 5. Phase 3 (optional): the agent in Rust
+## 5. Phase 3 (optional): WireView Mini in Rust
 
-Only if the .NET agent's 25 to 40 MB is still judged too much. Scope is small and fully specified
+Only if the .NET mini's 25 to 40 MB is still judged too much. Scope is small and fully specified
 by then: the serial protocol (`serialport` crate), the `/sensors` JSON API with HMAC (`axum` or
 `tiny_http`, `hmac`, `sha2`), toasts (`tauri-winrt-notification`, `notify-rust`), shutdown, the
-logon task. Two reference implementations (wireviewd.c and the .NET agent) and the existing
+logon task. Two reference implementations (wireviewd.c and the .NET mini) and the existing
 `tests/test_wireviewd.c` give a conformance target: same JSON, same HMAC, same handover. Result:
 one 2 to 3 MB executable, 3 to 6 MB RSS, no runtime. Roughly 3 to 4k lines, two to three weeks.
 
@@ -336,12 +336,12 @@ there has no user-visible benefit.
 
 1. Measurement script and baseline table (section 3, item 0). Half a day.
 2. Phase 1 items 1 to 6, each measured. One week. Release 1.3.2.
-3. `FaultMonitor` and `AppSettings` extraction into shared code, then `WireViewAgent` for Windows
-   with the localhost probe in the GUI. One to two weeks. Release 1.4.0 with the agent in the
+3. `FaultMonitor` and `AppSettings` extraction into shared code, then `WireViewMini` for Windows
+   with the localhost probe in the GUI. One to two weeks. Release 1.4.0 with WireView Mini in the
    Windows zip.
 4. wireviewd `shutdown-on-fault` and fault events, `wireviewctl watch --notify`. In the
    wireview-hwmon repo, a few days.
-5. NativeAOT: agent first, GUI after. One week with the packaging checks.
-6. Rust agent, only on evidence from step 3.
+5. NativeAOT: mini first, GUI after. One week with the packaging checks.
+6. Rust mini, only on evidence from step 3.
 
 Steps 2, 3 and 4 are independent and can be interleaved; 5 and 6 depend on 3.

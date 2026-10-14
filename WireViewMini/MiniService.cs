@@ -5,14 +5,14 @@ using WireView2.Device;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>What the tray shows about this PC's device.</summary>
 /// <param name="DeviceName">The connected device, null when none.</param>
 /// <param name="PowerW">Its latest total power.</param>
 /// <param name="FaultText">Its active fault (<see cref="FaultMonitor.FormatFaults"/>), null when clear.</param>
 /// <param name="Handover">The serial port is lent to a local client (the GUI).</param>
-internal readonly record struct AgentStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover);
+internal readonly record struct MiniStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover);
 
 /// <summary>One remote device (or an unreachable host) as the tray and the
 /// control panel show it.</summary>
@@ -26,7 +26,7 @@ internal readonly record struct RemoteHostStatus(
     string Host, string Endpoint, bool Online, string? HostName, WireViewSensorDto? Readings, string? FaultText);
 
 /// <summary>
-/// The agent's always-on work: owns this machine's WireView through its own
+/// WireView Mini's always-on work: owns this machine's WireView through its own
 /// <see cref="DeviceManager"/> (hwmon when wireviewd runs, otherwise the serial
 /// port, as in the GUI), watches the remote hosts from the settings with a
 /// second one, publishes the local device through <see cref="LocalPublishHost"/>
@@ -37,10 +37,10 @@ internal readonly record struct RemoteHostStatus(
 /// Settings changes made in the GUI are picked up every tick, and so are the
 /// tray's (<see cref="RequestSettingsChange"/>).
 /// </summary>
-internal sealed class AgentService : IDisposable
+internal sealed class MiniService : IDisposable
 {
     /// <summary>Handover window when the client does not ask for one, and the
-    /// longest one granted: the agent takes the port back after this even if
+    /// longest one granted: WireView Mini takes the port back after this even if
     /// the client never hands it back (crashed GUI).</summary>
     internal const int DefaultHandoverSeconds = 600;
     internal const int MaxHandoverSeconds = 600;
@@ -93,12 +93,12 @@ internal sealed class AgentService : IDisposable
     /// device, on the tick or the device thread. The tray rate-limits.</summary>
     public event Action? StatusChanged;
 
-    public AgentService(string version, IToastNotifier toast, bool noShutdown)
+    public MiniService(string version, IToastNotifier toast, bool noShutdown)
     {
         _version = version;
         _toast = toast;
         _noShutdown = noShutdown;
-        _localKey = AgentKey.LoadOrCreate();
+        _localKey = MiniKey.LoadOrCreate();
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         _panel = new ControlPanel(this);
         _daemon = new DaemonConfigService(() =>
@@ -108,8 +108,8 @@ internal sealed class AgentService : IDisposable
             new RemoteDeviceProbe(RemoteHostList.Endpoints, () => AppSettings.Current.NetworkSecret).Probe);
         _publish = new LocalPublishHost(_local, version)
         {
-            AgentVersion = version,
-            CommandHook = HandleAgentCommand,
+            MiniVersion = version,
+            CommandHook = HandleMiniCommand,
             LocalSecretProvider = () => _localKey,
             ExtraRoutes = _panel.Handle,
         };
@@ -127,7 +127,7 @@ internal sealed class AgentService : IDisposable
         ApplySettings();
         _local.Start();
         _remote.Start();
-        FileLog.Info($"wireview-agent {_version} started on {Environment.MachineName} ({Os})");
+        FileLog.Info($"wireview-mini {_version} started on {Environment.MachineName} ({Os})");
         WritePanelFile(); // again with the port once the listener is up
 
         while (!stop.IsCancellationRequested)
@@ -194,9 +194,9 @@ internal sealed class AgentService : IDisposable
     internal DaemonConfigService Daemon => _daemon;
 
     /// <summary>Linux with wireviewd serving this PC's device (hwmon + daemon):
-    /// the daemon publishes it on the LAN, the agent listens on loopback only and
+    /// the daemon publishes it on the LAN, WireView Mini listens on loopback only and
     /// keeps off the daemon's port. Stays set through a daemon restart; cleared
-    /// when the agent opens the device itself (serial).</summary>
+    /// when WireView Mini opens the device itself (serial).</summary>
     public bool DaemonMode => _daemonMode;
     internal DeviceManager LocalDevices => _local;
 
@@ -214,7 +214,7 @@ internal sealed class AgentService : IDisposable
     public (int Port, bool Lan)? PublishWanted => _wantedView is { } w ? (w.Item1, w.Item2) : null;
 
     /// <summary>The control panel's address, with the token in the fragment, or
-    /// null while the agent is not listening.</summary>
+    /// null while WireView Mini is not listening.</summary>
     public string? PanelUrl => _publish.Endpoint is { } ep ? $"http://127.0.0.1:{ep.Port}/#t={PanelToken}" : null;
 
     /// <summary>The debounced fault text for a local device id, null when clear.</summary>
@@ -273,15 +273,15 @@ internal sealed class AgentService : IDisposable
 
     /// <summary>This PC's device as the tray shows it. Never blocks on the
     /// handover lock, so it is safe from the device thread.</summary>
-    public AgentStatus GetStatus()
+    public MiniStatus GetStatus()
     {
-        if (_handoverActive) return new AgentStatus(null, null, null, Handover: true);
+        if (_handoverActive) return new MiniStatus(null, null, null, Handover: true);
         foreach (var d in _local.Devices)
         {
             if (!d.Device.Connected || d.Latest is not { } data) continue;
             ushort fault;
             lock (_monitors) _localFault.TryGetValue(d.Id, out fault);
-            return new AgentStatus(d.Device.DeviceName, data.SumPowerW,
+            return new MiniStatus(d.Device.DeviceName, data.SumPowerW,
                 fault != 0 ? FaultMonitor.FormatFaults(fault) : null, Handover: false);
         }
         return default;
@@ -291,7 +291,7 @@ internal sealed class AgentService : IDisposable
     /// The next tick applies it on top of a fresh read of settings.json, saves the
     /// file and applies the settings (and rebinds the publisher), the same path a
     /// GUI edit takes. The save records the file's new write time, so
-    /// <see cref="AppSettings.ReloadIfChanged"/> does not see the agent's own write
+    /// <see cref="AppSettings.ReloadIfChanged"/> does not see WireView Mini's own write
     /// as a change. Returns once applied when <paramref name="wait"/> is set
     /// (true), or false when the tick did not get to it in that time.</summary>
     public bool RequestSettingsChange(string what, Action<AppSettings> change, string source = "tray", TimeSpan? wait = null)
@@ -328,12 +328,12 @@ internal sealed class AgentService : IDisposable
         if (!_daemonMode && devices.Any(d => d.Device is HwmonDevice { DaemonAvailable: true }))
         {
             _daemonMode = true;
-            FileLog.Info("wireviewd serves this PC's device: it does the LAN publishing, the agent listens on loopback only");
+            FileLog.Info("wireviewd serves this PC's device: it does the LAN publishing, WireView Mini listens on loopback only");
         }
         else if (_daemonMode && devices.Any(d => d.Device is not HwmonDevice && d.Device is not NetworkDevice && d.Device.Connected))
         {
             _daemonMode = false;
-            FileLog.Info("the agent opened the device itself: wireviewd no longer serves it, LAN publishing follows the agent's setting");
+            FileLog.Info("WireView Mini opened the device itself: wireviewd no longer serves it, LAN publishing follows WireView Mini's setting");
         }
     }
 
@@ -414,7 +414,7 @@ internal sealed class AgentService : IDisposable
         var current = _publish.Endpoint;
         if (daemon && current is { } held && _daemon.IsReserved(held.Port))
         {
-            FileLog.Info($"port {held.Port} is wireviewd's: moving the agent's listener off it");
+            FileLog.Info($"port {held.Port} is wireviewd's: moving WireView Mini's listener off it");
             _publish.Stop();
             current = null;
             _onFallback = false;
@@ -466,7 +466,7 @@ internal sealed class AgentService : IDisposable
             if (firstFailure)
             {
                 // Name the holder when it is a WireView publisher (wireviewd on Linux).
-                _portHolder = LocalAgentProbe.TryFetch(want.Port, TimeSpan.FromSeconds(1)) is { } snap
+                _portHolder = LocalMiniProbe.TryFetch(want.Port, TimeSpan.FromSeconds(1)) is { } snap
                     ? (string.IsNullOrEmpty(snap.AppVersion) ? "another WireView publisher" : snap.AppVersion)
                     : null;
                 FileLog.Warn($"cannot listen on port {want.Port}" +
@@ -504,13 +504,13 @@ internal sealed class AgentService : IDisposable
     /// <summary>Writes the panel token and the port in use for --open and --status.</summary>
     private void WritePanelFile()
     {
-        try { AgentPanelToken.Write(PanelToken, _publish.Endpoint?.Port); }
-        catch (Exception ex) { FileLog.Warn($"cannot write {AgentPanelToken.FilePath} (wireview-agent --open needs it): {ex.Message}"); }
+        try { MiniPanelToken.Write(PanelToken, _publish.Endpoint?.Port); }
+        catch (Exception ex) { FileLog.Warn($"cannot write {MiniPanelToken.FilePath} (wireview-mini --open needs it): {ex.Message}"); }
     }
 
     // ---- Serial handover ----
 
-    private DaemonResult? HandleAgentCommand(WireViewCommand cmd)
+    private DaemonResult? HandleMiniCommand(WireViewCommand cmd)
     {
         switch (cmd.Op)
         {
@@ -606,7 +606,7 @@ internal sealed class AgentService : IDisposable
         _toast.Show("WireView Fault", body);
 
         // Only this machine's device powers this machine off; a remote host's
-        // own agent or GUI handles that host.
+        // own WireView Mini or GUI handles that host.
         if (local && AppSettings.Current.SoftwareShutdownOnFault)
         {
             if (_noShutdown)
@@ -632,7 +632,7 @@ internal sealed class AgentService : IDisposable
 
     public void Dispose()
     {
-        AgentPanelToken.Delete();
+        MiniPanelToken.Delete();
         _publish.Stop();
         _local.Stop(TimeSpan.FromSeconds(3));
         _remote.Stop();

@@ -3,25 +3,25 @@ using System.Runtime.InteropServices;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>
 /// The tray's "Open WireView": starts the GUI, or brings a running one forward
 /// where the GUI supports that.
 ///
-/// Where the GUI is, in order: next to the agent (the Windows zip ships
+/// Where the GUI is, in order: next to WireView Mini (the Windows zip ships
 /// <c>wireview2-plus.exe</c>, a dev build is <c>WireView2.exe</c>; the Linux
 /// tarball and packages ship <c>WireView2</c>), then on Linux the package path
 /// <c>/usr/lib/wireview-linux/WireView2</c>, <c>wireview-linux</c> on PATH (the
 /// package's and the Flatpak's launcher) and the installed Flatpak
 /// (<c>flatpak run io.github.emaspa.WireViewLinux</c>, through
-/// <c>flatpak-spawn --host</c> when the agent itself runs inside a sandbox).
+/// <c>flatpak-spawn --host</c> when WireView Mini itself runs inside a sandbox).
 ///
 /// A GUI that is already running: on Windows it waits on a named event
 /// (SingleInstanceService.CreateOrOpenActivationEvent) and shows its window when
-/// it is set, so the agent sets it. A second GUI launch does not set it (the new
+/// it is set, so WireView Mini sets it. A second GUI launch does not set it (the new
 /// copy just exits), so launching again would do nothing. On Linux the GUI has
-/// no such channel (named events do not exist there), so the agent says where
+/// no such channel (named events do not exist there), so WireView Mini says where
 /// to find it instead.
 /// </summary>
 internal static class GuiLauncher
@@ -57,7 +57,7 @@ internal static class GuiLauncher
             if (Resolve() is not { } start)
             {
                 FileLog.Warn("Open WireView: the app was not found");
-                return (false, "The WireView app was not found. Install it, or put it next to wireview-agent.");
+                return (false, "The WireView app was not found. Install it, or put it next to wireview-mini.");
             }
 
             var psi = new ProcessStartInfo(start.File) { UseShellExecute = false };
@@ -74,7 +74,7 @@ internal static class GuiLauncher
     }
 
     /// <summary>What Open WireView would start (a path or command line), or null
-    /// when the app is not installed where the agent looks.</summary>
+    /// when the app is not installed where WireView Mini looks.</summary>
     public static string? Locate()
     {
         try
@@ -197,7 +197,7 @@ internal static class GuiLauncher
         {
             using (activate)
             {
-                // The tray click made the agent the foreground process; pass that
+                // The tray click made WireView Mini the foreground process; pass that
                 // on, or Windows only flashes the GUI's taskbar button.
                 try { AllowSetForegroundWindow(AsfwAny); } catch { }
                 activate.Set();

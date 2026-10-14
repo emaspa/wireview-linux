@@ -3,7 +3,7 @@ using System.Text;
 namespace WireView2.Net
 {
     /// <summary>A request handed to <see cref="SensorPublisher"/>'s extra routes
-    /// (the agent's control panel). <see cref="Path"/> excludes the query string.</summary>
+    /// (WireView Mini's control panel). <see cref="Path"/> excludes the query string.</summary>
     public sealed class HttpRequestInfo
     {
         private readonly string _headers;

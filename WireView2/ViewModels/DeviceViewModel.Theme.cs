@@ -273,10 +273,10 @@ public sealed partial class DeviceViewModel
             return await op(pro2).ConfigureAwait(false);
         if (_device is HwmonDevice { Connected: true, DaemonAvailable: true } hwmon)
             return await DirectSerialSession.RunAsync(hwmon, op).ConfigureAwait(false);
-        // wireview-agent on this machine lends its port the same way (off the UI
+        // wireview-mini on this machine lends its port the same way (off the UI
         // thread: the handover is an HTTP round trip).
-        if (_device is NetworkDevice { Connected: true, IsLocalAgent: true } agent)
-            return await Task.Run(() => DirectSerialSession.RunAsync(agent, op)).ConfigureAwait(false);
+        if (_device is NetworkDevice { Connected: true, IsLocalMini: true } mini)
+            return await Task.Run(() => DirectSerialSession.RunAsync(mini, op)).ConfigureAwait(false);
         throw new InvalidOperationException("Theme assets require a locally connected device.");
     }
 

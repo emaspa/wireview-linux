@@ -12,9 +12,9 @@ namespace WireView2.Services
     /// There is no mDNS auto-discovery: remote hosts are entered explicitly.
     /// Endpoints that resolve to this machine are filtered out (see
     /// <see cref="RemoteHostList.IsLocalEndpoint"/>) so a host never re-reads its own devices.
-    /// Also registers the probe for wireview-agent on this machine
-    /// (<see cref="LocalAgentProbe"/>), which runs ahead of the serial probe:
-    /// while the agent answers, the GUI reaches the device through it.
+    /// Also registers the probe for wireview-mini on this machine
+    /// (<see cref="LocalMiniProbe"/>), which runs ahead of the serial probe:
+    /// while WireView Mini answers, the GUI reaches the device through it.
     /// Call <see cref="Start"/> before <see cref="DeviceManager.Start"/>.
     /// </summary>
     public sealed class WireViewDiscoveryService : IDisposable
@@ -22,20 +22,20 @@ namespace WireView2.Services
         public static WireViewDiscoveryService Shared { get; } = new WireViewDiscoveryService();
 
         private bool _started;
-        private LocalAgentProbe? _agentProbe;
+        private LocalMiniProbe? _miniProbe;
 
-        /// <summary>True while wireview-agent answers on this machine's publish port.</summary>
-        public bool AgentPresent => _agentProbe?.AgentPresent ?? false;
+        /// <summary>True while wireview-mini answers on this machine's publish port.</summary>
+        public bool MiniPresent => _miniProbe?.MiniPresent ?? false;
 
         public void Start()
         {
             if (_started) return;
             _started = true;
 
-            _agentProbe = new LocalAgentProbe(
-                LocalAgentProbe.AgentPort,
+            _miniProbe = new LocalMiniProbe(
+                LocalMiniProbe.MiniPort,
                 () => DeviceManager.Shared.PollIntervalMs);
-            DeviceManager.Shared.SetLocalOwnerProbe(_agentProbe.Probe, () => _agentProbe.AgentPresent);
+            DeviceManager.Shared.SetLocalOwnerProbe(_miniProbe.Probe, () => _miniProbe.MiniPresent);
 
             // The configured host list is re-read every probe tick, so edits in
             // Settings take effect without restarting.

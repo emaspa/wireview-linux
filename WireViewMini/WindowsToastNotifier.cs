@@ -3,7 +3,7 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using WireView2.Net;
 using WireView2.Services;
 
-namespace WireView2.Agent;
+namespace WireView2.Mini;
 
 /// <summary>Windows toast notifications for an unpackaged program, through
 /// Microsoft.Toolkit.Uwp.Notifications (it registers the app's identity under

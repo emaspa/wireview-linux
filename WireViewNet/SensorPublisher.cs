@@ -14,11 +14,11 @@ namespace WireView2.Net
     /// command sink are supplied, authenticated <c>POST /command</c> (HMAC-signed,
     /// see <see cref="HmacAuth"/>). Flood-protected: a concurrency cap, a request
     /// size cap (413), and a per-IP rate limit (429). Binds all interfaces unless
-    /// a bind address is given (the headless agent binds loopback only while LAN
+    /// a bind address is given (the WireView Mini binds loopback only while LAN
     /// publishing is off). Commands from this machine may also be signed with a
-    /// local-only secret (the agent's key file), and <see cref="WireViewCommand.LocalOnly"/>
+    /// local-only secret (WireView Mini's key file), and <see cref="WireViewCommand.LocalOnly"/>
     /// ops are refused from any other address. An optional extra-routes hook
-    /// (the agent's control panel) answers any other method and path on the same
+    /// (WireView Mini's control panel) answers any other method and path on the same
     /// port, under the same connection, size and rate limits.
     /// </summary>
     public sealed class SensorPublisher : IDisposable

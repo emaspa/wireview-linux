@@ -33,7 +33,7 @@ namespace WireView2.Device
         };
 
         /// <summary>Like <see cref="Describe"/> without naming wireviewd, for a
-        /// result relayed by another port owner (the headless agent).</summary>
+        /// result relayed by another port owner (the WireView Mini).</summary>
         public static string DescribeNeutral(this DaemonResult result) => result switch
         {
             DaemonResult.Ok           => "OK",

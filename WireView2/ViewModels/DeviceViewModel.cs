@@ -253,11 +253,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Flashing needs the device on this host's USB — remote (LAN) devices
-    /// can't be flashed from here. A device reached through wireview-agent on this
-    /// machine is on this host's USB: the agent hands the port over for the flash.</summary>
+    /// can't be flashed from here. A device reached through wireview-mini on this
+    /// machine is on this host's USB: WireView Mini hands the port over for the flash.</summary>
     public bool CanStartFirmwareUpdate =>
         !IsFirmwareUpdating && IsConnected && IsFirmwareUpdateSupported
-        && _device is WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalAgent: true };
+        && _device is WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalMini: true };
 
     public bool IsAveragingSupported
     {
@@ -559,7 +559,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             FirmwareUpdateStatus = "Not connected.";
             return;
         }
-        if (_device is not (WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalAgent: true }))
+        if (_device is not (WireViewPro2Device or HwmonDevice or NetworkDevice { IsLocalMini: true }))
         {
             FirmwareUpdateStatus = "Remote devices can only be flashed from the host they are plugged into.";
             return;
@@ -663,9 +663,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         // it can be restored once the device is back.
         string? selectionToRestore = DeviceManager.Shared.SelectedId;
         string binPath = Path.Combine(Path.GetTempPath(), $"wireview2-fw-{Guid.NewGuid():N}.bin");
-        // Set once wireview-agent has closed its port for the flash; handed back
-        // in the finally below (the agent also takes it back on its own).
-        NetworkDevice? agentHandover = null;
+        // Set once wireview-mini has closed its port for the flash; handed back
+        // in the finally below (WireView Mini also takes it back on its own).
+        NetworkDevice? miniHandover = null;
         try
         {
             FirmwareUpdateStatus = "Restarting device into DFU bootloader…";
@@ -689,11 +689,11 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                         return;
                     }
                     break;
-                case NetworkDevice { IsLocalAgent: true } agent:
-                    // The agent owns the port: have it close the port, then send the
+                case NetworkDevice { IsLocalMini: true } mini:
+                    // WireView Mini owns the port: have it close the port, then send the
                     // bootloader command over a direct connection of our own.
-                    string? bootError = await Task.Run(() => EnterBootloaderViaAgent(agent));
-                    agentHandover = agent;
+                    string? bootError = await Task.Run(() => EnterBootloaderViaMini(mini));
+                    miniHandover = mini;
                     if (bootError != null)
                     {
                         FirmwareUpdateStatus = bootError;
@@ -743,9 +743,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         finally
         {
             try { File.Delete(binPath); } catch { }
-            if (agentHandover != null)
+            if (miniHandover != null)
             {
-                var handback = agentHandover;
+                var handback = miniHandover;
                 _ = Task.Run(() => { try { handback.ResumeSerial(); } catch { } });
             }
             IsFirmwareUpdating = false;
@@ -754,18 +754,18 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>How long wireview-agent keeps its port closed for a firmware flash
+    /// <summary>How long wireview-mini keeps its port closed for a firmware flash
     /// before it takes the port back on its own (the flash hands it back sooner).</summary>
-    private const int AgentFlashHandoverSeconds = 600;
+    private const int MiniFlashHandoverSeconds = 600;
 
-    /// <summary>Asks wireview-agent to close its serial port and restarts the
+    /// <summary>Asks wireview-mini to close its serial port and restarts the
     /// device into its DFU bootloader over a direct connection. Returns null on
     /// success, else the status line. Blocking: run it off the UI thread.</summary>
-    private static string? EnterBootloaderViaAgent(NetworkDevice agent)
+    private static string? EnterBootloaderViaMini(NetworkDevice mini)
     {
-        var suspend = agent.RequestSuspendSerial(AgentFlashHandoverSeconds);
+        var suspend = mini.RequestSuspendSerial(MiniFlashHandoverSeconds);
         if (suspend != DaemonResult.Ok)
-            return $"The WireView agent did not hand over the serial port ({suspend.DescribeNeutral()}).";
+            return $"WireView Mini did not hand over the serial port ({suspend.DescribeNeutral()}).";
 
         string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
         if (port == null)
@@ -925,7 +925,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         }
         else if (_device != null)
         {
-            DeviceName = _device is NetworkDevice { IsLocalAgent: false } nd
+            DeviceName = _device is NetworkDevice { IsLocalMini: false } nd
                 ? $"{_device.DeviceName}  ·  remote @ {nd.Endpoint.Replace("http://", string.Empty)}"
                 : _device.DeviceName;
             DeviceEdition = _device.Edition;

@@ -9,7 +9,7 @@ namespace WireView2.Net
     /// through a <see cref="SensorPublisher"/>: builds the <c>GET /sensors</c>
     /// snapshot, serves <c>GET /config</c>, and relays authenticated
     /// <c>POST /command</c> writes to the matching device. One implementation for
-    /// the GUI's publisher (Windows) and the headless agent. Devices reached over
+    /// the GUI's publisher (Windows) and the WireView Mini. Devices reached over
     /// the LAN (<see cref="NetworkDevice"/>) are never re-published or relayed to.
     /// Limits and the network secret come from <see cref="AppSettings.Current"/>.
     /// </summary>
@@ -19,7 +19,7 @@ namespace WireView2.Net
         private readonly string _appVersion;
         private readonly object _gate = new();
         private SensorPublisher? _publisher;
-        // Devices as last seen before the serial port was handed over (agent only).
+        // Devices as last seen before the serial port was handed over (mini only).
         private List<WireViewSensorDto>? _frozen;
 
         /// <param name="manager">Whose devices to publish.</param>
@@ -30,19 +30,19 @@ namespace WireView2.Net
             _appVersion = appVersion;
         }
 
-        /// <summary>Sent as the snapshot's <c>agent</c> field (the agent sets its
+        /// <summary>Sent as the snapshot's <c>mini</c> field (WireView Mini sets its
         /// version; the GUI leaves it null).</summary>
-        public string? AgentVersion { get; init; }
+        public string? MiniVersion { get; init; }
 
         /// <summary>Consulted before the device relay: returns the result for a
-        /// command it handles (the agent's serial handover), or null to relay it.</summary>
+        /// command it handles (WireView Mini's serial handover), or null to relay it.</summary>
         public Func<WireViewCommand, DaemonResult?>? CommandHook { get; init; }
 
         /// <summary>A second secret accepted for commands from this machine only
         /// (see <see cref="SensorPublisher"/>).</summary>
         public Func<string?>? LocalSecretProvider { get; init; }
 
-        /// <summary>Answers requests the publisher's own routes do not (the agent's
+        /// <summary>Answers requests the publisher's own routes do not (WireView Mini's
         /// control panel), on the same port; null passes them on (404).</summary>
         public Func<HttpRequestInfo, HttpResponseInfo?>? ExtraRoutes { get; init; }
 
@@ -99,7 +99,7 @@ namespace WireView2.Net
             }
         }
 
-        // ---- Serial handover view (agent) ----
+        // ---- Serial handover view (mini) ----
 
         /// <summary>True between <see cref="FreezeDevices"/> and <see cref="Unfreeze"/>.</summary>
         public bool SerialSuspended
@@ -134,7 +134,7 @@ namespace WireView2.Net
             {
                 Host = Environment.MachineName,
                 AppVersion = _appVersion,
-                Agent = AgentVersion,
+                Mini = MiniVersion,
                 SerialSuspended = frozen != null,
                 Devices = frozen != null ? new List<WireViewSensorDto>(frozen) : CurrentDevices(),
             };
