@@ -207,7 +207,7 @@ internal sealed class ControlPanel
             };
         }
 
-        var md = _agent.LocalDevices.Devices.FirstOrDefault(d => d.Device is not NetworkDevice);
+        var md = PreferredLocal();
         if (md == null) return null;
         var dev = md.Device;
         var latest = md.Latest;
@@ -230,6 +230,18 @@ internal sealed class ControlPanel
             faultLogText = log != 0 ? FaultNames((ushort)log) : null,
         };
     }
+
+    /// <summary>The local device the panel shows and drives. With the hwmon
+    /// module loaded but wireviewd stopped the manager lists both a read-only
+    /// hwmon entry and the serial port, so prefer a device that takes commands,
+    /// then a connected one, then one with readings.</summary>
+    private ManagedDevice? PreferredLocal() =>
+        _agent.LocalDevices.Devices
+            .Where(d => d.Device is not NetworkDevice)
+            .OrderByDescending(d => CanWrite(d.Device))
+            .ThenByDescending(d => d.Device.Connected)
+            .ThenByDescending(d => d.Latest != null)
+            .FirstOrDefault();
 
     private static bool CanWrite(IWireViewDevice dev) =>
         dev is WireViewPro2Device || dev is HwmonDevice { DaemonAvailable: true };
@@ -315,8 +327,8 @@ internal sealed class ControlPanel
     {
         if (_agent.HandoverActive)
             return Error(409, "the serial port is lent to the WireView app; try again when it hands it back");
-        var md = _agent.LocalDevices.Devices.FirstOrDefault(d => d.Device is not NetworkDevice && d.Device.Connected);
-        if (md == null) return Error(503, "no device connected");
+        var md = PreferredLocal();
+        if (md == null || !md.Device.Connected) return Error(503, "no device connected");
         if (!CanWrite(md.Device))
             return Error(503, "the device is reached through hwmon without wireviewd, which is read only");
         return null;

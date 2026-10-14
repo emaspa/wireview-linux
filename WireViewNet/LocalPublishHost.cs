@@ -185,12 +185,17 @@ namespace WireView2.Net
             if (CommandHook?.Invoke(cmd) is { } handled) return handled;
             if (cmd.LocalOnly) return DaemonResult.Error; // nobody here implements it
 
-            foreach (var md in _manager.Devices)
-            {
-                if (md.Device is NetworkDevice) continue; // never relay back out to a remote
-                if (!string.IsNullOrEmpty(cmd.DeviceId) && md.Device.UniqueId != cmd.DeviceId) continue;
+            // Never relay back out to a remote. With no device id, prefer a device
+            // that takes commands: with the hwmon module loaded but wireviewd
+            // stopped the manager holds a read-only hwmon entry next to the
+            // serial port, and the first entry would answer "not connected".
+            var candidates = _manager.Devices
+                .Where(md => md.Device is not NetworkDevice)
+                .Where(md => string.IsNullOrEmpty(cmd.DeviceId) || md.Device.UniqueId == cmd.DeviceId)
+                .OrderByDescending(md => md.Device is WireViewPro2Device || md.Device is HwmonDevice { DaemonAvailable: true })
+                .ThenByDescending(md => md.Device.Connected);
+            foreach (var md in candidates)
                 return ExecuteOn(md.Device, cmd);
-            }
             return DaemonResult.NotConnected;
         }
 

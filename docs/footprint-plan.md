@@ -303,7 +303,11 @@ Left:
 - Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
   through the handover, the tray icon and its menu (including the submenus) and the control
   panel's browser launch. Built and published for win-x64 from Linux only.
-- The agent's direct serial mode on Linux (no hwmon) is not tested on hardware yet.
+- Direct serial on Linux verified on hardware (2026-10-14) with wireviewd stopped, both with the
+  kernel module unloaded and loaded: the agent opens `/dev/ttyACM0`, the panel reads and writes
+  the config byte-exact, screen commands work. With the module loaded but the daemon stopped
+  the manager can list a read-only hwmon entry next to the serial port; the panel and the
+  command relay prefer the device that takes commands.
 - The control panel's memory after use: source-generated JSON and a collection once the page
   closes could take back most of the +17 MB.
 - After a flash through the agent the Device page shows the old firmware version until the
