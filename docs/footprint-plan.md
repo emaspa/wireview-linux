@@ -199,9 +199,8 @@ free of Avalonia, and almost everything it needs exists:
 | shutdown | `shutdown /s /t 0` (Windows), `systemctl poweroff` (Linux) |
 | settings | `AppSettings` moved to a shared library so the GUI configures and WireView Mini follows the same `settings.json` |
 
-New code: a console host (~150 lines), Windows toast notifications
-(`Microsoft.Toolkit.Uwp.Notifications` works for unpackaged apps on the `net8.0-windows10.0.17763`
-target; `notify-send` on Linux), an `--install`/`--uninstall` pair that registers a logon task
+New code: a console host (~150 lines), Windows notifications (from the tray icon through
+`Shell_NotifyIcon`, which Windows 10 and 11 show as toasts; `notify-send` on Linux), an `--install`/`--uninstall` pair that registers a logon task
 (extend `AutoStartService`), and a serial handover command mirroring wireviewd's `SUSPEND_SERIAL`
 so the GUI can still read logs, flash firmware and edit themes while WireView Mini owns the COM port.
 
@@ -223,8 +222,9 @@ idle CPU ~0. Measured on Linux (2026-10-14, hwmon + wireviewd, panel closed): th
 build sits at 87 MB RSS / 75 MB PSS / 32 MB anonymous after a while; the NativeAOT build (10.7 MB
 binary, zero trimming warnings, source-generated JSON) starts at 23 MB RSS and levels off at about
 39 MB RSS / 33 MB PSS / 23 MB anonymous, 0.2 % of a core, so AOT is the default Linux publish.
-Windows stays on the JIT build until the toast package is replaced (it needs COM and Reflection.Emit,
-which NativeAOT does not have). Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+Windows gets the AOT build too when published on a Windows machine, now that the notifications come
+from the tray icon and no toast package is left (the SDK cannot compile a Windows build natively from
+Linux, so the zip made here stays the JIT build). Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
 packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 
@@ -243,7 +243,7 @@ Done, in this repo:
   takes a bind address, a local-only second secret, refuses local-only ops from other
   addresses, and asks for exclusive use of the port on Windows.
 - `WireViewMini/` (`wireview-mini`): `net8.0` plus `net8.0-windows10.0.17763.0` (WinExe,
-  WinRT toasts through Microsoft.Toolkit.Uwp.Notifications, `AttachConsole` for the CLI). Runs
+  notifications from the tray icon through `Shell_NotifyIcon`, `AttachConsole` for the CLI). Runs
   the local `DeviceManager` (hwmon first, then serial), a second one for the remote hosts,
   publishes always (all interfaces with LAN publishing on, loopback otherwise), alerts, shuts
   down on a local fault, `--install`/`--uninstall` (XDG autostart, HKCU Run key),

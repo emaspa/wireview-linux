@@ -30,7 +30,8 @@ internal sealed class Win32TrayIcon : ITrayIcon
     private const uint WM_TRAYSTATE = WM_APP + 2; // SetState: refresh the tooltip
 
     private const uint NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
-    private const uint NIF_MESSAGE = 0x01, NIF_ICON = 0x02, NIF_TIP = 0x04, NIF_SHOWTIP = 0x80;
+    private const uint NIF_MESSAGE = 0x01, NIF_ICON = 0x02, NIF_TIP = 0x04, NIF_INFO = 0x10, NIF_SHOWTIP = 0x80;
+    private const uint NIIF_USER = 0x04, NIIF_LARGE_ICON = 0x20;
     private const uint NOTIFYICON_VERSION_4 = 4;
 
     private const uint MF_STRING = 0x0000, MF_GRAYED = 0x0001, MF_CHECKED = 0x0008, MF_POPUP = 0x0010, MF_SEPARATOR = 0x0800;
@@ -64,6 +65,9 @@ internal sealed class Win32TrayIcon : ITrayIcon
         _thread = new Thread(MessageLoop) { IsBackground = true, Name = "wireview-mini tray" };
         _thread.SetApartmentState(ApartmentState.STA);
     }
+
+    /// <summary>The process's tray icon, for <see cref="WindowsToastNotifier"/>.</summary>
+    public static Win32TrayIcon? Current => s_instance;
 
     /// <summary>Starts the tray thread and waits for the window; null when the
     /// window cannot be created (logged).</summary>
@@ -318,6 +322,21 @@ internal sealed class Win32TrayIcon : ITrayIcon
         data.uVersion = NOTIFYICON_VERSION_4;
         _version4 = Shell_NotifyIconW(NIM_SETVERSION, ref data);
         FileLog.Info("tray: icon added to the notification area");
+    }
+
+    /// <summary>A notification from the icon, with the app's icon: Windows 10 and
+    /// 11 show it as a toast and keep it in the notification center. Any thread.
+    /// False when the icon is not in the notification area (no Explorer yet) or
+    /// the shell refused it.</summary>
+    public bool ShowNotification(string title, string message)
+    {
+        if (!_added) return false;
+        var data = NewData(NIF_INFO);
+        data.szInfoTitle = title.Length > 63 ? title[..63] : title;      // 64 chars with the terminator
+        data.szInfo = message.Length > 255 ? message[..255] : message;   // 256
+        data.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON;
+        data.hBalloonIcon = _icon;
+        return Shell_NotifyIconW(NIM_MODIFY, ref data);
     }
 
     private void UpdateTip()

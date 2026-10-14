@@ -175,13 +175,11 @@ dotnet publish WireViewMini -c Release -r win-x64
 
 On Linux this is a NativeAOT build: one native `wireview-mini` executable of about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so` next to it for the serial port. It idles at about 40 MB resident instead of about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang` plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them, add `-p:PublishAot=false` to get the self-contained single-file JIT build, which behaves the same.
 
-On Windows the default is the single-file JIT build, and it also builds from Linux. A NativeAOT build can only be made on Windows, with the Visual Studio Build Tools and their "Desktop development with C++" workload:
+On Windows the same command makes a NativeAOT build too, when run on a Windows machine with the Visual Studio Build Tools and their "Desktop development with C++" workload (the .NET SDK cannot compile a Windows build natively from Linux; the Windows build made on Linux is the single-file JIT build, and `-p:PublishAot=false` asks for it on Windows as well):
 
 ```powershell
-dotnet publish WireViewMini -c Release -r win-x64 -p:PublishAot=true
+dotnet publish WireViewMini -c Release -r win-x64
 ```
-
-Expect the Windows AOT build to lose its fault toasts: the toast library registers the app through COM and code generated at run time, and NativeAOT supports neither.
 
 WireView Mini ships the firmware image `TG-WV-PRO2-FW.hex` and the factory artwork `ext_flash.bin` next to `wireview-mini`.
 
@@ -205,5 +203,5 @@ WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.j
 - The chart history lives in memory only and starts empty with each run.
 - A remote host's fault raises a notification but never powers this PC off.
 - The control panel answers this PC only.
-- The Windows NativeAOT build has no fault toasts (see [Building](#building)).
+- On Windows the fault notification comes from the tray icon, so it needs the notification area: without Explorer there is none.
 - While a flash, a theme transfer or a log read runs, the other device controls wait and the app cannot borrow the serial port.

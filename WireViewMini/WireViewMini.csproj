@@ -5,8 +5,8 @@
        on a fault. References only the two Avalonia-free libraries, never Avalonia.
 
        Two targets: net8.0 (Linux, macOS) and net8.0-windows10.0.17763.0 (Windows:
-       WinRT toast notifications, and a windowless WinExe so the logon start shows
-       no console; CLI flags attach to the parent console). A -r/RuntimeIdentifier
+       a windowless WinExe so the logon start shows no console; CLI flags attach
+       to the parent console). A -r/RuntimeIdentifier
        picks the matching one, so `dotnet publish -r linux-x64` and
        `dotnet publish -r win-x64` need no -f. -->
   <!-- No runtime identifier (solution build): both targets. With one, only the
@@ -43,16 +43,14 @@
        with no .NET runtime (plus libSystem.IO.Ports.Native.so for the serial
        port), much smaller in memory than the JIT build. It needs clang or gcc
        and zlib (zlib1g-dev, zlib-devel) and cannot cross-compile to another OS.
-       Windows: the JIT build by default, because the toast package
-       (Microsoft.Toolkit.Uwp.Notifications) uses built-in COM and Reflection.Emit
-       to register the app, which NativeAOT does not support (its IL3050/IL3052
-       warnings), so fault toasts would fail. -p:PublishAot=true on a Windows
-       machine with the Visual Studio Build Tools (C++ workload) builds it anyway.
+       Windows: NativeAOT too when publishing on a Windows machine (it needs the
+       Visual Studio Build Tools with the C++ workload); from Linux, where the
+       Windows build cannot be compiled natively, the JIT build.
        -p:PublishAot=false is the fallback everywhere: the self-contained
        single-file JIT build (bigger, heavier in memory, same behavior), for a
        machine without the native toolchain. -->
   <PropertyGroup>
-    <PublishAot Condition="'$(PublishAot)' == '' and !$(TargetFramework.Contains('-windows'))">true</PublishAot>
+    <PublishAot Condition="'$(PublishAot)' == '' and (!$(TargetFramework.Contains('-windows')) or $([MSBuild]::IsOSPlatform('Windows')))">true</PublishAot>
     <!-- The trim and AOT analyzers on every build of both targets: every JSON
          call goes through source-generated contexts (MiniJsonContext,
          WireViewJsonContext), so a reflection call shows up as a warning. -->
@@ -70,10 +68,6 @@
   </PropertyGroup>
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
-  </ItemGroup>
-
-  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
   </ItemGroup>
 
   <!-- Tray icon (TrayIcon.cs). Linux: StatusNotifierItem plus com.canonical.dbusmenu
