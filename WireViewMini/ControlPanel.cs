@@ -359,6 +359,7 @@ internal sealed class ControlPanel
         DaemonResult.Denied => Error(403,
             $"{action}: wireviewd refused it. Add your user to the 'wireview' group and log in again."),
         DaemonResult.NotConnected => Error(503, $"{action}: no device connected"),
+        DaemonResult.Busy => Error(409, $"{action}: a firmware update is running, try again when it is done"),
         _ => Error(500, $"{action}: the device did not take the command"),
     };
 

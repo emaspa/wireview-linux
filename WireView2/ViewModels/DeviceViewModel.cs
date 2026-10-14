@@ -761,6 +761,8 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     private static string? EnterBootloaderViaMini(NetworkDevice mini)
     {
         var suspend = mini.RequestSuspendSerial(MiniFlashHandoverSeconds);
+        if (suspend == DaemonResult.Busy)
+            return "WireView Mini is updating the firmware itself. Wait for it to finish, then try again.";
         if (suspend != DaemonResult.Ok)
             return $"WireView Mini did not hand over the serial port ({suspend.DescribeNeutral()}).";
 

@@ -289,6 +289,7 @@ namespace WireView2.Net
                 CommandOutcome.Ok => DaemonResult.Ok,
                 CommandOutcome.Unreachable => DaemonResult.Unavailable,
                 CommandOutcome.HttpError when r.StatusCode == 503 => DaemonResult.NotConnected,
+                CommandOutcome.HttpError when r.StatusCode == 409 => DaemonResult.Busy,
                 _ => DaemonResult.Error,
             };
         }

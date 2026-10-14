@@ -224,10 +224,6 @@ internal sealed class MiniService : IDisposable, IFlashHost
     /// firmware flash. The panel shows the last readings meanwhile.</summary>
     public bool PortSuspended => _handoverActive || _flashSuspended;
 
-    /// <summary>Device commands are refused: the port is lent out or a firmware
-    /// update runs (in daemon mode too, where the port is wireviewd's).</summary>
-    private bool DeviceBusy => _handoverActive || Firmware.Running;
-
     /// <summary>Why the publisher is not on the wanted port (the bind error, and
     /// the fallback port while one is used), null while it is.</summary>
     public string? PublishError => _onFallback || _publish.Endpoint == null ? _publishError : null;
@@ -278,7 +274,9 @@ internal sealed class MiniService : IDisposable, IFlashHost
     /// <summary>Runs a device command on this PC's device through the same relay
     /// as a LAN command (direct serial, or hwmon through wireviewd).</summary>
     public DaemonResult RunLocalCommand(WireViewCommand cmd) =>
-        DeviceBusy ? DaemonResult.NotConnected : _publish.ExecuteCommand(cmd);
+        Firmware.Running ? DaemonResult.Busy
+        : _handoverActive ? DaemonResult.NotConnected
+        : _publish.ExecuteCommand(cmd);
 
     /// <summary>Clears the active faults like the app's fault banner: every active
     /// fault (keep-mask 0), the fault log kept (keep-mask 0xFFFF), then a redraw of
@@ -646,7 +644,7 @@ internal sealed class MiniService : IDisposable, IFlashHost
                 if (!Suspend(cmd.Seconds))
                 {
                     FileLog.Warn("serial handover refused: a firmware update is running");
-                    return DaemonResult.Error;
+                    return DaemonResult.Busy;
                 }
                 return DaemonResult.Ok;
             case WireViewCommand.ResumeSerialOp:
@@ -666,7 +664,7 @@ internal sealed class MiniService : IDisposable, IFlashHost
                 return DaemonResult.Ok;
             default:
                 // No device commands from the LAN or the app while flashing.
-                return Firmware.Running ? DaemonResult.NotConnected : null;
+                return Firmware.Running ? DaemonResult.Busy : null;
         }
     }
 

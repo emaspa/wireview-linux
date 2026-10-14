@@ -12,6 +12,7 @@ namespace WireView2.Device
         NotConnected, // RESP_NOT_CONNECTED: the daemon has no serial link to the device
         Denied,       // RESP_DENIED: privileged command, peer not root or in the "wireview" group
         Unavailable,  // no daemon connection, or the request failed in transport
+        Busy,         // the port owner is flashing the firmware (WireView Mini); not a wireviewd status
     }
 
     public static class DaemonResults
@@ -29,6 +30,7 @@ namespace WireView2.Device
             DaemonResult.NotConnected => "wireviewd is not connected to the device",
             DaemonResult.Denied       => "not permitted (not in the 'wireview' group)",
             DaemonResult.Unavailable  => "wireviewd is not reachable",
+            DaemonResult.Busy         => "a firmware update is running",
             _                         => "failed",
         };
 
@@ -41,6 +43,7 @@ namespace WireView2.Device
             DaemonResult.NotConnected => "it is not connected to the device",
             DaemonResult.Denied       => "not permitted",
             DaemonResult.Unavailable  => "it is not reachable",
+            DaemonResult.Busy         => "it is updating the firmware",
             _                         => "failed",
         };
     }

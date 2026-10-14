@@ -281,6 +281,7 @@ namespace WireView2.Net
             DaemonResult.Denied => (403, "Forbidden",
                 "{\"error\":\"denied\",\"host\":" + JsonSerializer.Serialize(Environment.MachineName, WireViewJsonContext.Default.String) + "}", "denied by wireviewd"),
             DaemonResult.NotConnected => (503, "Service Unavailable", "{\"error\":\"no device\"}", "no device"),
+            DaemonResult.Busy => (409, "Conflict", "{\"error\":\"busy\"}", "busy: firmware update running"),
             _ => (500, "Internal Server Error", "{\"error\":\"relay failed\"}", "relay failed"),
         };
 
