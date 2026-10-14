@@ -49,7 +49,12 @@ internal static class Program
         "\n" +
         "Exit codes: 0 ok, 1 error or already running, 2 bad usage,\n" +
         "--status only: 3 not running, 4 no device connected, 5 active fault.\n" +
-        "--open: 3 when WireView Mini is not running.";
+        "--open: 3 when WireView Mini is not running.\n" +
+        "\n" +
+        "Unofficial, community-made software by emaspa, https://github.com/emaspa/wireview-linux.\n" +
+        "Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs.\n" +
+        "Use at your own risk: it interacts with hardware, and the authors are not\n" +
+        "responsible for any damage to your device.";
 
     public static int Main(string[] args)
     {
