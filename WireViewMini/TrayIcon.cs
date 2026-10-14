@@ -80,7 +80,7 @@ internal sealed record TrayState(
             var items = new List<TrayItem>
             {
                 new(1, TrayItemKind.Header, Header),
-                new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Open WireView"),
+                new((int)TrayCommand.OpenApp, TrayItemKind.Action, "Launch WireView Desktop"),
                 new((int)TrayCommand.OpenPanel, TrayItemKind.Action, "Settings and controls..."),
                 new(3, TrayItemKind.Separator),
                 new(10, TrayItemKind.Submenu, "Screen", Enabled: DeviceCommands, Children:

@@ -252,7 +252,7 @@ Done, in this repo:
 - Tray icon with no UI framework: Win32 `Shell_NotifyIcon` through P/Invoke on Windows, a
   StatusNotifierItem plus `com.canonical.dbusmenu` over the session bus on Linux
   (`Tmds.DBus.Protocol`, the low-level library, no code generation). Menu: live state line
-  (device and power, fault, handover or no device), Open WireView, the *Publish on the LAN* and
+  (device and power, fault, handover or no device), Launch WireView Desktop, the *Publish on the LAN* and
   *Shutdown on fault* switches (saved to `settings.json`, applied on the next tick like a GUI
   edit), *Start at login* (`--install`/`--uninstall`), Quit. The power is also in the tooltip.
   No tray on the desktop: one log line, WireView Mini runs on and registers when a watcher

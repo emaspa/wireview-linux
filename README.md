@@ -132,7 +132,7 @@ menu, top to bottom:
 
 - the live state (`WireView Pro II: 123.4 W`, the fault while one is active,
   *Serial port lent to the app* during a handover, or *No device*),
-- **Open WireView** (starts the app, or on Windows brings the running app's
+- **Launch WireView Desktop** (starts the app, or on Windows brings the running app's
   window forward),
 - **Settings and controls...**, which opens the control panel in the browser,
 - **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then
@@ -190,7 +190,7 @@ refreshed every second:
 - **LAN monitoring**: Publish on the LAN, the port (the page follows WireView Mini to
   a new port), the remote hosts to watch, and the network secret; with
   wireviewd, the daemon's own settings instead of the first two (below),
-- **Tools**: Open WireView app (graphs, firmware updates, themes, device log) and
+- **Tools**: Launch WireView Desktop (graphs, firmware updates, themes, device log) and
   where WireView Mini's log is.
 
 Settings changed on the page are saved to `settings.json` and applied at once,

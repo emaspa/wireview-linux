@@ -6,7 +6,7 @@ using WireView2.Services;
 namespace WireView2.Mini;
 
 /// <summary>
-/// The tray's "Open WireView": starts the GUI, or brings a running one forward
+/// The tray's "Launch WireView Desktop": starts the GUI, or brings a running one forward
 /// where the GUI supports that.
 ///
 /// Where the GUI is, in order: next to WireView Mini (the Windows zip ships
@@ -30,7 +30,7 @@ internal static class GuiLauncher
     private const string GuiMutexName = "WireView2_SingleInstance";
     private const string GuiActivationEventName = "WireView2_SingleInstance_ActivationEvent";
 
-    /// <summary>The tray's Open WireView: <see cref="Launch"/>, with a
+    /// <summary>The tray's Launch WireView Desktop: <see cref="Launch"/>, with a
     /// notification when that did not open a window.</summary>
     public static void Open(IToastNotifier toast)
     {
@@ -50,30 +50,30 @@ internal static class GuiLauncher
             }
             else if (IsLinuxGuiRunning())
             {
-                FileLog.Info("Open WireView: the app is already running");
+                FileLog.Info("Launch WireView Desktop: the app is already running");
                 return (false, "WireView is already running. Open its window from its own tray icon.");
             }
 
             if (Resolve() is not { } start)
             {
-                FileLog.Warn("Open WireView: the app was not found");
+                FileLog.Warn("Launch WireView Desktop: the app was not found");
                 return (false, "The WireView app was not found. Install it, or put it next to wireview-mini.");
             }
 
             var psi = new ProcessStartInfo(start.File) { UseShellExecute = false };
             foreach (var a in start.Args) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);
-            FileLog.Info($"Open WireView: started {start.File} {string.Join(' ', start.Args)}".TrimEnd());
+            FileLog.Info($"Launch WireView Desktop: started {start.File} {string.Join(' ', start.Args)}".TrimEnd());
             return (true, "Starting the WireView app.");
         }
         catch (Exception ex)
         {
-            FileLog.Warn($"Open WireView failed: {ex.Message}");
+            FileLog.Warn($"Launch WireView Desktop failed: {ex.Message}");
             return (false, $"Cannot start the WireView app: {ex.Message}");
         }
     }
 
-    /// <summary>What Open WireView would start (a path or command line), or null
+    /// <summary>What Launch WireView Desktop would start (a path or command line), or null
     /// when the app is not installed where WireView Mini looks.</summary>
     public static string? Locate()
     {
@@ -202,11 +202,11 @@ internal static class GuiLauncher
                 try { AllowSetForegroundWindow(AsfwAny); } catch { }
                 activate.Set();
             }
-            FileLog.Info("Open WireView: asked the running app to show its window");
+            FileLog.Info("Launch WireView Desktop: asked the running app to show its window");
         }
         else
         {
-            FileLog.Info("Open WireView: the app is running but did not answer");
+            FileLog.Info("Launch WireView Desktop: the app is running but did not answer");
         }
         return true;
     }
