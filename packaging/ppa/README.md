@@ -22,7 +22,7 @@ bits of the release.
 |------|---------|
 | `debian/` | Packaging template. `debian/changelog` holds the PPA history; its top entry is the release being uploaded. |
 | `build-ppa-source.sh` | Fetches the release .deb and builds one source package per series into `build/` (git-ignored). |
-| `lp-builds.py` | Shows the Launchpad builds of a version; `--wait` polls until they finish, `--retry` retries a failed build that has no log. |
+| `lp-builds.py` | Shows the Launchpad builds of a version; `--wait` polls until they finish, `--retry` retries a failed build that has no log. `--source wireview-hwmon` watches the daemon's builds in the same PPA (versions like `1.8.0~26.04.1`). |
 
 ## Series and version scheme
 

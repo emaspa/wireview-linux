@@ -1,11 +1,15 @@
 #!/usr/bin/python3
-"""Show (and optionally wait for / retry) the PPA builds of a wireview-linux version.
+"""Show (and optionally wait for / retry) the PPA builds of a version.
 
-Usage:  packaging/ppa/lp-builds.py <version> [--wait] [--retry]
+Usage:  packaging/ppa/lp-builds.py <version> [--wait] [--retry] [--source NAME]
   e.g.  packaging/ppa/lp-builds.py 1.2.5.0 --wait --retry
+        packaging/ppa/lp-builds.py 1.8.0 --wait --source wireview-hwmon
 
-Looks up <version>~<series>1 for each series in ppa:sparvoli/wireview-hwmon and
-prints the source publishing status and each build's state and URL.
+Looks up the per-series versions in ppa:sparvoli/wireview-hwmon and prints the
+source publishing status and each build's state and URL. The default source is
+wireview-linux, whose versions are <version>~<series>1; wireview-hwmon (the
+daemon, same PPA) uses <version>~<release>.1, e.g. 1.8.0~26.04.1.
+--source NAME  the source package name (wireview-linux or wireview-hwmon).
 --wait   poll every 60 s until every build has finished (and the source is published).
 --retry  retry a failed build once if Launchpad attached no build log
          (known builder infrastructure flake; a real failure has a log).
@@ -20,13 +24,20 @@ import time
 from launchpadlib.launchpad import Launchpad
 
 SERIES = ("resolute", "noble")
+SERIES_RELEASE = {"resolute": "26.04", "noble": "24.04"}
 CREDS = os.path.expanduser("~/.config/launchpadlib-wireview.creds")
 DONE = {"Successfully built", "Failed to build", "Chroot problem",
         "Failed to upload", "Cancelled build", "Build for superseded Source"}
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    source = "wireview-linux"
+    if "--source" in argv:
+        i = argv.index("--source")
+        source = argv[i + 1]
+        del argv[i:i + 2]
+    args = [a for a in argv if not a.startswith("--")]
     if len(args) != 1:
         sys.exit(__doc__)
     version = args[0]
@@ -39,8 +50,9 @@ def main():
     while True:
         pending = False
         for series in SERIES:
-            ver = f"{version}~{series}1"
-            srcs = ppa.getPublishedSources(source_name="wireview-linux", version=ver, exact_match=True)
+            ver = (f"{version}~{SERIES_RELEASE[series]}.1" if source == "wireview-hwmon"
+                   else f"{version}~{series}1")
+            srcs = ppa.getPublishedSources(source_name=source, version=ver, exact_match=True)
             if len(srcs) == 0:
                 print(f"{ver}: not in the PPA yet (upload still being processed?)")
                 pending = True
