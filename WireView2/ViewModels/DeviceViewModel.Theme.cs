@@ -862,10 +862,12 @@ public sealed partial class DeviceViewModel
                     if ((uint)tx >= (uint)targetWidth) continue;
                     int s = (y * drawW + x) * 4;
                     int d = (ty * targetWidth + tx) * 4;
-                    byte a = scaledPixels[s + 3];
-                    canvas[d] = (byte)(scaledPixels[s] * a / 255);
-                    canvas[d + 1] = (byte)(scaledPixels[s + 1] * a / 255);
-                    canvas[d + 2] = (byte)(scaledPixels[s + 2] * a / 255);
+                    // The bitmap's pixels are premultiplied: a translucent pixel over
+                    // the black canvas is its channels as they are. Multiplying by
+                    // alpha again darkened translucent imports.
+                    canvas[d] = scaledPixels[s];
+                    canvas[d + 1] = scaledPixels[s + 1];
+                    canvas[d + 2] = scaledPixels[s + 2];
                     canvas[d + 3] = 255;
                 }
             }
