@@ -18,7 +18,9 @@ internal sealed record PanelStatus(
     PanelSettings Settings,
     PanelGui Gui,
     PanelFlash Firmware,
-    PanelThemeUpload? Theme);
+    PanelThemeUpload? Theme,
+    PanelDeviceLogState? DeviceLog,
+    PanelHistory? History);
 
 internal sealed record PanelMiniInfo(
     string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown);
@@ -151,6 +153,45 @@ internal sealed record PanelThemeStarted(bool Ok, string Message, PanelThemeUplo
 internal sealed record PanelThemeFile(
     PanelThemeValues Values, string Preset, string? Background, string? FanFrame1, string? FanFrame2, string Message);
 
+/// <summary>GET /api/history, and /api/status with ?history=: the chart history,
+/// one array per column (oldest first), so a full hour is one small answer.
+/// <paramref name="T"/>: Unix milliseconds. <paramref name="V"/>, <paramref name="I"/>:
+/// six arrays (pins 1 to 6). <paramref name="Temp"/>: four (onboard in, onboard
+/// out, external 1, external 2), null where a sensor reads nothing.
+/// <paramref name="Energy"/>: joules (wireviewd's counter), null when the device
+/// has none. <paramref name="Step"/>: every Step-th sample, raised so that at most
+/// <paramref name="MaxPoints"/> come back; ask again with the same step for
+/// samples that line up. <paramref name="Enabled"/>: false with HistoryMinutes 0.</summary>
+internal sealed record PanelHistory(
+    bool Enabled, int Minutes, int Capacity, int Buffered, int Step, int MaxPoints, int Count,
+    long[] T, float?[][] V, float?[][] I, float?[][] Temp, int[] Fan, int[] Fault, double?[]? Energy);
+
+/// <summary>A device log read's state: in /api/status while one runs (null
+/// otherwise), and in the device log answers.</summary>
+/// <param name="State">Idle, Reading, Parsing, Done or Failed.</param>
+internal sealed record PanelDeviceLogState(string State, double Progress, string? Message, bool Running);
+
+/// <summary>One power cycle. <paramref name="Start"/>: the log's synthetic clock
+/// (each cycle starts at 2026-01-01 00:00, as in the app); <paramref name="Label"/>:
+/// the app's ("Cycle #1 (1200 samples, 1:40)").</summary>
+internal sealed record PanelDeviceLogCycle(int Index, int Samples, string Start, double DurationSeconds, string Label);
+
+/// <summary>GET /api/devicelog: the last read's cycles (empty before the first
+/// read). <paramref name="MemoryBytes"/>: what WireView Mini keeps of it.</summary>
+internal sealed record PanelDeviceLog(
+    bool Loaded, string? ReadAt, int Samples, long MemoryBytes, List<PanelDeviceLogCycle> Cycles, PanelDeviceLogState State);
+
+/// <summary>GET /api/devicelog/cycle/N: one cycle's samples, the arrays as in
+/// <see cref="PanelHistory"/>; <paramref name="T"/> in seconds since the cycle's
+/// start (the app's X axis). <paramref name="Samples"/>: the cycle's count,
+/// <paramref name="Count"/>: how many came back (every Step-th).</summary>
+internal sealed record PanelDeviceLogSamples(
+    int Index, string Label, int Samples, int Step, int Count,
+    double[] T, float?[][] V, float?[][] I, float?[][] Temp);
+
+/// <summary>POST /api/devicelog/read when it started (202).</summary>
+internal sealed record PanelDeviceLogStarted(bool Ok, string Message, PanelDeviceLogState State);
+
 /// <summary>Every failure: {"error": "..."}.</summary>
 internal sealed record PanelError(string Error);
 
@@ -175,6 +216,10 @@ internal sealed record PanelError(string Error);
 [JsonSerializable(typeof(PanelTheme))]
 [JsonSerializable(typeof(PanelThemeStarted))]
 [JsonSerializable(typeof(PanelThemeFile))]
+[JsonSerializable(typeof(PanelHistory))]
+[JsonSerializable(typeof(PanelDeviceLog))]
+[JsonSerializable(typeof(PanelDeviceLogSamples))]
+[JsonSerializable(typeof(PanelDeviceLogStarted))]
 [JsonSerializable(typeof(ThemeEdit))]
 [JsonSerializable(typeof(DeviceConfigModel))]
 [JsonSerializable(typeof(DaemonConfigEdit))]

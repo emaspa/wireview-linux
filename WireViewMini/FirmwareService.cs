@@ -429,7 +429,7 @@ internal sealed class FirmwareService
     }
 
     private const string FailedPrefix = "Firmware update failed: ";
-    private const string SerialTransferText = "A theme transfer is using the serial port. Try again when it has finished.";
+    private const string SerialTransferText = "A theme transfer or a device log read is using the serial port. Try again when it has finished.";
 
     private void Fail(int generation, string message)
     {

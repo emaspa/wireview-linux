@@ -357,6 +357,16 @@ namespace WireView2.Net
             sb.Append("HTTP/1.1 ").Append(r.Status).Append(' ').Append(ReasonPhrase(r.Status)).Append("\r\n");
             sb.Append("Content-Type: ").Append(r.ContentType).Append("\r\n");
             foreach (var h in r.Headers) sb.Append(h.Key).Append(": ").Append(h.Value).Append("\r\n");
+            if (r.WriteBody is { } write)
+            {
+                // Streamed: the end of the body is the end of the connection.
+                sb.Append("Connection: close\r\n\r\n");
+                await s.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString())).ConfigureAwait(false);
+                using var buffered = new BufferedStream(s, 64 * 1024);
+                write(buffered);
+                buffered.Flush();
+                return;
+            }
             sb.Append("Connection: close\r\nContent-Length: ").Append(r.Body.Length).Append("\r\n\r\n");
             await s.WriteAsync(Encoding.ASCII.GetBytes(sb.ToString())).ConfigureAwait(false);
             if (r.Body.Length > 0) await s.WriteAsync(r.Body).ConfigureAwait(false);

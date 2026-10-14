@@ -175,6 +175,28 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
 .file-btn input[type=file]:disabled { cursor: default; }
 .staged { color: var(--warn); font-size: 12.5px; }
 #themeCard input:disabled, #themeCard select:disabled { opacity: .45; }
+/* Charts and the device log: canvas line charts drawn by the page (no library). */
+.chart { position: relative; width: 100%; margin-top: 8px; }
+.chart canvas { display: block; width: 100%; height: 300px; background: #141414; border: 1px solid var(--line);
+                border-radius: 4px; touch-action: pan-y; }
+@media (max-width: 760px) { .chart canvas { height: 240px; } }
+.chart .tip { position: absolute; top: 8px; pointer-events: none; background: rgba(18, 18, 18, .94); border: 1px solid #666;
+              border-radius: 4px; padding: 5px 8px; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; z-index: 2; }
+.chart .tip div { display: flex; align-items: center; gap: 6px; }
+.chart .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+                padding: 0 16px; color: var(--muted); font-size: 12.5px; pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 3px 16px; margin: 8px 0 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend b { font-weight: 600; }
+.series-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px; }
+.series-pick label { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.series-pick .grp { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.axes { display: grid; grid-template-columns: max-content max-content minmax(0, 110px) minmax(0, 110px); gap: 4px 10px; align-items: center; }
+.axes .h { color: var(--muted); font-size: 12px; }
+.axes label { display: inline-flex; align-items: center; gap: 4px; }
+.chart-tools { gap: 8px; }
+.chart-tools select { width: auto; max-width: 100%; }
+#lgCycle { width: auto; max-width: 100%; }
 </style>
 </head>
 <body>
@@ -246,6 +268,63 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
     </div>
   </section>
 
+  <section id="chartSection">
+    <h2 class="card-head"><button type="button" class="card-toggle" data-card="charts" aria-expanded="false" aria-controls="chBody"><span class="chev" aria-hidden="true"></span>Charts</button>
+      <span class="sub" id="chInfo">the readings of the last minutes, kept by WireView Mini</span></h2>
+    <div class="card-body" id="chBody" hidden>
+      <div class="hint hidden" id="chOff"></div>
+      <div class="row chart-tools">
+        <label class="muted" for="chWindow">Window</label>
+        <select id="chWindow">
+          <option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option>
+          <option value="3600">1 h</option><option value="0">All buffered</option>
+        </select>
+        <span style="flex:1"></span>
+        <button id="chCsv" title="Every buffered sample, in the WireView app's CSV columns">Export CSV</button>
+      </div>
+      <div class="chart" id="chChart"></div>
+      <div class="legend" id="chLegend"></div>
+      <h3 class="card-head"><button type="button" class="card-toggle" data-card="chartsOptions" aria-expanded="false" aria-controls="chOpts"><span class="chev" aria-hidden="true"></span>Series and Y axis</button></h3>
+      <div class="card-body" id="chOpts" hidden>
+        <div class="series-pick" id="chSeries"></div>
+        <h3>Y axis</h3>
+        <div class="axes" id="chAxes"></div>
+      </div>
+      <div class="result" id="chResult"></div>
+      <p class="note" id="chNote"></p>
+    </div>
+  </section>
+
+  <section id="logSection">
+    <h2 class="card-head"><button type="button" class="card-toggle" data-card="devicelog" aria-expanded="false" aria-controls="lgBody"><span class="chev" aria-hidden="true"></span>Device log</button>
+      <span class="sub" id="lgInfo">what the device logged in its flash, by power cycle</span> <span class="card-note" id="lgNote"></span></h2>
+    <div class="card-body" id="lgBody" hidden>
+      <div class="hint hidden" id="lgReason"></div>
+      <div class="row chart-tools">
+        <button class="primary" id="lgRead">Read from device</button>
+        <label class="muted" for="lgCycle">Power cycle</label>
+        <select id="lgCycle" disabled><option>Not read yet</option></select>
+        <button id="lgCsv" disabled title="Every sample of this power cycle, in the WireView app's CSV columns">Export CSV</button>
+      </div>
+      <div id="lgRun" class="hidden">
+        <div class="bar"><i id="lgBar"></i></div>
+        <div id="lgState"></div>
+      </div>
+      <div class="result pre" id="lgResult"></div>
+      <div class="chart" id="lgChart"></div>
+      <div class="legend" id="lgLegend"></div>
+      <h3 class="card-head"><button type="button" class="card-toggle" data-card="logOptions" aria-expanded="false" aria-controls="lgOpts"><span class="chev" aria-hidden="true"></span>Series and Y axis</button></h3>
+      <div class="card-body" id="lgOpts" hidden>
+        <div class="series-pick" id="lgSeries"></div>
+        <h3>Y axis</h3>
+        <div class="axes" id="lgAxes"></div>
+      </div>
+      <p class="note">Read from device reads the log area of the device's flash (8 MB) over the serial port, which takes
+        about a minute and a half; with wireviewd WireView Mini borrows the port for it. The log has no clock: as in the app, the time
+        is counted from each power-on. The result stays in WireView Mini until the next read.</p>
+    </div>
+  </section>
+
   <section id="cfgSection">
     <h2 class="card-head"><button type="button" class="card-toggle" data-card="config" aria-expanded="false" aria-controls="cfgBody"><span class="chev" aria-hidden="true"></span>Device configuration</button>
       <span class="sub" id="cfgInfo"></span></h2>
@@ -306,7 +385,7 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
           <div class="field"><label for="thHighlight">Highlight color</label><span><input type="color" id="thHighlight"></span></div>
           <div class="field"><label for="thBackground">Background color</label><span><input type="color" id="thBackground"></span></div>
           <div class="field"><label for="thBg">Background</label><select id="thBg"></select></div>
-          <div class="field"><label for="thFan">Fan animation</label><select id="thFan"></select></div>
+          <div class="field"><label>Fan animation</label><span class="muted" id="thFanNote">follows the background</span></div>
           <h3>Custom background image</h3>
           <div class="row">
             <span class="file-btn"><button id="thPickBtn" tabindex="-1">Choose image...</button>
@@ -465,7 +544,6 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
     <h2>Tools</h2>
     <div class="row" id="appRow" hidden>
       <button id="openApp">Launch WireView Desktop</button>
-      <span class="muted">for the graphs and the device log</span>
       <span class="result" id="appResult"></span>
     </div>
     <dl class="kv" style="margin-top:10px">
@@ -716,6 +794,8 @@ const WVPixels = (function () {
     renderFlash(s);
     renderFlashNote(s);
     renderThemeStatus(s);
+    renderLogStatus(s);
+    if (s.history && live) takeHistory(s.history, false);
     refreshButtons();
   }
 
@@ -735,7 +815,7 @@ const WVPixels = (function () {
   }
 
   async function poll() {
-    try { renderStatus(await api("GET", "/api/status")); }
+    try { renderStatus(await api("GET", "/api/status" + historyQuery())); }
     catch (e) {
       if (e.offline) { $("offline").classList.remove("hidden"); $("state").className = "pill bad"; $("state").textContent = "Mini unreachable"; }
       if (e.status === 401) { setTimeout(poll, 5000); return; }
@@ -1250,7 +1330,15 @@ const WVPixels = (function () {
   function hexRgb(hex) { const v = parseInt(hex.slice(-6), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
   function invRgb(c) { return [255 - c[0], 255 - c[1], 255 - c[2]]; }
   function css(c) { return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")"; }
-  const fanFor = (bg) => bg === 1 ? 100 : bg === 2 ? 117 : 152; // DeviceConfigEditor.FanBitmapFor
+  // The fan animation follows the background, as in the app (it has no fan
+  // choice): DeviceConfigEditor.FanBitmapFor. A background id this page does not
+  // know keeps the device's fan, as the server does.
+  const fanFor = (bg) => bg === 1 ? 100 : bg === 2 ? 117 : bg === BG_NONE ? 152
+    : (th && th.values ? th.values.fanBitmapId : 152);
+  function showFan() {
+    const f = th && (th.fans || []).find(o => o.value === thEdit.fan);
+    $("thFanNote").textContent = (f ? f.label : "slot " + thEdit.fan) + " (follows the background)";
+  }
 
   function themeRunning() { return !!(status && status.theme && status.theme.running); }
 
@@ -1291,7 +1379,7 @@ const WVPixels = (function () {
 
   function setEditor(v) {
     thEdit = {
-      alpha: {}, inversion: !!v.displayInversion, bg: v.backgroundBitmapId, fan: v.fanBitmapId,
+      alpha: {}, inversion: !!v.displayInversion, bg: v.backgroundBitmapId, fan: fanFor(v.backgroundBitmapId),
     };
     for (const [k, id, key] of TH_COLORS) {
       const t = v[key] || "#000000";
@@ -1301,7 +1389,7 @@ const WVPixels = (function () {
     }
     $("thInv").checked = thEdit.inversion;
     fillSelect("thBg", th.backgrounds, thEdit.bg);
-    fillSelect("thFan", th.fans, thEdit.fan);
+    showFan();
     syncPreset();
   }
 
@@ -1375,7 +1463,7 @@ const WVPixels = (function () {
     thArtLoading = true;
     renderThemePreview();
     try {
-      const r = await api("GET", "/api/theme?bg=" + thEdit.bg + "&fan=" + thEdit.fan);
+      const r = await api("GET", "/api/theme?bg=" + thEdit.bg);
       takeArtwork(r);
       if (r.artworkError) say("thResult", false, r.artworkError);
     } catch (e) {
@@ -1473,7 +1561,7 @@ const WVPixels = (function () {
     const can = !reason && !running && !thLoading && !!thEdit;
     $("thReason").textContent = running ? "" : reason;
     $("thReason").classList.toggle("hidden", running || !reason);
-    const inputs = ["thPreset", "thInv", "thPrimary", "thSecondary", "thHighlight", "thBackground", "thBg", "thFan",
+    const inputs = ["thPreset", "thInv", "thPrimary", "thSecondary", "thHighlight", "thBackground", "thBg",
                     "thFit", "thScale", "thOx", "thOy", "thClear", "thSave", "thLoad", "thLoadBtn"];
     const editable = !!thEdit && !running && !!(th && th.uiV2Supported);
     // Nothing to edit (no device, older firmware): the reason and Reload only.
@@ -1553,12 +1641,11 @@ const WVPixels = (function () {
     thEdit.bg = Number($("thBg").value);
     // As the app: the fan animation follows the background.
     thEdit.fan = fanFor(thEdit.bg);
-    fillSelect("thFan", th.fans, thEdit.fan);
+    showFan();
     if (thEdit.bg === BG_NONE && thStaged && !thStaged.file) { thStaged = null; thSource = null; $("thPick").value = ""; }
     onThemeEdit();
     loadSlotArtwork();
   });
-  $("thFan").addEventListener("change", () => { thEdit.fan = Number($("thFan").value); onThemeEdit(); loadSlotArtwork(); });
   $("thPreset").addEventListener("change", () => {
     const p = th.presets.find(x => x.name === $("thPreset").value);
     if (!p) return; // Custom: keep the values
@@ -1683,6 +1770,459 @@ const WVPixels = (function () {
     return { status: res.status, data };
   }
 
+  // ---- Charts and the device log ----
+
+  // The app's series (MonitoringViewModel / LoggingViewModel BuildItems, in its
+  // order and with its palette, cycled), then the per-pin power and the fan duty,
+  // which the panel adds. Each reads one sample k of a data set
+  // { x, v[6], i[6], temp[4], fan }.
+  const PALETTE = ["#32cd32", "#ff4500", "#1e90ff", "#ffd700", "#ee82ee", "#40e0d0",
+                   "#ff1493", "#ff7f50", "#3cb371", "#6a5acd", "#ff6347", "#ba55d3"];
+  const SERIES = [];
+  (function () {
+    const add = (key, label, unit, group, get) => SERIES.push({ key, label, unit, group, get, color: PALETTE[SERIES.length % PALETTE.length] });
+    const sum = (d, k, f) => { let t = 0, any = false; for (let p = 0; p < 6; p++) { const x = f(d, p, k); if (x !== null) { t += x; any = true; } } return any ? t : null; };
+    const pw = (d, p, k) => d.v[p][k] === null || d.i[p][k] === null ? null : d.v[p][k] * d.i[p][k];
+    add("Psum", "Total Power (W)", "W", "Totals", (d, k) => sum(d, k, pw));
+    add("Isum", "Total Current (A)", "A", "Totals", (d, k) => sum(d, k, (d, p, k) => d.i[p][k]));
+    for (let p = 0; p < 6; p++) add("V" + (p + 1), "V" + (p + 1) + " (V)", "V", "Voltage", (d, k) => d.v[p][k]);
+    for (let p = 0; p < 6; p++) add("I" + (p + 1), "I" + (p + 1) + " (A)", "A", "Current", (d, k) => d.i[p][k]);
+    [["Tin", "Onboard In (°C)"], ["Tout", "Onboard Out (°C)"], ["T1", "External 1 (°C)"], ["T2", "External 2 (°C)"]]
+      .forEach(([key, label], s) => add(key, label, "°C", "Temperature", (d, k) => d.temp[s][k]));
+    for (let p = 0; p < 6; p++) add("P" + (p + 1), "P" + (p + 1) + " (W)", "W", "Power per pin", (d, k) => pw(d, p, k));
+    add("Fan", "Fan duty (%)", "%", "Fan", (d, k) => d.fan ? d.fan[k] : null);
+  })();
+  const UNITS = ["V", "A", "W", "°C", "%"];
+  const fmt3 = (v) => String(Math.round(v * 1000) / 1000); // the app's 0.###
+
+  function niceStep(raw) {
+    if (!(raw > 0) || !isFinite(raw)) return 1;
+    const m = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / m;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * m;
+  }
+  const pad2 = (n) => String(n).padStart(2, "0");
+  // Clock-time ticks for the live chart (x in ms), the app's s/m/h ticks for a log cycle (x in s).
+  const CLOCK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
+  const clockAxis = {
+    step(range, ticks) { const raw = range / 1000 / Math.max(1, ticks - 1); return 1000 * (CLOCK_STEPS.find(s => s >= raw) || 86400); },
+    label(x, range, step) { const d = new Date(x); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + (step < 60000 ? ":" + pad2(d.getSeconds()) : ""); },
+    hover(x) { const d = new Date(x); return d.toLocaleDateString() + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds()); },
+  };
+  const elapsedLabel = (x, range) => range >= 7200 ? fmt2(x / 3600) + "h" : range >= 120 ? fmt2(x / 60) + "m" : fmt2(x) + "s";
+  const fmt2 = (v) => String(Math.round(v * 100) / 100); // the app's 0.##
+  const elapsedAxis = {
+    step(range, ticks) { return niceStep(range / Math.max(1, ticks - 1)); },
+    label: elapsedLabel,
+    hover(x) {
+      const s = Math.round(x), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+      return "+" + (h > 0 ? h + ":" + pad2(m) : m) + ":" + pad2(s % 60);
+    },
+  };
+
+  // One chart: the canvas, the hover readout, the legend, the series picker and
+  // the Y axis settings, remembered in this browser per chart.
+  function makeChart(name, defaults, opts) {
+    const root = $(opts.root), legend = $(opts.legend);
+    const cv = el("canvas", { "aria-label": opts.aria }), tip = el("div", { class: "tip hidden" }), empty = el("div", { class: "empty" });
+    root.replaceChildren(cv, tip, empty);
+    const series = SERIES.filter(s => !opts.skip || !opts.skip.includes(s.key));
+    const key = "wvmini.chart." + name;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { }
+    const on = new Set(saved && Array.isArray(saved.series) ? saved.series : defaults);
+    // The app's axis defaults: auto, manual range 0 to 100.
+    const axes = {};
+    for (const u of UNITS) axes[u] = Object.assign({ auto: true, min: 0, max: 100 }, saved && saved.axes && saved.axes[u]);
+    let data = null, xMin = 0, xMax = 1, hoverX = null, emptyText = "";
+    const cache = new Map();
+
+    function save() {
+      try { localStorage.setItem(key, JSON.stringify({ series: [...on], axes })); } catch (e) { }
+    }
+    function values(s) {
+      let c = cache.get(s.key);
+      if (!c) {
+        c = new Array(data.x.length);
+        for (let k = 0; k < c.length; k++) { const v = s.get(data, k); c[k] = (v === null || v === undefined || !isFinite(v)) ? null : v; }
+        cache.set(s.key, c);
+      }
+      return c;
+    }
+    const shown = () => series.filter(s => on.has(s.key));
+    function lower(x) { let lo = 0, hi = data.x.length; while (lo < hi) { const m = (lo + hi) >> 1; if (data.x[m] < x) lo = m + 1; else hi = m; } return lo; }
+
+    // The app's single Y scale: auto (min/max of the visible samples of the shown
+    // series, plus 10 %) unless every shown unit is set to manual, then the
+    // union of those ranges.
+    function yRange(list, a, b) {
+      const units = [...new Set(list.map(s => s.unit))];
+      if (units.length && units.every(u => !axes[u].auto)) {
+        const lo = Math.min(...units.map(u => axes[u].min)), hi = Math.max(...units.map(u => axes[u].max));
+        if (hi > lo) return [lo, hi];
+      }
+      let lo = Infinity, hi = -Infinity;
+      for (const s of list) {
+        const c = values(s);
+        for (let k = a; k < b; k++) { const v = c[k]; if (v === null) continue; if (v < lo) lo = v; if (v > hi) hi = v; }
+      }
+      if (!isFinite(lo)) return [0, 1];
+      if (Math.abs(hi - lo) < 1e-9) hi = lo + 1;
+      const p = (hi - lo) * 0.1;
+      return [lo - p, hi + p];
+    }
+
+    function render() {
+      const w = Math.max(50, cv.clientWidth), h = Math.max(50, cv.clientHeight), dpr = window.devicePixelRatio || 1;
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      const g = cv.getContext("2d");
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      const n = data ? data.x.length : 0;
+      const list = shown();
+      empty.textContent = emptyText || (n === 0 ? "No samples yet." : list.length === 0 ? "Pick a series below." : "");
+      empty.classList.toggle("hidden", !empty.textContent);
+      if (n === 0) { tip.classList.add("hidden"); renderLegend(); return; }
+      const a = lower(xMin), b = Math.min(n, lower(xMax + 1e-9) + 1);
+      const [yMin, yMax] = yRange(list, a, b);
+      g.font = "12px system-ui, sans-serif";
+      // Room for the widest Y label.
+      const yStep = niceStep((yMax - yMin) / Math.max(2, Math.floor((h - 40) / 40)));
+      const yLabels = [];
+      for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax + yStep * 1e-4; v += yStep)
+        yLabels.push([v, fmt2(Math.abs(v) < yStep * 1e-6 ? 0 : v)]);
+      const padL = 10 + Math.max(24, ...yLabels.map(l => g.measureText(l[1]).width)), padR = 10, padT = 10, padB = 24;
+      const pw = w - padL - padR, ph = h - padT - padB;
+      if (pw < 10 || ph < 10) return;
+      const xs = (x) => padL + (x - xMin) / (xMax - xMin) * pw, ys = (y) => padT + ph - (y - yMin) / (yMax - yMin) * ph;
+
+      // Grid, axes and ticks, in the app's greys.
+      g.lineWidth = 1;
+      g.textBaseline = "middle"; g.textAlign = "right"; g.fillStyle = "#d3d3d3";
+      for (const [v, t] of yLabels) {
+        const y = Math.round(ys(v)) + 0.5;
+        g.strokeStyle = "#262626"; g.beginPath(); g.moveTo(padL, y); g.lineTo(padL + pw, y); g.stroke();
+        g.strokeStyle = "#696969"; g.beginPath(); g.moveTo(padL - 5, y); g.lineTo(padL, y); g.stroke();
+        g.fillText(t, padL - 8, y);
+      }
+      const range = xMax - xMin, xStep = opts.axis.step(range, Math.max(3, Math.min(12, Math.floor(pw / 90))));
+      g.textBaseline = "top"; g.textAlign = "center";
+      for (let x = Math.ceil(xMin / xStep) * xStep, i = 0; x <= xMax + xStep * 1e-4 && i < 1000; x += xStep, i++) {
+        const cx = Math.round(xs(x)) + 0.5;
+        g.strokeStyle = "#262626"; g.beginPath(); g.moveTo(cx, padT); g.lineTo(cx, padT + ph); g.stroke();
+        g.strokeStyle = "#696969"; g.beginPath(); g.moveTo(cx, padT + ph); g.lineTo(cx, padT + ph + 5); g.stroke();
+        g.fillText(opts.axis.label(x, range, xStep), cx, padT + ph + 7);
+      }
+      g.strokeStyle = "#808080";
+      g.beginPath(); g.moveTo(padL + 0.5, padT); g.lineTo(padL + 0.5, padT + ph + 0.5); g.lineTo(padL + pw, padT + ph + 0.5); g.stroke();
+
+      // The series: a gap where a sample has no value; dense runs keep each pixel
+      // column's first, lowest, highest and last point, as the app's chart does.
+      g.save();
+      g.beginPath(); g.rect(padL, padT, pw, ph); g.clip();
+      g.lineWidth = 1.6; g.lineJoin = "round";
+      const dense = (b - a) > pw * 2;
+      for (const s of list) {
+        const c = values(s);
+        g.strokeStyle = s.color;
+        g.beginPath();
+        let pen = false;
+        const point = (k) => { const X = xs(data.x[k]), Y = ys(c[k]); if (pen) g.lineTo(X, Y); else { g.moveTo(X, Y); pen = true; } };
+        if (!dense) {
+          for (let k = Math.max(0, a - 1); k < Math.min(n, b + 1); k++) { if (c[k] === null) { pen = false; continue; } point(k); }
+        } else {
+          let k = Math.max(0, a - 1);
+          const end = Math.min(n, b + 1);
+          while (k < end) {
+            const col = Math.floor(xs(data.x[k]));
+            let first = -1, lo = -1, hi = -1, last = -1, j = k;
+            for (; j < end && Math.floor(xs(data.x[j])) === col; j++) {
+              if (c[j] === null) continue;
+              if (first < 0) first = j;
+              if (lo < 0 || c[j] < c[lo]) lo = j;
+              if (hi < 0 || c[j] > c[hi]) hi = j;
+              last = j;
+            }
+            if (first < 0) pen = false;
+            else [...new Set([first, lo, hi, last])].sort((p, q) => p - q).forEach(point);
+            k = j;
+          }
+        }
+        g.stroke();
+      }
+      g.restore();
+
+      // Hover: the crosshair on the nearest sample and its values.
+      tip.classList.add("hidden");
+      if (hoverX === null || !list.length) { renderLegend(); return; }
+      const xv = xMin + (hoverX - padL) / pw * range;
+      let k = Math.min(n - 1, lower(xv));
+      if (k > 0 && Math.abs(data.x[k - 1] - xv) < Math.abs(data.x[k] - xv)) k--;
+      const hx = xs(data.x[k]);
+      if (hx < padL - 1 || hx > padL + pw + 1 || Math.abs(hx - hoverX) > 50) { renderLegend(); return; }
+      g.strokeStyle = "#fff"; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(hx) + 0.5, padT); g.lineTo(Math.round(hx) + 0.5, padT + ph); g.stroke();
+      const rows = [el("div", { class: "muted", text: opts.axis.hover(data.x[k]) })];
+      for (const s of list) {
+        const v = values(s)[k];
+        if (v !== null) { g.fillStyle = "#fff"; g.beginPath(); g.arc(hx, ys(v), 3, 0, Math.PI * 2); g.fill(); }
+        rows.push(el("div", {}, el("b", { class: "swatch", style: "background:" + s.color }), s.label + ": " + (v === null ? "-" : fmt3(v))));
+      }
+      tip.replaceChildren(...rows);
+      tip.classList.remove("hidden");
+      const tw = tip.offsetWidth;
+      tip.style.left = Math.max(0, hx + 12 + tw > w ? hx - 12 - tw : hx + 12) + "px";
+      renderLegend();
+    }
+
+    // The legend: each shown series with its newest value.
+    function renderLegend() {
+      const n = data ? data.x.length : 0;
+      legend.replaceChildren(...shown().map(s => {
+        let v = null;
+        if (n) { const c = values(s); for (let k = n - 1; k >= 0 && v === null; k--) v = c[k]; }
+        return el("span", {}, el("b", { class: "swatch", style: "background:" + s.color }), s.label, el("b", { text: v === null ? "-" : fmt3(v) }));
+      }));
+    }
+
+    function buildPicker() {
+      const kids = [];
+      let group = null;
+      for (const s of series) {
+        if (s.group !== group) { group = s.group; kids.push(el("div", { class: "grp", text: group })); }
+        const cb = el("input", { type: "checkbox", checked: on.has(s.key) });
+        cb.addEventListener("change", () => { if (cb.checked) on.add(s.key); else on.delete(s.key); save(); buildAxes(); render(); });
+        kids.push(el("label", {}, cb, el("b", { class: "swatch", style: "background:" + s.color }), s.label));
+      }
+      $(opts.picker).replaceChildren(...kids);
+    }
+    function buildAxes() {
+      const units = UNITS.filter(u => shown().some(s => s.unit === u));
+      const kids = [el("span", { class: "h", text: "Unit" }), el("span", { class: "h", text: "Scale" }),
+                    el("span", { class: "h", text: "Min" }), el("span", { class: "h", text: "Max" })];
+      for (const u of units) {
+        const ax = axes[u];
+        const auto = el("input", { type: "checkbox", checked: ax.auto, "aria-label": u + " automatic" });
+        const lo = el("input", { type: "number", step: "any", value: ax.min, disabled: ax.auto, "aria-label": u + " minimum" });
+        const hi = el("input", { type: "number", step: "any", value: ax.max, disabled: ax.auto, "aria-label": u + " maximum" });
+        auto.addEventListener("change", () => { ax.auto = auto.checked; lo.disabled = hi.disabled = ax.auto; save(); render(); });
+        const num = (i, f) => i.addEventListener("input", () => { const v = Number(i.value); if (i.value !== "" && isFinite(v)) { ax[f] = v; save(); render(); } });
+        num(lo, "min"); num(hi, "max");
+        kids.push(el("span", { text: u }), el("label", {}, auto, "Auto"), lo, hi);
+      }
+      $(opts.axes).replaceChildren(...kids);
+      $(opts.axes).classList.toggle("hidden", units.length === 0);
+    }
+
+    cv.addEventListener("pointermove", (e) => { const r = cv.getBoundingClientRect(); hoverX = e.clientX - r.left; render(); });
+    cv.addEventListener("pointerleave", () => { hoverX = null; render(); });
+    window.addEventListener("resize", () => { if (data && root.offsetParent) render(); });
+    buildPicker();
+    buildAxes();
+    return {
+      // d: { x, v, i, temp, fan }; the X window [lo, hi].
+      set(d, lo, hi) { data = d; cache.clear(); xMin = lo; xMax = hi > lo ? hi : lo + 1; render(); },
+      empty(text) { emptyText = text || ""; render(); },
+      render,
+    };
+  }
+
+  // A download through fetch (the token is a header): the file name from the answer.
+  async function download(path, fallback) {
+    let res;
+    try { res = await fetch(path, { cache: "no-store", headers: { "X-Mini-Token": token } }); }
+    catch (e) { throw new Error("WireView Mini does not answer"); }
+    if (!res.ok) { let m = "HTTP " + res.status; try { m = (await res.json()).error || m; } catch (e) { } throw new Error(m); }
+    const blob = await res.blob();
+    const m = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") || "");
+    const name = m ? m[1] : fallback;
+    const a = el("a", { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    return name;
+  }
+
+  // ---- Charts (the history WireView Mini keeps) ----
+
+  // Read only while the card is open and the page visible: the first read when it
+  // opens (or the window changes), then the new samples ride along with the status
+  // poll (?history=), so the chart costs no requests of its own.
+  const chart = makeChart("live", ["Psum", "Isum"], { root: "chChart", legend: "chLegend", picker: "chSeries", axes: "chAxes",
+    axis: clockAxis, aria: "Chart of the readings WireView Mini keeps" });
+  let live = null;           // { x (ms), v, i, temp, fan, step, capacity, minutes, enabled }
+  let liveLoading = false;
+
+  function chartsWanted() { return cardIsOpen("charts") && document.visibilityState === "visible"; }
+  function chartWindowMs() { return Number($("chWindow").value) * 1000; }
+  function historyQuery() {
+    if (!live || !live.enabled || !chartsWanted()) return "";
+    const last = live.x.length ? live.x[live.x.length - 1] : Date.now() - 1000;
+    return "?history=" + (last / 1000).toFixed(3) + "&step=" + live.step;
+  }
+
+  function takeHistory(h, fresh) {
+    if (fresh || !live) {
+      live = { x: [], v: [[], [], [], [], [], []], i: [[], [], [], [], [], []], temp: [[], [], [], []], fan: [], step: h.step };
+    }
+    Object.assign(live, { capacity: h.capacity, minutes: h.minutes, enabled: h.enabled, buffered: h.buffered });
+    const last = live.x.length ? live.x[live.x.length - 1] : -Infinity;
+    for (let k = 0; k < h.count; k++) {
+      if (h.t[k] <= last) continue;
+      live.x.push(h.t[k]);
+      for (let p = 0; p < 6; p++) { live.v[p].push(h.v[p][k]); live.i[p].push(h.i[p][k]); }
+      for (let s = 0; s < 4; s++) live.temp[s].push(h.temp[s][k]);
+      live.fan.push(h.fan[k]);
+    }
+    // Keep what the window shows (or what WireView Mini keeps, for All).
+    const keep = chartWindowMs() || (live.capacity + 60) * 1000;
+    const newest = live.x.length ? live.x[live.x.length - 1] : 0;
+    let drop = 0;
+    while (drop < live.x.length && live.x[drop] < newest - keep) drop++;
+    if (drop > 0) {
+      live.x.splice(0, drop); live.fan.splice(0, drop);
+      for (const a of [...live.v, ...live.i, ...live.temp]) a.splice(0, drop);
+    }
+    showLive();
+  }
+
+  function showLive() {
+    $("chOff").classList.toggle("hidden", !live || live.enabled);
+    $("chOff").textContent = "The chart history is off: \"HistoryMinutes\" is 0 in " +
+      ((status && status.mini.settingsPath) || "settings.json") + ". Set it to the minutes to keep (60 by default, at most 1440) and WireView Mini picks it up at once.";
+    if (!live) return;
+    const n = live.x.length, win = chartWindowMs();
+    const hi = n ? live.x[n - 1] : Date.now(), lo = win ? hi - win : (n ? live.x[0] : hi - 60000);
+    chart.set(live, lo, hi);
+    chart.empty(live.enabled ? "" : "The chart history is off.");
+    $("chNote").textContent = live.enabled
+      ? "WireView Mini keeps the last " + live.minutes + " min (" + live.buffered + " of " + live.capacity + " samples now, one a second" +
+        (live.step > 1 ? "; this window shows every " + live.step + "th" : "") + "), in memory only. Paused while the serial port is in other use."
+      : "";
+  }
+
+  async function loadHistory() {
+    if (liveLoading) return;
+    liveLoading = true;
+    try {
+      const win = chartWindowMs();
+      const since = win ? (Date.now() - win) / 1000 - 5 : 0;
+      takeHistory(await api("GET", "/api/history" + (since ? "?since=" + since.toFixed(3) : "")), true);
+    } catch (e) {
+      say("chResult", false, "The history cannot be read: " + e.message);
+    } finally {
+      liveLoading = false;
+    }
+  }
+
+  function onChartsCard(open) {
+    if (open && chartsWanted()) loadHistory();
+  }
+  document.addEventListener("visibilitychange", () => { if (chartsWanted() && !liveLoading) (live ? showLive() : loadHistory()); });
+  $("chWindow").addEventListener("change", () => {
+    try { localStorage.setItem("wvmini.chart.window", $("chWindow").value); } catch (e) { }
+    loadHistory();
+  });
+  try { const w = localStorage.getItem("wvmini.chart.window"); if (w !== null && [...$("chWindow").options].some(o => o.value === w)) $("chWindow").value = w; } catch (e) { }
+  $("chCsv").addEventListener("click", () => run("chResult", async () => "Saved " + await download("/api/history.csv", "wireview-history.csv") + ".", [$("chCsv")]));
+
+  // ---- Device log ----
+
+  const logChart = makeChart("devicelog", ["I1", "I2", "I3", "I4", "I5", "I6", "Tin", "Tout"], { root: "lgChart", legend: "lgLegend",
+    picker: "lgSeries", axes: "lgAxes", axis: elapsedAxis, skip: ["Fan"], aria: "Chart of a power cycle from the device log" });
+  let devlog = null;         // last GET /api/devicelog
+  let logWasRunning = false, logLoaded = false;
+
+  function logRunning() { return !!(status && status.deviceLog && status.deviceLog.running); }
+
+  function logReason() {
+    const d = status && status.device;
+    if (flashRunning()) return "A firmware update is running.";
+    if (d && d.serialSuspended) return "The serial port is lent to the WireView app. Try again when it hands the port back.";
+    if (themeRunning()) return "A theme upload is running.";
+    if (!d || !d.connected) return "Not connected.";
+    if (!d.canWrite && !logRunning()) return "The device is reached through hwmon without wireviewd, which is read only. Start wireviewd and try again.";
+    return "";
+  }
+
+  function refreshLog() {
+    const running = logRunning(), reason = running ? "" : logReason();
+    $("lgReason").textContent = reason;
+    $("lgReason").classList.toggle("hidden", !reason);
+    $("lgRead").disabled = running || !!reason;
+    const has = !!(devlog && devlog.cycles.length);
+    $("lgCycle").disabled = running || !has;
+    $("lgCsv").disabled = running || !has;
+  }
+
+  async function loadDeviceLog(selectLast) {
+    try {
+      devlog = await api("GET", "/api/devicelog");
+      logLoaded = true;
+      const sel = $("lgCycle"), was = sel.value;
+      if (!devlog.cycles.length) sel.replaceChildren(el("option", { text: devlog.loaded ? "No power cycles" : "Not read yet" }));
+      else sel.replaceChildren(...devlog.cycles.map(c => el("option", { value: c.index, text: c.label })));
+      // As the app: the most recent cycle after a read.
+      if (devlog.cycles.length) sel.value = selectLast || !devlog.cycles.some(c => String(c.index) === was) ? String(devlog.cycles[devlog.cycles.length - 1].index) : was;
+      $("lgNote").textContent = devlog.loaded ? devlog.samples + " samples" : "";
+      refreshLog();
+      await showCycle();
+    } catch (e) {
+      say("lgResult", false, "The device log cannot be read from WireView Mini: " + e.message);
+    }
+  }
+
+  async function showCycle() {
+    if (!devlog || !devlog.cycles.length) { logChart.set(null, 0, 1); logChart.empty(devlog && devlog.loaded ? "The log has no samples." : "Read from device to see the log."); return; }
+    const n = Number($("lgCycle").value);
+    try {
+      const c = await api("GET", "/api/devicelog/cycle/" + n);
+      logChart.empty("");
+      // The app's X window: the cycle from its start, at least a second.
+      logChart.set({ x: c.t, v: c.v, i: c.i, temp: c.temp, fan: null }, 0, Math.max(1, c.t.length ? c.t[c.t.length - 1] : 1));
+      if (c.step > 1) say("lgResult", "warn", "This cycle has " + c.samples + " samples: the chart shows every " + c.step + "th (the CSV has them all).", true);
+    } catch (e) {
+      say("lgResult", false, e.message);
+    }
+  }
+
+  function renderLogStatus(s) {
+    const t = s.deviceLog, running = !!(t && t.running);
+    $("lgRun").classList.toggle("hidden", !running);
+    if (running) {
+      $("lgBar").style.width = Math.round((t.progress || 0) * 100) + "%";
+      $("lgState").textContent = (t.message || "") + "  " + Math.round((t.progress || 0) * 100) + " %";
+      $("lgResult").textContent = "";
+      $("lgNote").className = "card-note warn";
+      $("lgNote").textContent = "reading, " + Math.round((t.progress || 0) * 100) + " %";
+    }
+    if (logWasRunning && !running) {
+      logWasRunning = false;
+      $("lgNote").className = "card-note";
+      // The final line comes with the log.
+      loadDeviceLog(true).then(() => {
+        const st = devlog && devlog.state;
+        if (!st) return;
+        const line = $("lgResult");
+        line.className = "result pre " + (st.state === "Done" ? "ok" : "err");
+        line.textContent = st.message || "";
+      });
+    }
+    if (running) logWasRunning = true;
+    refreshLog();
+  }
+
+  function onLogCard(open) {
+    if (open && !logLoaded) loadDeviceLog(false);
+    else if (open) logChart.render();
+  }
+  $("lgCycle").addEventListener("change", () => { $("lgResult").textContent = ""; showCycle(); });
+  $("lgRead").addEventListener("click", () => run("lgResult", async () => {
+    const r = await api("POST", "/api/devicelog/read");
+    if (status) { status.deviceLog = r.state; renderLogStatus(status); }
+    return "";
+  }, [$("lgRead")]));
+  $("lgCsv").addEventListener("click", () => run("lgResult", async () =>
+    "Saved " + await download("/api/devicelog/cycle/" + Number($("lgCycle").value) + ".csv", "wireview-devicelog.csv") + ".", [$("lgCsv")]));
+
   // ---- Collapsible cards ----
 
   // Closed by default; each card's state is remembered in this browser
@@ -1700,6 +2240,8 @@ const WVPixels = (function () {
     theme: (open) => onThemeCard(open),
     firmware: () => { renderFirmware(); },
     daemon: () => { if (status) renderDaemon(status.daemon); },
+    charts: (open) => onChartsCard(open),
+    devicelog: (open) => onLogCard(open),
   };
   function setCard(b, open, remember) {
     const name = b.dataset.card;

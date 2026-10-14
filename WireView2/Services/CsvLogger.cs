@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -64,52 +63,15 @@ public class CsvLogger : IDisposable
         }
 
         var values = new List<string>(activeHeaders.Count);
-        var valueMap = GetValueMap(data);
         foreach (string header in activeHeaders)
         {
-            values.Add(valueMap.TryGetValue(header, out var val) ? val : "");
+            values.Add(DeviceDataCsv.Value(data, header) ?? "");
         }
         _writer.WriteLine(string.Join(",", values));
     }
 
-    private static List<string> GetAllHeaders()
-    {
-        var headers = new List<string>
-        {
-            "Timestamp", "Connected", "HW", "FW",
-            "SumPowerW", "SumCurrentA",
-            "OnboardInC", "OnboardOutC", "Ext1C", "Ext2C"
-        };
-        for (int i = 1; i <= 6; i++)
-        {
-            headers.Add($"V{i}");
-            headers.Add($"I{i}");
-        }
-        return headers;
-    }
-
-    private static Dictionary<string, string> GetValueMap(DeviceData data)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Timestamp"] = data.Timestamp.ToString("o", CultureInfo.InvariantCulture),
-            ["Connected"] = data.Connected ? "True" : "False",
-            ["HW"] = data.HardwareRevision ?? "",
-            ["FW"] = data.FirmwareVersion ?? "",
-            ["SumPowerW"] = data.SumPowerW.ToString("F3", CultureInfo.InvariantCulture),
-            ["SumCurrentA"] = data.SumCurrentA.ToString("F3", CultureInfo.InvariantCulture),
-            ["OnboardInC"] = data.OnboardTempInC.ToString("F2", CultureInfo.InvariantCulture),
-            ["OnboardOutC"] = data.OnboardTempOutC.ToString("F2", CultureInfo.InvariantCulture),
-            ["Ext1C"] = data.ExternalTemp1C.ToString("F2", CultureInfo.InvariantCulture),
-            ["Ext2C"] = data.ExternalTemp2C.ToString("F2", CultureInfo.InvariantCulture),
-        };
-        for (int i = 1; i <= 6; i++)
-        {
-            map[$"V{i}"] = data.PinVoltage[i - 1].ToString("F3", CultureInfo.InvariantCulture);
-            map[$"I{i}"] = data.PinCurrent[i - 1].ToString("F3", CultureInfo.InvariantCulture);
-        }
-        return map;
-    }
+    // The columns and formats are shared with WireView Mini's history export.
+    private static List<string> GetAllHeaders() => DeviceDataCsv.LiveHeaders.ToList();
 
     public void Dispose()
     {

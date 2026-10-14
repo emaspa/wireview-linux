@@ -37,12 +37,14 @@ internal readonly record struct RemoteHostStatus(
 /// off, because the GUI reaches the device through it), raises fault alerts with
 /// <see cref="FaultMonitor"/>, shuts the PC down on a local fault when the
 /// setting asks for it, lends the serial port to the GUI on request, flashes
-/// the bundled firmware on request (<see cref="Firmware"/>) and reads and writes
-/// the display theme on request (<see cref="Theme"/>).
+/// the bundled firmware on request (<see cref="Firmware"/>), reads and writes
+/// the display theme on request (<see cref="Theme"/>), keeps the last readings in
+/// memory for the panel's charts (<see cref="History"/>, one sample a tick) and
+/// reads the on-device log on request (<see cref="DeviceLog"/>).
 /// Settings changes made in the GUI are picked up every tick, and so are the
 /// tray's (<see cref="RequestSettingsChange"/>).
 /// </summary>
-internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
+internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDeviceLogHost
 {
     /// <summary>Handover window when the client does not ask for one, and the
     /// longest one granted: WireView Mini takes the port back after this even if
@@ -97,6 +99,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
     private string? _portHolder;           // who serves the wanted port, when known
     private int _lastFallbackPort;
     private int _pollMs = -1;
+    private string? _historyDevice;        // UniqueId of the device the history is of
 
     /// <summary>Raised after every tick and on every reading of this PC's
     /// device, on the tick or the device thread. The tray rate-limits.</summary>
@@ -111,6 +114,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
         PanelToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         Firmware = new FirmwareService(this);
         Theme = new ThemeService(this);
+        DeviceLog = new DeviceLogService(this);
         _panel = new ControlPanel(this);
         _daemon = new DaemonConfigService(() =>
             RunOnTick(() => _nextBindAttempt = DateTime.MinValue, TimeSpan.FromSeconds(5)));
@@ -174,6 +178,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
         foreach (var w in work)
             try { w.Done.Set(); } catch (ObjectDisposedException) { } // the waiter gave up
         if (_daemonMode) _daemon.Tick();
+        RecordHistory();
 
         lock (_gate)
         {
@@ -227,6 +232,17 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
 
     /// <summary>The display theme editor's device side (the panel's Theme section).</summary>
     public ThemeService Theme { get; }
+
+    /// <summary>The on-device log read (the panel's Device log section).</summary>
+    public DeviceLogService DeviceLog { get; }
+
+    /// <summary>The last <see cref="AppSettings.HistoryMinutes"/> of readings of
+    /// this PC's device (the panel's Charts section).</summary>
+    public HistoryBuffer History { get; } = new();
+
+    /// <summary>Something else uses the serial port now (a theme transfer or a
+    /// device log read): the device's readings pause meanwhile.</summary>
+    public bool SerialTransferBusy => Theme.Busy || DeviceLog.Busy;
 
     /// <summary>The local device is out of use: lent to the GUI, or closed for a
     /// firmware flash. The panel shows the last readings meanwhile.</summary>
@@ -417,11 +433,13 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
         lock (_gate) ResumeFlashLocked();
     }
 
-    bool IFlashHost.SerialTransferRunning => Theme.Busy;
+    bool IFlashHost.SerialTransferRunning => SerialTransferBusy;
 
     // ---- Theme transfers (IThemeHost) ----
 
     bool IThemeHost.FlashRunning => Firmware.Running;
+
+    bool IThemeHost.DeviceLogBusy => DeviceLog.Busy;
 
     FlashTarget? IThemeHost.ThemeTarget() => ((IFlashHost)this).FlashTarget();
 
@@ -434,14 +452,56 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
     /// <summary>The app's RunOnSerialDeviceAsync: WireView Mini's own port when it
     /// has the device on serial (the poll loop waits on the port lock meanwhile),
     /// else the port borrowed from wireviewd for the transfer.</summary>
-    Task<T> IThemeHost.RunOnSerialAsync<T>(Func<IThemeDevice, CancellationToken, Task<T>> op, CancellationToken ct)
+    Task<T> IThemeHost.RunOnSerialAsync<T>(Func<IThemeDevice, CancellationToken, Task<T>> op, CancellationToken ct) =>
+        RunOnSerialAsync((d, t) => op(new SerialThemeDevice(d), t), ct, "Theme assets require a locally connected device.");
+
+    private Task<T> RunOnSerialAsync<T>(Func<WireViewPro2Device, CancellationToken, Task<T>> op, CancellationToken ct, string notConnected)
     {
         var dev = PreferredLocal()?.Device;
         if (dev is WireViewPro2Device { Connected: true } pro2)
-            return op(new SerialThemeDevice(pro2), ct);
+            return op(pro2, ct);
         if (dev is HwmonDevice { Connected: true, DaemonAvailable: true } hwmon)
-            return DirectSerialSession.RunAsync(hwmon, (d, t) => op(new SerialThemeDevice(d), t), ct);
-        throw new InvalidOperationException("Theme assets require a locally connected device.");
+            return DirectSerialSession.RunAsync(hwmon, op, ct);
+        throw new InvalidOperationException(notConnected);
+    }
+
+    // ---- Device log (IDeviceLogHost) ----
+
+    bool IDeviceLogHost.FlashRunning => Firmware.Running;
+
+    bool IDeviceLogHost.ThemeBusy => Theme.Busy;
+
+    FlashTarget? IDeviceLogHost.LogTarget() => ((IFlashHost)this).FlashTarget();
+
+    /// <summary>The app's Logging read: WireView Mini's own port in direct serial
+    /// mode (the poll loop waits on the port lock meanwhile), else the port
+    /// borrowed from wireviewd for the read.</summary>
+    Task<byte[]> IDeviceLogHost.ReadLogAsync(IProgress<double> progress, CancellationToken ct) =>
+        RunOnSerialAsync((d, t) => d.ReadDeviceLogAsync(progress, t), ct, "Not connected.");
+
+    // ---- History ----
+
+    /// <summary>One sample of this PC's device per tick into <see cref="History"/>.
+    /// Not while the port is lent out or used for a flash, a theme transfer or a
+    /// log read (the readings are frozen or stale then), and not the same reading
+    /// twice. Another device starts a new history.</summary>
+    private void RecordHistory()
+    {
+        if (History.Capacity == 0) return;
+        if (PortSuspended || Firmware.Running || SerialTransferBusy) return;
+        var md = PreferredLocal();
+        if (md == null || !md.Device.Connected || md.Latest is not { Connected: true } data) return;
+        string id = md.Device.UniqueId;
+        if (!string.IsNullOrEmpty(id))
+        {
+            if (_historyDevice != null && _historyDevice != id)
+            {
+                FileLog.Info($"history: another device ({md.Device.DeviceName}), the chart history starts again");
+                History.Clear();
+            }
+            _historyDevice = id;
+        }
+        History.Add(data);
     }
 
     private void ResumeFlashLocked()
@@ -558,6 +618,15 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
         }
         _publishWanted = (s.PublishPort, s.PublishEnabled);
         _wantedView = Tuple.Create(s.PublishPort, s.PublishEnabled);
+
+        int samples = s.EffectiveHistoryMinutes * 60;
+        if (samples != History.Capacity)
+        {
+            History.Resize(samples);
+            FileLog.Info(samples == 0
+                ? "chart history off (HistoryMinutes 0)"
+                : $"chart history: {s.EffectiveHistoryMinutes} min, {samples} samples, {History.ResidentBytes / 1024} KB");
+        }
     }
 
     // ---- Publishing ----
@@ -684,8 +753,8 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
                 // itself: the app must not open the port in the middle of it.
                 if (!Suspend(cmd.Seconds))
                 {
-                    FileLog.Warn(Theme.Busy
-                        ? "serial handover refused: a theme transfer is running"
+                    FileLog.Warn(Theme.Busy ? "serial handover refused: a theme transfer is running"
+                        : DeviceLog.Busy ? "serial handover refused: the device log is being read"
                         : "serial handover refused: a firmware update is running");
                     return DaemonResult.Busy;
                 }
@@ -714,14 +783,14 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost
     /// <summary>Closes the port (stops the local manager) and keeps the last
     /// readings published, marked not connected. Re-sending extends the window.
     /// Returns once the port is closed, so the client can open it right away;
-    /// false (nothing done) while WireView Mini flashes the firmware or moves theme
-    /// artwork over the port.</summary>
+    /// false (nothing done) while WireView Mini flashes the firmware, moves theme
+    /// artwork or reads the device log over the port.</summary>
     private bool Suspend(int seconds)
     {
         int window = seconds <= 0 ? DefaultHandoverSeconds : Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
         {
-            if (_flashUntil != null || Firmware.Running || Theme.Busy) return false;
+            if (_flashUntil != null || Firmware.Running || SerialTransferBusy) return false;
             bool rearm = _handoverUntil != null;
             _handoverUntil = DateTime.UtcNow.AddSeconds(window);
             _handoverActive = true;

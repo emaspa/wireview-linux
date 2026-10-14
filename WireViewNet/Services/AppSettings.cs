@@ -140,6 +140,23 @@ public class AppSettings
 
     public int MonitoringXWindowSeconds { get; set; } = 30;
 
+    /// <summary>Minutes of readings WireView Mini keeps in memory for its control
+    /// panel's charts and history CSV (one sample a second), 0 for none. Null
+    /// (left out of the file, so files written before it existed stay
+    /// byte-identical) means <see cref="DefaultHistoryMinutes"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? HistoryMinutes { get; set; }
+
+    public const int DefaultHistoryMinutes = 60;
+    /// <summary>A day: 86,400 samples, about 8.5 MB.</summary>
+    public const int MaxHistoryMinutes = 1440;
+
+    /// <summary><see cref="HistoryMinutes"/> with the default applied, 0 to
+    /// <see cref="MaxHistoryMinutes"/>.</summary>
+    [JsonIgnore]
+    public int EffectiveHistoryMinutes => Math.Clamp(HistoryMinutes ?? DefaultHistoryMinutes, 0, MaxHistoryMinutes);
+
+
     public MonitoringAxisSettings MonitoringYV { get; set; } = new MonitoringAxisSettings();
     public MonitoringAxisSettings MonitoringYA { get; set; } = new MonitoringAxisSettings();
     public MonitoringAxisSettings MonitoringYW { get; set; } = new MonitoringAxisSettings();

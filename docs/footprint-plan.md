@@ -282,6 +282,15 @@ Done, in this repo:
   bodies only for the theme routes (loopback, with the token). The long panel cards (Device
   configuration, Theme, Firmware, wireviewd settings) are collapsed and read on opening.
   +0.42 MB on the Linux AOT binary (11,044,880 to 11,481,312 bytes).
+- Charts and the device log in WireView Mini (2026-10-14): a history ring (`HistoryBuffer`, one
+  sample a tick, preallocated float arrays, 99 bytes a sample: 356,400 bytes for the default
+  `HistoryMinutes` 60, written to `settings.json` only when set) and an on-request device log read
+  (`DeviceLogService`, the app's split into power cycles, now `DeviceLogCycles` in
+  `WireViewDeviceLib`, kept as 20 bytes a sample: 7.5 MB at most for a full log, 128 KB for the
+  test unit's 6,360 samples); canvas charts in the page, CSV in the app's columns (`DeviceDataCsv`,
+  shared with the app's CsvLogger and Logging export), streamed. Panel closed, same age: 44.2 to
+  45.0 MB RSS, 37.8 to 38.6 MB PSS; a log read leaves nothing behind (an aggressive collection after
+  it). +0.39 MB on the Linux AOT binary (11,481,312 to 11,884,704 bytes).
 - Control panel: one embedded page (`WireViewMini/ControlPanel.html`, inline CSS and JS)
   and a JSON API under `/api/` (status, config read and write, screen/NVM/clear-faults
   commands, mini settings, open the app), served on the publish port through a new

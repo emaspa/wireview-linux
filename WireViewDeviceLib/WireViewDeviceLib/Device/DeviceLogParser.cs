@@ -37,6 +37,16 @@ public static class DeviceLogParser
     public static ENTRY_TYPE DecodeType(uint data) => (ENTRY_TYPE)(data & 0b11u);
     public static uint DecodeTimestamp30(uint data) => (data >> 2) & 0x3FFF_FFFFu;
 
+    /// <summary>Size of one <see cref="DATALOGGER_Entry"/> in the flash (packed):
+    /// Data (4), Ts (4), Voltage (6), Current (6), HpwrSense (1).</summary>
+    public const int EntrySize = 4 + SENSOR_TS_NUM + SENSOR_POWER_NUM + SENSOR_POWER_NUM + 1;
+
+    /// <summary>Byte offsets of the fields in an entry's <see cref="EntrySize"/> bytes.</summary>
+    public const int TsOffset = 4, VoltageOffset = 8, CurrentOffset = 14, HpwrSenseOffset = 20;
+
+    /// <summary>Called by <see cref="Scan"/> with the <see cref="EntrySize"/> bytes of each entry it keeps.</summary>
+    public delegate void EntryVisitor(ReadOnlySpan<byte> entry);
+
     public static IReadOnlyList<DATALOGGER_Entry> Parse(ReadOnlySpan<byte> data)
     {
         int entrySizeBytes = Marshal.SizeOf<DATALOGGER_Entry>();
@@ -44,12 +54,23 @@ public static class DeviceLogParser
             return Array.Empty<DATALOGGER_Entry>();
 
         var results = new List<DATALOGGER_Entry>(capacity: Math.Max(1024, data.Length / entrySizeBytes));
+        Scan(data, entry => results.Add(WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entry.ToArray())));
+        return results;
+    }
+
+    /// <summary>The walk <see cref="Parse"/> makes over the log, without decoding:
+    /// hands every entry it keeps (power-on markers and plausible samples, in flash
+    /// order) to <paramref name="visit"/> as raw bytes. WireView Mini reads the log
+    /// through this, so a full log costs no object per entry.</summary>
+    public static void Scan(ReadOnlySpan<byte> data, EntryVisitor visit)
+    {
+        const int entrySizeBytes = EntrySize;
         if (data.Length < entrySizeBytes)
-            return results;
+            return;
 
         int entriesPerSector = SpiFlashSectorSizeBytes / entrySizeBytes;
         if (entriesPerSector <= 0)
-            return results;
+            return;
 
         int totalSectors = data.Length / SpiFlashSectorSizeBytes;
         int parseBytes = totalSectors * SpiFlashSectorSizeBytes;
@@ -99,7 +120,7 @@ public static class DeviceLogParser
                     {
                         emptyCount++;
                         if (emptyCount >= 32)
-                            return results;
+                            return;
                     }
 
                     index++;
@@ -117,16 +138,14 @@ public static class DeviceLogParser
                     // the consumer needs them to split the log into cycles.
                     case ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
                     {
-                        var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
-                        results.Add(entry);
+                        visit(entryBytes);
                         firstEntryFound = true;
                         index++;
                         break;
                     }
                     case ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
                     {
-                        var entry = WireViewPro2Device.BytesToStruct<DATALOGGER_Entry>(entryBytes.ToArray());
-                        if (entry.HpwrSense > 3)
+                        if (entryBytes[HpwrSenseOffset] > 3)
                         {
                             index++;
                             break;
@@ -136,13 +155,13 @@ public static class DeviceLogParser
                         // from a partially written / corrupted flash page.
                         int voltageSum = 0;
                         for (int v = 0; v < SENSOR_POWER_NUM; v++)
-                            voltageSum += entry.Voltage[v];
+                            voltageSum += entryBytes[VoltageOffset + v];
                         if (voltageSum <= 60 || voltageSum >= 900)
                         {
                             index++;
                             break;
                         }
-                        results.Add(entry);
+                        visit(entryBytes);
                         firstEntryFound = true;
                         index++;
                         break;
@@ -153,9 +172,10 @@ public static class DeviceLogParser
                 }
             }
         }
-
-        return results;
     }
+
+    /// <summary>The Data word (type and timestamp) of an entry's raw bytes.</summary>
+    public static uint ReadData(ReadOnlySpan<byte> entry) => ReadU32LE(entry, 0);
 
     private static uint ReadU32LE(ReadOnlySpan<byte> s, int o)
         => (uint)(s[o] | (s[o + 1] << 8) | (s[o + 2] << 16) | (s[o + 3] << 24));

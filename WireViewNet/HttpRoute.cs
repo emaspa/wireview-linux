@@ -38,6 +38,11 @@ namespace WireView2.Net
         /// <summary>Extra response headers, e.g. Cache-Control.</summary>
         public IReadOnlyList<KeyValuePair<string, string>> Headers { get; init; } = Array.Empty<KeyValuePair<string, string>>();
 
+        /// <summary>Writes the body in place of <see cref="Body"/>, while it is sent
+        /// (a large download, such as a CSV export, never held in memory whole). The
+        /// answer then has no Content-Length and ends when the connection closes.</summary>
+        public Action<Stream>? WriteBody { get; init; }
+
         public static HttpResponseInfo Json(int status, string json) =>
             new(status, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(json))
             {

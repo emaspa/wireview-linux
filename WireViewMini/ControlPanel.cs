@@ -25,7 +25,10 @@ namespace WireView2.Mini;
 /// /api/firmware/flash (the bundled firmware, see <see cref="FirmwareService"/>),
 /// GET and POST /api/theme, POST /api/theme/restore-defaults, GET and POST
 /// /api/theme/file and POST /api/theme/file/export (the display theme, see
-/// <see cref="ThemeService"/>), and on Linux GET and POST /api/daemon-config (wireviewd's settings through
+/// <see cref="ThemeService"/>), GET /api/history and /api/history.csv (the chart
+/// history, see <see cref="HistoryBuffer"/>), POST /api/devicelog/read, GET
+/// /api/devicelog, /api/devicelog/cycle/N and /api/devicelog/cycle/N.csv (the
+/// on-device log, see <see cref="DeviceLogService"/>), and on Linux GET and POST /api/daemon-config (wireviewd's settings through
 /// wireviewctl, see <see cref="DaemonConfigService"/>). Device writes go through the same
 /// relay as a LAN command (<see cref="LocalPublishHost.ExecuteCommand"/>), so
 /// they work over direct serial and over hwmon with wireviewd alike.
@@ -87,7 +90,7 @@ internal sealed class ControlPanel
         {
             return (req.Method, req.Path) switch
             {
-                ("GET", "/api/status") => Ok(Status(), MiniJsonContext.Default.PanelStatus),
+                ("GET", "/api/status") => Ok(Status(req.Query), MiniJsonContext.Default.PanelStatus),
                 ("GET", "/api/config") => GetConfig(),
                 ("POST", "/api/config") => PostConfig(req.Body),
                 ("POST", "/api/command") => PostCommand(req.Body),
@@ -103,9 +106,15 @@ internal sealed class ControlPanel
                 ("POST", "/api/theme/file/export") => PostThemeExport(req.Body),
                 ("GET", "/api/daemon-config") => GetDaemonConfig(),
                 ("POST", "/api/daemon-config") => PostDaemonConfig(req.Body),
+                ("GET", "/api/history") => Ok(History(ParseQuery(req.Query)), MiniJsonContext.Default.PanelHistory),
+                ("GET", "/api/history.csv") => HistoryCsv(ParseQuery(req.Query)),
+                ("POST", "/api/devicelog/read") => PostDeviceLogRead(),
+                ("GET", "/api/devicelog") => Ok(DeviceLogView(), MiniJsonContext.Default.PanelDeviceLog),
+                ("GET", var cycle) when cycle.StartsWith(CyclePrefix, StringComparison.Ordinal) => GetCycle(cycle[CyclePrefix.Length..], req.Query),
                 (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config"
                     or "/api/firmware" or "/api/firmware/flash" or "/api/theme" or "/api/theme/restore-defaults"
-                    or "/api/theme/file" or "/api/theme/file/export")
+                    or "/api/theme/file" or "/api/theme/file/export" or "/api/history" or "/api/history.csv"
+                    or "/api/devicelog" or "/api/devicelog/read")
                     => Error(405, "method not allowed"),
                 _ => Error(404, "no such API"),
             };
@@ -173,8 +182,11 @@ internal sealed class ControlPanel
 
     // ---- Status ----
 
-    private PanelStatus Status()
+    private PanelStatus Status(string query)
     {
+        // ?history=<unix seconds>[&step=n]: the chart's new samples ride along
+        // with the status poll, so an open chart costs no extra request.
+        var q = ParseQuery(query);
         var s = AppSettings.Current;
         var ep = _mini.Publisher.Endpoint;
         string? gui = GuiLauncher.Locate();
@@ -205,7 +217,9 @@ internal sealed class ControlPanel
             Gui: new PanelGui(Location: gui, Available: gui != null),
             Firmware: FlashView(_mini.Firmware.State, _mini.Firmware.UpdateAvailable()),
             // Only while an upload runs: the progress needs no extra requests.
-            Theme: _mini.Theme.State is { Running: true } t ? ThemeUploadView(t) : null);
+            Theme: _mini.Theme.State is { Running: true } t ? ThemeUploadView(t) : null,
+            DeviceLog: _mini.DeviceLog.State is { Running: true } l ? DeviceLogStateView(l) : null,
+            History: q.TryGetValue("history", out var since) ? History(q, since) : null);
     }
 
     private static PanelSettings SettingsView(AppSettings s) => new(
@@ -252,7 +266,7 @@ internal sealed class ControlPanel
             Source: md.Source,
             Connected: dev.Connected,
             SerialSuspended: false,
-            CanWrite: MiniService.CanWrite(dev) && !_mini.Firmware.Running && !_mini.Theme.UploadRunning,
+            CanWrite: MiniService.CanWrite(dev) && !_mini.Firmware.Running && !_mini.Theme.UploadRunning && !_mini.DeviceLog.Busy,
             Readings: latest != null ? WireViewSensorDto.FromDevice(dev, latest) : null,
             FaultStatus: status,
             FaultLog: log,
@@ -342,6 +356,8 @@ internal sealed class ControlPanel
             return Error(409, "a firmware update is running; try again when it has finished");
         if (_mini.Theme.Busy)
             return Error(409, "a theme transfer is using the serial port; try again when it has finished");
+        if (_mini.DeviceLog.Busy)
+            return Error(409, "the device log is being read; try again when it has finished");
         var md = _mini.PreferredLocal();
         if (md == null || !md.Device.Connected) return Error(503, "no device connected");
         if (!MiniService.CanWrite(md.Device))
@@ -744,15 +760,15 @@ internal sealed class ControlPanel
 
     private static string? B64(byte[]? b) => b == null ? null : Convert.ToBase64String(b);
 
-    /// <summary>?artwork=0 skips the SPI read (colours only); bg= and fan= read
-    /// another slot's artwork than the device's own (the editor's slot choice).</summary>
+    /// <summary>?artwork=0 skips the SPI read (colours only); bg= reads another
+    /// background slot's artwork than the device's own (the editor's slot choice),
+    /// with the fan frames of the slot's fan (the fan follows the background).</summary>
     private HttpResponseInfo GetTheme(string query)
     {
         var q = ParseQuery(query);
         bool artwork = !q.TryGetValue("artwork", out var a) || a is not ("0" or "false");
         byte? bgSlot = q.TryGetValue("bg", out var b) && byte.TryParse(b, NumberStyles.None, CultureInfo.InvariantCulture, out byte bv) ? bv : null;
-        byte? fanSlot = q.TryGetValue("fan", out var f) && byte.TryParse(f, NumberStyles.None, CultureInfo.InvariantCulture, out byte fv) ? fv : null;
-        var r = _mini.Theme.Read(artwork, bgSlot, fanSlot);
+        var r = _mini.Theme.Read(artwork, bgSlot);
         // Busy states are transient: 409, so the page keeps what it shows.
         if (r.Status == 409) return Error(409, r.Problem!);
         return Ok(ThemeView(r, null), MiniJsonContext.Default.PanelTheme);
@@ -875,21 +891,29 @@ internal sealed class ControlPanel
         {
             return Error(400, "Theme load failed: " + ex.Message);
         }
-        // The app's reading: an unknown background is Disabled, an unknown fan the background's.
+        // The app's reading: an unknown background is Disabled. The fan follows the
+        // background, as in the app's editor, whatever fan the file names.
         var background = DeviceThemePresets.KnownBackground(doc.BackgroundBitmapId);
-        var fan = DeviceThemePresets.KnownFan(doc.FanBitmapId, background);
+        var fan = DeviceConfigEditor.FanBitmapFor(background);
         var values = ThemeFileFormat.Values(doc) with { BackgroundBitmapId = (byte)background, FanBitmapId = (byte)fan };
-        FileLog.Info($"control panel: theme file read ({(bg != null ? "with" : "without")} a background image)");
+        string? fanNote = doc.FanBitmapId == (byte)fan ? null
+            : $" The file's fan animation ({FanLabel(doc.FanBitmapId)}) does not match its background: " +
+              $"the fan follows the background ({FanLabel((byte)fan)}).";
+        FileLog.Info($"control panel: theme file read ({(bg != null ? "with" : "without")} a background image" +
+                     (fanNote != null ? $", fan slot {doc.FanBitmapId} replaced by the background's {(byte)fan}" : "") + ")");
         return Ok(new PanelThemeFile(
             Values: ValuesView(values),
             Preset: DeviceThemePresets.Detect(values),
             Background: B64(bg),
             FanFrame1: B64(fans?.Frame1),
             FanFrame2: B64(fans?.Frame2),
-            Message: bg != null
+            Message: (bg != null
                 ? "Theme loaded and background staged (press Apply to upload)."
-                : "Theme loaded (press Apply to upload colors)."), MiniJsonContext.Default.PanelThemeFile);
+                : "Theme loaded (press Apply to upload colors).") + fanNote), MiniJsonContext.Default.PanelThemeFile);
     }
+
+    private static string FanLabel(byte id) =>
+        DeviceThemePresets.Fans.FirstOrDefault(f => f.Value == id)?.Label ?? $"slot {id}";
 
     private static Dictionary<string, string> ParseQuery(string query)
     {
@@ -900,6 +924,179 @@ internal sealed class ControlPanel
             d[Uri.UnescapeDataString(eq < 0 ? part : part[..eq])] = eq < 0 ? "" : Uri.UnescapeDataString(part[(eq + 1)..]);
         }
         return d;
+    }
+
+    // ---- History (the Charts card) ----
+
+    /// <summary>The most samples one answer carries (an hour at one a second).</summary>
+    private const int MaxChartPoints = 3600;
+
+    /// <summary>?since=&lt;unix seconds&gt; (only newer samples; 0 or none: all)
+    /// and ?step=n (every n-th sample, raised to stay within <see cref="MaxChartPoints"/>).</summary>
+    private PanelHistory History(Dictionary<string, string> q) =>
+        History(q, q.TryGetValue("since", out var since) ? since : null);
+
+    private PanelHistory History(Dictionary<string, string> q, string? since)
+    {
+        int step = q.TryGetValue("step", out var st) && int.TryParse(st, NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n > 0 ? n : 1;
+        var h = _mini.History;
+        var slice = h.Read(SinceMs(since), step, MaxChartPoints);
+        int count = slice.Count;
+        var v = Columns(6, count, (k, p) => slice.Volts[k * 6 + p]);
+        var i = Columns(6, count, (k, p) => slice.Amps[k * 6 + p]);
+        var temp = Columns(4, count, (k, p) => TempOrNull(slice.Temps[k * 4 + p]));
+        var t = new long[count];
+        var fan = new int[count];
+        var fault = new int[count];
+        bool energy = false;
+        for (int k = 0; k < count; k++)
+        {
+            t[k] = slice.UnixMs(k);
+            fan[k] = slice.Fan[k];
+            fault[k] = slice.Fault[k];
+            energy |= !double.IsNaN(slice.EnergyJ[k]);
+        }
+        double?[]? e = null;
+        if (energy)
+        {
+            e = new double?[count];
+            for (int k = 0; k < count; k++) e[k] = double.IsNaN(slice.EnergyJ[k]) ? null : slice.EnergyJ[k];
+        }
+        return new PanelHistory(h.Capacity > 0, AppSettings.Current.EffectiveHistoryMinutes, h.Capacity, h.Count,
+            slice.Step, MaxChartPoints, count, t, v, i, temp, fan, fault, e);
+    }
+
+    /// <summary>"1760450000.123" (Unix seconds) to milliseconds, 0 for none.</summary>
+    private static long SinceMs(string? since) =>
+        double.TryParse(since, NumberStyles.Float, CultureInfo.InvariantCulture, out double s) && s > 0 && double.IsFinite(s)
+            ? (long)Math.Round(s * 1000)
+            : 0;
+
+    /// <summary>Column arrays (one per pin or sensor), NaN as null (JSON has no NaN).</summary>
+    private static float?[][] Columns(int columns, int count, Func<int, int, float> value)
+    {
+        var cols = new float?[columns][];
+        for (int p = 0; p < columns; p++)
+        {
+            var col = cols[p] = new float?[count];
+            for (int k = 0; k < count; k++)
+            {
+                float x = value(k, p);
+                col[k] = float.IsFinite(x) ? x : null;
+            }
+        }
+        return cols;
+    }
+
+    /// <summary>The app's test for a connected sensor (TemperatureSensorPresence):
+    /// an absent one reads about -3276.8 °C over serial, NaN through hwmon.</summary>
+    private static float TempOrNull(float c) => c > -100f && c < 200f ? c : float.NaN;
+
+    /// <summary>The history as the app's live CSV log writes it (CsvLogger's
+    /// columns, formats and UTF-8 with a byte order mark), every sample, ?since= as above.</summary>
+    private HttpResponseInfo HistoryCsv(Dictionary<string, string> q)
+    {
+        var slice = _mini.History.Read(SinceMs(q.TryGetValue("since", out var since) ? since : null), 1, 0);
+        FileLog.Info($"control panel: history CSV export ({slice.Count} rows)");
+        return Csv($"wireview-history-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.csv", bom: true, w =>
+        {
+            DeviceDataCsv.WriteHeader(w, DeviceDataCsv.LiveHeaders);
+            for (int k = 0; k < slice.Count; k++) DeviceDataCsv.WriteLiveRow(w, slice.ToDeviceData(k));
+        });
+    }
+
+    /// <summary>A CSV download, written while it is sent.</summary>
+    private static HttpResponseInfo Csv(string fileName, bool bom, Action<TextWriter> write) =>
+        new(200, "text/csv; charset=utf-8", [])
+        {
+            Headers =
+            [
+                new("Cache-Control", "no-store"),
+                new("Content-Disposition", $"attachment; filename=\"{fileName}\""),
+                new("X-Content-Type-Options", "nosniff"),
+            ],
+            WriteBody = stream =>
+            {
+                using var w = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: bom), 64 * 1024, leaveOpen: true);
+                write(w);
+            },
+        };
+
+    // ---- Device log ----
+
+    private const string CyclePrefix = "/api/devicelog/cycle/";
+
+    private static PanelDeviceLogState DeviceLogStateView(DeviceLogState s) => new(
+        State: s.Phase switch
+        {
+            DeviceLogPhase.Reading => "Reading",
+            DeviceLogPhase.Parsing => "Parsing",
+            DeviceLogPhase.Done => "Done",
+            DeviceLogPhase.Failed => "Failed",
+            _ => "Idle",
+        },
+        Progress: Math.Round(s.Progress, 3),
+        Message: s.Message,
+        Running: s.Running);
+
+    /// <summary>202 once started (the progress is in /api/status), 409 busy, 503 no device.</summary>
+    private HttpResponseInfo PostDeviceLogRead()
+    {
+        FileLog.Info("control panel: device log read requested");
+        var start = _mini.DeviceLog.Start();
+        if (start.Status != 202) return Error(start.Status, start.Error ?? "the device log read did not start");
+        return HttpResponseInfo.Json(202, JsonSerializer.Serialize(
+            new PanelDeviceLogStarted(true, start.State.Message ?? "Reading the device log...", DeviceLogStateView(start.State)),
+            MiniJsonContext.Default.PanelDeviceLogStarted));
+    }
+
+    private PanelDeviceLog DeviceLogView()
+    {
+        var log = _mini.DeviceLog.Log;
+        return new PanelDeviceLog(
+            Loaded: log != null,
+            ReadAt: log?.ReadAt.ToString("o", CultureInfo.InvariantCulture),
+            Samples: log?.Samples ?? 0,
+            MemoryBytes: log?.ResidentBytes ?? 0,
+            Cycles: log?.Cycles.Select(c => new PanelDeviceLogCycle(c.Index, c.Count,
+                c.Start.ToString("o", CultureInfo.InvariantCulture), c.Duration.TotalSeconds, c.Label)).ToList() ?? [],
+            State: DeviceLogStateView(_mini.DeviceLog.State));
+    }
+
+    /// <summary>"N" (?step=, as for the history) or "N.csv" (every sample, the
+    /// app's Logging export: its columns and formats, UTF-8 without a byte order mark).</summary>
+    private HttpResponseInfo GetCycle(string rest, string query)
+    {
+        bool csv = rest.EndsWith(".csv", StringComparison.Ordinal);
+        if (csv) rest = rest[..^4];
+        var log = _mini.DeviceLog.Log;
+        if (log == null) return Error(404, "the device log has not been read yet");
+        if (!int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out int index) || index >= log.Cycles.Count)
+            return Error(404, "no such power cycle");
+        var c = log.Cycles[index];
+
+        if (csv)
+        {
+            FileLog.Info($"control panel: device log CSV export (cycle {index + 1}, {c.Count} rows)");
+            return Csv($"wireview-devicelog-cycle{index + 1}-{DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)}.csv", bom: false, w =>
+            {
+                DeviceDataCsv.WriteHeader(w, DeviceDataCsv.LogHeaders);
+                for (int k = 0; k < c.Count; k++) DeviceDataCsv.WriteLogRow(w, log.ToDeviceData(c.First + k));
+            });
+        }
+
+        var q = ParseQuery(query);
+        int step = q.TryGetValue("step", out var st) && int.TryParse(st, NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n > 0 ? n : 1;
+        if (c.Count / step > MaxChartPoints) step = (c.Count + MaxChartPoints - 1) / MaxChartPoints;
+        int count = (c.Count + step - 1) / step;
+        var t = new double[count];
+        for (int k = 0; k < count; k++) t[k] = (log.Time(c.First + k * step) - c.Start).TotalSeconds;
+        // The app's values: 100 mV and 100 mA steps, whole degrees.
+        var v = Columns(6, count, (k, p) => log.Raw(c.First + k * step)[4 + p] / 10f);
+        var i = Columns(6, count, (k, p) => log.Raw(c.First + k * step)[10 + p] / 10f);
+        var temp = Columns(4, count, (k, p) => TempOrNull(log.Raw(c.First + k * step)[p]));
+        return Ok(new PanelDeviceLogSamples(index, c.Label, c.Count, step, count, t, v, i, temp),
+            MiniJsonContext.Default.PanelDeviceLogSamples);
     }
 
     // ---- App ----

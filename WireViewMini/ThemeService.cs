@@ -42,6 +42,9 @@ internal interface IThemeHost
     /// <summary>A firmware flash is running.</summary>
     bool FlashRunning { get; }
 
+    /// <summary>The device log is being read over the serial port.</summary>
+    bool DeviceLogBusy => false;
+
     /// <summary>This PC's device the panel drives (its route tells serial from
     /// wireviewd), or null when there is none or the port is out of use.</summary>
     FlashTarget? ThemeTarget();
@@ -88,6 +91,8 @@ internal sealed class ThemeEdit
     public string? BackgroundColor { get; set; }
     public bool DisplayInversion { get; set; }
     public int BackgroundBitmapId { get; set; }
+    /// <summary>Ignored: the fan animation follows the background slot, as in the
+    /// app (<see cref="ThemeService.FanFor"/>). Read so older pages still parse.</summary>
     public int FanBitmapId { get; set; }
     /// <summary>A custom background (320x170) for the selected slot, null for none.</summary>
     public string? Background { get; set; }
@@ -173,7 +178,13 @@ internal sealed class ThemeService
     /// <summary>The factory artwork image is next to WireView Mini.</summary>
     public bool FactoryArtworkAvailable => File.Exists(_factoryPath);
 
-    private bool TryEnter() => Interlocked.CompareExchange(ref _busy, 1, 0) == 0;
+    private bool TryEnter()
+    {
+        if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return false;
+        // A device log read that started in between keeps the port.
+        if (_host.DeviceLogBusy) { Exit(); return false; }
+        return true;
+    }
     private void Exit() => Volatile.Write(ref _busy, 0);
 
     // ---- Gates ----
@@ -185,6 +196,7 @@ internal sealed class ThemeService
         target = null;
         if (_host.FlashRunning) return (409, "A firmware update is running. Try again when it has finished.");
         if (_host.HandoverActive) return (409, "The serial port is lent to the WireView app. Try again when it hands the port back.");
+        if (_host.DeviceLogBusy) return (409, "The device log is being read. Try again when it has finished.");
         if (UploadRunning) return (409, "A theme upload is running. Try again when it has finished.");
         target = _host.ThemeTarget();
         if (target == null || !target.Connected) return (503, "Not connected.");
@@ -199,12 +211,12 @@ internal sealed class ThemeService
     // ---- Read ----
 
     /// <summary>The device's theme: the config's theme fields, and with
-    /// <paramref name="artwork"/> the artwork of the background and fan slots
-    /// (the device's own unless <paramref name="backgroundSlot"/> or
-    /// <paramref name="fanSlot"/> asks for another) read over the serial port.
+    /// <paramref name="artwork"/> the artwork of the background slot (the device's
+    /// own unless <paramref name="backgroundSlot"/> asks for another) and of the
+    /// fan slot that goes with it (<see cref="FanFor"/>) read over the serial port.
     /// Blocks for the transfer (a few seconds, plus the handover with wireviewd).
     /// A denied or failed artwork read still returns the colours, with the reason.</summary>
-    public ThemeRead Read(bool artwork, byte? backgroundSlot = null, byte? fanSlot = null, bool fans = true)
+    public ThemeRead Read(bool artwork, byte? backgroundSlot = null, bool fans = true)
     {
         if (Problem(out _) is { } p) return new ThemeRead(p.Status, p.Message, null, null, null, null);
         var snap = _host.ReadConfig();
@@ -214,7 +226,7 @@ internal sealed class ThemeService
         if (!artwork) return new ThemeRead(200, null, snap.Version, values, null, null);
 
         byte bgId = backgroundSlot ?? values.BackgroundBitmapId;
-        byte fanId = fanSlot ?? values.FanBitmapId;
+        byte fanId = FanFor(bgId, values);
         if (!TryEnter()) return new ThemeRead(409, "A theme transfer is running. Try again when it has finished.", snap.Version, values, null, null);
         try
         {
@@ -263,6 +275,7 @@ internal sealed class ThemeService
         if (snap.Version < 2) return Refused(400, LayoutMessage);
         var current = DeviceThemeValues.From(WireViewPro2Device.DeserializeConfig(snap.Version, snap.Data));
         if (CheckIds(wanted, current) is { } badId) return Refused(400, badId);
+        wanted = wanted with { FanBitmapId = FanFor(wanted.BackgroundBitmapId, current) };
 
         if (bg == null)
         {
@@ -520,13 +533,16 @@ internal sealed class ThemeService
                 error = $"{names[i]}: \"{texts[i]}\" is not a #rrggbb color";
                 return false;
             }
-        if (edit.BackgroundBitmapId is < 0 or > 255 || edit.FanBitmapId is < 0 or > 255)
+        if (edit.BackgroundBitmapId is < 0 or > 255)
         {
             error = "the bitmap ids are 0 to 255";
             return false;
         }
+        // The client's fan id is not used: the fan follows the background, as in
+        // the app (Apply keeps the device's fan for a background id it does not know).
+        var slot = (WireViewPro2Device.THEME_BACKGROUND)edit.BackgroundBitmapId;
         values = new DeviceThemeValues(colors[0], colors[1], colors[2], colors[3], edit.DisplayInversion,
-            (byte)edit.BackgroundBitmapId, (byte)edit.FanBitmapId);
+            (byte)slot, (byte)DeviceConfigEditor.FanBitmapFor(slot));
 
         if (!TryImage(edit.Background, BgBytes, "background image (320x170)", out background, out error)) return false;
         if (!TryImage(edit.FanFrame1, FanBytes, "fan frame 1 (73x73)", out fan1, out error)) return false;
@@ -557,18 +573,25 @@ internal sealed class ThemeService
         return true;
     }
 
-    /// <summary>Slot ids the device can take: the known ones, or the one it already
-    /// has (an id this version does not know is kept, not refused).</summary>
+    /// <summary>Background ids the device can take: the known ones, or the one it
+    /// already has (an id this version does not know is kept, not refused).</summary>
     private static string? CheckIds(DeviceThemeValues wanted, DeviceThemeValues current)
     {
-        bool bgOk = wanted.BackgroundBitmapId == current.BackgroundBitmapId
-                    || DeviceThemePresets.Backgrounds.Any(b => b.Value == wanted.BackgroundBitmapId);
-        bool fanOk = wanted.FanBitmapId == current.FanBitmapId
-                     || DeviceThemePresets.Fans.Any(f => f.Value == wanted.FanBitmapId);
-        if (!bgOk) return $"unknown background slot {wanted.BackgroundBitmapId}";
-        if (!fanOk) return $"unknown fan slot {wanted.FanBitmapId}";
-        return null;
+        bool bgOk = wanted.BackgroundBitmapId == current.BackgroundBitmapId || IsKnownBackground(wanted.BackgroundBitmapId);
+        return bgOk ? null : $"unknown background slot {wanted.BackgroundBitmapId}";
     }
+
+    private static bool IsKnownBackground(byte id) => DeviceThemePresets.Backgrounds.Any(b => b.Value == id);
+
+    /// <summary>The fan animation slot for a background slot. The app has no fan
+    /// choice: its fan always follows the background (orange, dark, black and
+    /// white for none; a custom image goes with its slot's fan frames), and so does
+    /// the panel. A background id this version does not know keeps the fan the
+    /// device has.</summary>
+    internal static byte FanFor(byte background, DeviceThemeValues device) =>
+        IsKnownBackground(background)
+            ? (byte)DeviceConfigEditor.FanBitmapFor((WireViewPro2Device.THEME_BACKGROUND)background)
+            : device.FanBitmapId;
 
     /// <summary>The fan slot the app restores with a background slot.</summary>
     internal static WireViewPro2Device.THEME_FAN DefaultFanForBackground(WireViewPro2Device.THEME_BACKGROUND bg) => bg switch

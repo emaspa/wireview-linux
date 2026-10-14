@@ -89,11 +89,11 @@ jobs, so the app only needs to run when you want to look at it:
 - it publishes the device on port `9876` (the app's publish port): on the LAN
   when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
 
-WireView Mini plus its control panel are a minimal client: everything except the
-graphs and the device log, which stay in the app. With the tray menu and the
-control panel you can watch the device, switch its screen, clear faults, edit
-its configuration and alarms, edit its display theme, update its firmware, and
-set up LAN monitoring and shutdown on fault without installing or opening the app.
+WireView Mini plus its control panel are a small client of their own. With the
+tray menu and the control panel you can watch the device, chart its readings,
+read its on-device log, switch its screen, clear faults, edit its configuration
+and alarms, edit its display theme, update its firmware, and set up LAN
+monitoring and shutdown on fault without installing or opening the app.
 
 On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with
 no hwmon device it opens the WireView's serial port (`/dev/ttyACM*`) itself, like
@@ -170,15 +170,26 @@ loopback-only fallback port instead (the next free one of the publish port +1
 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`,
 and moves back to the publish port once it is free (it retries every 30 s); the
 tray, `--open` and `--status` use whichever port it is on. The page shows,
-refreshed every second (Device configuration, Theme, Firmware and wireviewd's
-settings are collapsed until you click their header, and are read from the
-device only then; the page remembers which ones you left open):
+refreshed every second (Charts, Device log, Device configuration, Theme,
+Firmware and wireviewd's settings are collapsed until you click their header, and
+are read only then; the page remembers which ones you left open):
 
 - **Status**: device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`),
   total power, current and voltage, each pin's voltage, current and power, the
   temperatures, the fan duty, and the fault state with a **Clear faults** button,
 - **Remote hosts**: the same readings for each host in the settings, read only,
 - **Screen**: the five screens, pause and resume,
+- **Charts**: a live line chart of the readings WireView Mini keeps (see *Charts
+  and the device log* below) with the app's series and colors (total power and
+  current, each pin's voltage and current, the four temperatures) plus each
+  pin's power and the fan duty, the app's default selection (total power and
+  current), a window of 1, 5 or 15 minutes, an hour or everything kept, an
+  automatic or manual Y range per unit, a legend with the newest values, the
+  values under the pointer, and **Export CSV**,
+- **Device log**: **Read from device**, the power cycles found (labeled as in the
+  app's Logging page), the same chart for the selected cycle (the Logging page's
+  default series: the six currents and the onboard temperatures) and **Export
+  CSV** for that cycle,
 - **Device configuration**, grouped like the app's Device page: General (friendly
   name, backlight), Fan (mode, temperature source, duty and temperature limits),
   Display (current and power scale, theme on older firmware, rotation, timeout
@@ -189,8 +200,8 @@ device only then; the page remembers which ones you left open):
   from device**, **Reload from device memory** and **Reset to defaults** (asks
   first) are there too. Out-of-range values are refused with a message,
 - **Theme** (firmware with the color theme, config V3), opened on demand: the
-  app's presets, the four colors, display inversion, the background and fan
-  slots, a custom background image with the app's fit, scale and offsets, a live
+  app's presets, the four colors, display inversion, the background slot (the
+  fan animation follows it, as in the app), a custom background image with the app's fit, scale and offsets, a live
   preview of the main screen, **Apply**, **Reload from device**, **Save theme
   file...** and **Load theme file...** (.wv2t) and **Restore factory artwork**
   (see *Theme editor* below),
@@ -201,14 +212,36 @@ device only then; the page remembers which ones you left open):
   wireviewd, the daemon's own settings instead of the first two (below),
 - **Firmware**: the device's and the bundled firmware (version and build), what a
   flash would do, and **Update firmware** (see *Firmware updates* below),
-- **Tools**: Launch WireView Desktop (graphs, device log) and
-  where WireView Mini's log is.
+- **Tools**: Launch WireView Desktop (where the app is installed) and
+  where WireView Mini's log and settings are.
 
 Settings changed on the page are saved to `settings.json` and applied at once,
 the same path as the tray's switches (and, as with those, an app that is open
 at the same time writes back its own copy on its next settings save). Device writes go to the device the same
 way as a command from the LAN, so they work over hwmon with wireviewd and over
 direct serial alike. `GET /sensors` on the same port is unchanged.
+
+**Charts and the device log.** WireView Mini keeps the readings of this PC's
+device of the last `HistoryMinutes` minutes in memory, one sample a second: 60
+minutes by default (about 350 KB), at most 1440 (a day, about 8.5 MB), 0 turns
+it off. Set it in `settings.json` (`"HistoryMinutes": 120`); the key is written
+only when you set it, and a change applies at once. The history is not saved to
+disk, so it starts empty with WireView Mini, and it pauses while the serial port
+is lent to the app or busy with a flash, a theme transfer or a log read. The
+Charts card reads it only while it is open and the page is visible, and the new
+samples then come with the status poll, so an open chart adds no requests.
+**Export CSV** downloads every sample kept in the columns and formats of the
+app's CSV log (Timestamp, Connected, HW, FW, the totals, the four temperatures,
+then V1, I1 to V6, I6; times in UTC). **Read from device**
+in the Device log card reads the log the device keeps in its flash, as the app's
+Logging page does: the whole 8 MB log area over the serial port (about a minute and a half;
+with wireviewd WireView Mini borrows the port, which needs the `wireview`
+group), split into power cycles with the app's code. The log has no clock, so,
+as in the app, each cycle's time counts from its power-on (from 2026-01-01
+00:00 in the CSV). The result stays in WireView Mini's memory until the next
+read (a full log is at most 7.5 MB); a cycle's **Export CSV** has the columns of
+the app's Logging export. While the log is read, the other device controls, the
+theme editor and the firmware flash wait, and the app cannot borrow the port.
 
 **wireviewd's settings.** When the device is reached through hwmon with
 wireviewd, the daemon does the LAN publishing, so the **LAN monitoring** card

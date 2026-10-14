@@ -37,20 +37,7 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         public TimeSpan? Duration =>
             StartUtc.HasValue && EndUtc.HasValue && EndUtc >= StartUtc ? EndUtc - StartUtc : null;
 
-        public string Label
-        {
-            get
-            {
-                if (SampleCount == 0) return $"Cycle #{Index + 1} (empty)";
-                var d = Duration;
-                string duration = d.HasValue
-                    ? (d.Value.TotalHours >= 1
-                        ? $"{(int)d.Value.TotalHours}:{d.Value.Minutes:00}:{d.Value.Seconds:00}"
-                        : $"{d.Value.Minutes}:{d.Value.Seconds:00}")
-                    : "?";
-                return $"Cycle #{Index + 1} ({SampleCount} samples, {duration})";
-            }
-        }
+        public string Label => DeviceLogCycles.Label(Index, SampleCount, Duration);
 
         public override string ToString() => Label;
     }
@@ -308,77 +295,10 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Converts raw log entries into per-power-cycle sample lists. A cycle
-    /// ends at an explicit POWER_ON marker or when the MCU tick counter wraps
-    /// backwards (the counter resets on power-up). Timestamps are synthetic —
-    /// each cycle restarts at the epoch and advances 4 ms per tick.</summary>
-    private List<List<DeviceData>> DataLoggerEntryToDeviceData(
-        IReadOnlyList<DeviceLogParser.DATALOGGER_Entry> entries)
-    {
-        var cycles = new List<List<DeviceData>>();
-        var current = new List<DeviceData>();
-        DateTime timestamp = DateTime.Parse("2026-01-01 00:00");
-        uint prevTick = 0u;
-
-        foreach (var entry in entries)
-        {
-            var entryType = DeviceLogParser.DecodeType(entry.Data);
-            uint tick30 = DeviceLogParser.DecodeTimestamp30(entry.Data);
-
-            switch (entryType)
-            {
-                case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_POWER_ON:
-                    if (current.Count > 0)
-                    {
-                        cycles.Add(current);
-                        current = new List<DeviceData>();
-                    }
-                    timestamp = DateTime.Parse("2026-01-01 00:00");
-                    continue; // boundary marker, not a sample
-
-                case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_MCU_TICK:
-                    int delta = (int)(tick30 - prevTick);
-                    if (delta < 0)
-                    {
-                        if (current.Count > 0)
-                        {
-                            cycles.Add(current);
-                            current = new List<DeviceData>();
-                        }
-                        timestamp = DateTime.Parse("2026-01-01 00:00");
-                        delta = 0;
-                    }
-                    timestamp = timestamp.AddMilliseconds(delta * 4);
-                    prevTick = tick30;
-                    break;
-
-                case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_SYSTEM_TIME:
-                case DeviceLogParser.ENTRY_TYPE.ENTRY_TYPE_EMPTY:
-                    continue;
-            }
-
-            var dd = new DeviceData
-            {
-                Timestamp = timestamp,
-                OnboardTempInC  = entry.Ts[0],
-                OnboardTempOutC = entry.Ts[1],
-                ExternalTemp1C  = entry.Ts[2],
-                ExternalTemp2C  = entry.Ts[3]
-            };
-
-            for (int i = 0; i < 6; i++)
-            {
-                dd.PinVoltage[i] = (float)entry.Voltage[i] / 10f;
-                dd.PinCurrent[i] = (float)entry.Current[i] / 10f;
-            }
-
-            current.Add(dd);
-        }
-
-        if (current.Count > 0)
-            cycles.Add(current);
-        return cycles;
-    }
+    /// <summary>Converts raw log entries into per-power-cycle sample lists
+    /// (<see cref="DeviceLogCycles.ToCycles"/>, shared with WireView Mini).</summary>
+    private static List<List<DeviceData>> DataLoggerEntryToDeviceData(
+        IReadOnlyList<DeviceLogParser.DATALOGGER_Entry> entries) => DeviceLogCycles.ToCycles(entries);
 
     [RelayCommand]
     private void Cancel() => _cts?.Cancel();
@@ -621,44 +541,12 @@ public sealed partial class LoggingViewModel : ViewModelBase, IDisposable
     {
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
-        var headers = new List<string>
-        {
-            "Timestamp", "Connected", "HW", "FW",
-            "SumPowerW", "SumCurrentA",
-            "OnboardInC", "OnboardOutC", "Ext1C", "Ext2C"
-        };
-        for (int i = 1; i <= 6; i++) headers.Add($"V{i}");
-        for (int j = 1; j <= 6; j++) headers.Add($"I{j}");
-
+        // Columns and formats shared with WireView Mini's device log export.
         using var writer = new StreamWriter(filePath, append: false,
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        writer.WriteLine(string.Join(",", headers));
-
+        DeviceDataCsv.WriteHeader(writer, DeviceDataCsv.LogHeaders);
         foreach (var row in rows)
-        {
-            var vals = new string[headers.Count];
-            int c = 0;
-            vals[c++] = row.Timestamp.ToString("o", CultureInfo.InvariantCulture);
-            vals[c++] = row.Connected ? "True" : "False";
-            vals[c++] = EscapeCsv(row.HardwareRevision ?? "");
-            vals[c++] = EscapeCsv(row.FirmwareVersion ?? "");
-            vals[c++] = row.SumPowerW.ToString("F3", CultureInfo.InvariantCulture);
-            vals[c++] = row.SumCurrentA.ToString("F3", CultureInfo.InvariantCulture);
-            vals[c++] = row.OnboardTempInC.ToString("F2", CultureInfo.InvariantCulture);
-            vals[c++] = row.OnboardTempOutC.ToString("F2", CultureInfo.InvariantCulture);
-            vals[c++] = row.ExternalTemp1C.ToString("F2", CultureInfo.InvariantCulture);
-            vals[c++] = row.ExternalTemp2C.ToString("F2", CultureInfo.InvariantCulture);
-            for (int k = 0; k < 6; k++)
-                vals[c++] = row.PinVoltage[k].ToString("F3", CultureInfo.InvariantCulture);
-            for (int l = 0; l < 6; l++)
-                vals[c++] = row.PinCurrent[l].ToString("F3", CultureInfo.InvariantCulture);
-            writer.WriteLine(string.Join(",", vals));
-        }
-
-        static string EscapeCsv(string s) =>
-            s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0
-                ? s
-                : "\"" + s.Replace("\"", "\"\"") + "\"";
+            DeviceDataCsv.WriteLogRow(writer, row);
     }
 
     // ======================== Dispose ========================
