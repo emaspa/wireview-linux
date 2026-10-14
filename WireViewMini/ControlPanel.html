@@ -67,19 +67,19 @@ h3 { margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spac
 .big .v { border-left-color: var(--voltage); }
 .big .f { border-left-color: var(--muted); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-/* The app's per-wire bar chart: a group of up to three bars per pin, each
-   against its own fixed scale (15 V, 10 A, 150 W; more when a reading exceeds it). */
-.bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; height: 150px; align-items: end; margin: 22px 0 24px; }
-.bars .pin { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 100%; border-bottom: 1px solid var(--line); }
-.bars .pbar { position: relative; flex: 1 1 0; max-width: 20px; min-height: 2px; border-radius: 3px 3px 0 0; transition: height .3s; }
+/* The app's per-wire bar chart turned on its side: a row per pin under the
+   temperatures, a bar per enabled series (15 V, 10 A, 150 W full scale; more
+   when a reading exceeds it), the value at the end of each bar. */
+.bars { display: grid; grid-template-columns: max-content 1fr; gap: 5px 10px; align-items: center; margin-top: 8px; }
+.bars .pin { display: contents; }
+.bars .pin i { font-style: normal; font-size: 12px; color: var(--muted); }
+.bars .track { display: flex; flex-direction: column; gap: 2px; padding: 3px 54px 3px 0; border-left: 1px solid var(--line); }
+.bars .pbar { position: relative; height: 7px; min-width: 2px; border-radius: 0 3px 3px 0; transition: width .3s; }
 .bars .pbar.bv { background: var(--voltage); }
 .bars .pbar.bi { background: var(--current); }
 .bars .pbar.bp { background: var(--power); }
-/* Value labels only with one series on: three labels a pin overlap, and the table below has the numbers. */
-.bars:not(.labels) .pbar span { display: none; }
-.bars .pbar span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 2px; font-size: 10px; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
-.bars .pin i { position: absolute; top: 100%; margin-top: 3px; font-style: normal; font-size: 11px; color: var(--muted); }
-.barlegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.bars .pbar span { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; font-size: 10px; line-height: 1; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.barlegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 10px; }
 .barlegend label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
@@ -246,12 +246,6 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
       <div class="cols">
         <div>
           <h3>Connector pins</h3>
-          <div class="barlegend">
-            <label><input type="checkbox" id="bV"><b class="swatch" style="background:var(--voltage)"></b>Voltage</label>
-            <label><input type="checkbox" id="bI" checked><b class="swatch" style="background:var(--current)"></b>Current</label>
-            <label><input type="checkbox" id="bP"><b class="swatch" style="background:var(--power)"></b>Power</label>
-          </div>
-          <div class="bars" id="pinBars"></div>
           <table>
             <thead><tr><th>Pin</th><th>Voltage</th><th>Current</th><th>Power</th></tr></thead>
             <tbody id="pins"></tbody>
@@ -261,6 +255,13 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
           <h3>Temperatures</h3>
           <div class="temps" id="temps"></div>
           <p class="note" id="psu"></p>
+          <h3>Per-pin chart</h3>
+          <div class="barlegend">
+            <label><input type="checkbox" id="bV"><b class="swatch" style="background:var(--voltage)"></b>Voltage</label>
+            <label><input type="checkbox" id="bI" checked><b class="swatch" style="background:var(--current)"></b>Current</label>
+            <label><input type="checkbox" id="bP"><b class="swatch" style="background:var(--power)"></b>Power</label>
+          </div>
+          <div class="bars" id="pinBars"></div>
         </div>
       </div>
       <div class="fault" id="faultBox">
@@ -718,14 +719,13 @@ const WVPixels = (function () {
       const add = (key, unit, dec, cls) => {
         if (!show[key]) return;
         const h = Math.max(0, Math.min(100, vals[key][k] / max[key] * 100));
-        bars.push(el("div", { class: "pbar " + cls, style: "height:" + h.toFixed(1) + "%" },
+        bars.push(el("div", { class: "pbar " + cls, style: "width:" + h.toFixed(1) + "%" },
           el("span", { text: fmt(vals[key][k], dec) + unit })));
       };
       add("v", " V", 1, "bv"); add("i", " A", 2, "bi"); add("p", " W", 1, "bp");
-      groups.push(el("div", { class: "pin" }, ...bars, el("i", { text: "Pin " + (k + 1) })));
+      groups.push(el("div", { class: "pin" }, el("i", { text: "Pin " + (k + 1) }), el("div", { class: "track" }, ...bars)));
     }
     $("pinBars").replaceChildren(...groups);
-    $("pinBars").classList.toggle("labels", Object.values(show).filter(Boolean).length === 1);
   }
   for (const id of ["bV", "bI", "bP"]) {
     try { const v = localStorage.getItem("bars." + id); if (v !== null) $(id).checked = v === "1"; } catch {}
