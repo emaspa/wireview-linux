@@ -1,680 +1,89 @@
 # WireView Pro II - Linux Unofficial Client
 
-Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/).
-
-> A **Windows** build (**WireView Plus**) is also available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page - see [Windows](#windows-x64) under Installation.
+Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application, plus **WireView Mini**, a small always-on companion with a tray icon and a browser control panel. A **Windows** build (**WireView Plus**) is also available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/). Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. For sensors in `/sys/class/hwmon/` (`sensors`, Grafana, conky, btop) and the `wireviewctl` CLI, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon).
 
 ![Screenshot](docs/screenshot-v2.png)
 
 ## Features
 
-- **Real-time monitoring** - Voltage, current, and power readings across all 6 pins with live charts, plus custom charts: pick any telemetry series, per-series colors, manual or auto Y scaling
-- **Device configuration** - Fan speed, display settings, fault alarms, thresholds
-- **Configuration profiles** - Save, load, and manage named device configurations
-- **Data logging** - On-device log readback and CSV export, browsable per power cycle
-- **Desktop notifications** - Via `notify-send`
-- **Software shutdown on fault** - Optional system shutdown when a fault alarm triggers, for eGPU or setups where the hardware shutdown header cannot be connected
-- **LAN monitoring** - Read WireViews on other machines over the network, optionally publish this host's device, and remotely view/edit a remote device's configuration (HMAC-authenticated). See [LAN monitoring](#lan-monitoring) below
-- **Theme editor** - Customize the device display: background images, text and highlight colors, display inversion, with a live preview, in the app or in [WireView Mini](#wireview-mini)'s control panel. Theme files (.wv2t) are compatible with the official Windows app. The Noctua preset is the WireView Pro II Noctua Edition's own look: Thermal Grizzly's Dark background with Noctua colors. It works on any WireView Pro II and is also available as [themes/Noctua-Edition.wv2t](themes/Noctua-Edition.wv2t) for the Windows app
-- **Firmware updates** - Flash the bundled firmware (v05, build 20260902_0741) from the Device page over USB DFU. Requires the `dfu-util` package; compares the bundled and device firmware by version and build date, refuses an image made for another product, and warns before downgrades. The bundled image is byte for byte the firmware a Noctua Edition ships with, so flashing it again restores the factory firmware on either edition
+- **Real-time monitoring**: voltage, current and power on all 6 pins, live charts and custom charts (any series, per-series colors, manual or auto Y scaling)
+- **Device configuration**: fan, display, fault alarms and thresholds, saved and loaded as named profiles
+- **Data logging**: on-device log readback per power cycle, CSV export
+- **Alerts**: desktop notifications via `notify-send`, and optional software shutdown on fault for eGPUs or setups without the hardware shutdown header
+- **LAN monitoring**: read WireViews on other machines and edit their configuration (HMAC-authenticated). See [LAN monitoring](docs/lan-monitoring.md)
+- **Theme editor**: background images, colors, inversion and a live preview; `.wv2t` files work with the official Windows app. See [usage](docs/usage.md#theme-editor)
+- **Firmware updates**: flash the bundled firmware (v05, build 20260902_0741) over USB DFU with `dfu-util`. See [firmware](docs/firmware.md)
+- **WireView Mini**: alerts, shutdown on fault and the device on the LAN with the app closed. See [WireView Mini](docs/wireview-mini.md)
+- **hwmon integration**: works with the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module and daemon as an alternative to direct serial
 
-> **Warning:** firmware flashing restarts the device into its STM32 bootloader and rewrites its flash. It follows the same DFU procedure as the official Windows client (and refuses to start if `dfu-util` or the firmware image is missing), but a power loss or unplug mid-flash can leave the device unbootable until reflashed manually. This is unofficial software, not affiliated with or endorsed by Thermal Grizzly: flash at your own risk. The previous experimental `dfu-enabled` branch has been removed in favor of this built-in implementation.
+**Firmware flashing can leave the device unbootable if it is interrupted. Flash at your own risk and read the [full warning](docs/firmware.md#warning) first.**
 
-> **hwmon integration**: If you want sensor data exposed to `sensors`, Grafana, conky, btop, and other monitoring tools via `/sys/class/hwmon/`, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon). The kernel module and daemon work standalone without this app, and this app can also use them as an alternative to direct serial communication (see below). That project also includes `wireviewctl`, a CLI tool for monitoring and scripting device commands from the terminal.
+## Two apps
+
+| | Desktop app (`WireView2`, WireView Plus on Windows) | WireView Mini (`wireview-mini`) |
+|---|---|---|
+| What it is | The full window: Overview, Monitoring, Logging, Device and Settings pages | A program with no window: a tray icon and a control panel in the browser, about 40 MB resident on Linux |
+| When it runs | When you want to look at the device | All the time, started at login |
+| What it does | Monitoring, charts, device log, configuration and profiles, theme editor, firmware updates, LAN monitoring | Monitoring, fault alerts, shutdown on fault, device configuration, firmware updates, theme editor, charts, device log, CSV export, LAN publishing |
+
+Both read the same `settings.json`. While WireView Mini runs, the app connects through it instead of opening the serial port. Details: [docs/wireview-mini.md](docs/wireview-mini.md).
+
+## Install
+
+| Channel | Commands |
+|---|---|
+| Windows (x64) | Download `wireview-plus-<version>-windows-x64.zip` from [Releases](https://github.com/emaspa/wireview-linux/releases), extract it, run the executable |
+| Ubuntu 24.04 / 26.04 LTS (PPA) | `sudo add-apt-repository ppa:sparvoli/wireview-hwmon`<br>`sudo apt install wireview-linux` |
+| Ubuntu / Debian (.deb) | `sudo apt install ./wireview-linux_*_amd64.deb` (from [Releases](https://github.com/emaspa/wireview-linux/releases)) |
+| Fedora (COPR) | `sudo dnf copr enable emaspa/wireview-linux`<br>`sudo dnf install wireview-linux` |
+| Flatpak (Bazzite, Silverblue) | `flatpak install ./wireview-linux-*.flatpak` (from [Releases](https://github.com/emaspa/wireview-linux/releases)), then the [host udev rule](docs/install.md#flatpak) |
+| Arch / CachyOS / EndeavourOS (AUR) | `yay -S wireview-linux-bin` (or `yay -S wireview-linux` to build from source) |
+| NixOS (flake) | `nix run github:emaspa/wireview-linux`, or the [NixOS module](docs/install.md#nixos-flake) |
+| Pre-built tarball | Extract the `linux-x64.tar.gz` release, then `./install.sh` and `./WireView2` |
+| Build from source | `git clone https://github.com/emaspa/wireview-linux.git`<br>`cd wireview-linux && ./install.sh` |
+
+The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
 
 ## Connection modes
-
-The app supports two ways of communicating with the device:
 
 | Mode | How it works | Features |
 |------|-------------|----------|
 | **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
-| **Through WireView Mini** | App reads and controls the device through [`wireview-mini`](#wireview-mini) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
+| **Through WireView Mini** | App reads and controls the device through [`wireview-mini`](docs/wireview-mini.md) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
 
-The app auto-detects the connection mode at startup. If the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module is loaded, the app uses hwmon for sensor data and connects to the daemon's Unix socket (`/run/wireviewd.sock`) for commands - configuration read/write, fault clearing, screen control, and device info all work through the daemon. If the daemon is not running, the app still displays sensor data in read-only mode.
+The app picks the mode at startup: hwmon when the wireview-hwmon module is loaded, then WireView Mini, then direct serial. Writes through the daemon need the `wireview` group and wireview-hwmon 1.7.0 or later. Details: [docs/usage.md](docs/usage.md#connection-modes).
 
-Commands that change the device through the daemon (configuration writes, NVM store/reset, firmware flashing, and the serial handover used by log reads and the theme editor) need root or membership of the `wireview` group, which the wireview-hwmon packages create: `sudo usermod -aG wireview $USER`. Reading sensors needs no group. Without it the app reports the refused action with that hint, and the automatic theme preview is skipped. Use wireview-hwmon 1.7.0 or later: 1.6.0 refused `wireview` group members when wireviewd ran under systemd, and only 1.7.0 reports the product, so with an older daemon a Noctua Edition is shown as a WireView Pro II.
-
-If the kernel module is not loaded, the app looks for the [WireView Mini](#wireview-mini) on this PC, then falls back to direct serial communication.
-
-## LAN monitoring
-
-Beyond the single local device, the app can monitor and control **WireViews on
-other machines** over the LAN - one desktop reading several servers, or two PCs
-watching each other.
-
-### Reading remote devices
-
-In **Settings → Remote hosts**, add a comma-separated list of hosts
-(`192.168.1.50`, or `host:port` for a custom port - default `9876`). Each remote
-device appears in the device picker as `lan @ host` alongside local ones, with
-full live monitoring. A remote host is typically the
-[wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or
-another copy of this app with publishing enabled (Windows).
-
-### Publishing this host (Windows)
-
-**Settings → Publish this host on the LAN** opens a listener (default port
-`9876`, configurable) so other instances can read this machine's device. **Off
-by default.** On Linux the `wireviewd` daemon owns publishing, so the toggle is
-hidden there. While the [WireView Mini](#wireview-mini) runs, it publishes
-instead of the app, and this toggle decides whether it listens on the LAN or on
-this PC only.
-
-### Remote control & configuration (authenticated)
-
-Set the same **Network secret** on the publisher and the reader to allow
-*writing* to a remote device - screen changes, NVM store/reset, clear-faults,
-and the full configuration editor all work against a remote device. Requests are
-signed with HMAC-SHA256 (the secret never crosses the wire; replays rejected).
-Reading a remote needs no secret; only writes do, and failures are surfaced
-precisely (e.g. *"set the network secret"*, *"rejected by the remote host"*,
-*"the remote host is unreachable"*).
-
-> Publishing is independent of reading - you can read remote hosts without
-> exposing your own. There is no TLS; this targets a trusted LAN.
-
-## WireView Mini
-
-`wireview-mini` is a small program with no window that does the always-on
-jobs, so the app only needs to run when you want to look at it:
-
-- it owns the device (hwmon through wireviewd when that runs, otherwise the
-  serial port, the same choice the app makes),
-- it raises the fault notification (Windows toast, `notify-send` on Linux) for
-  this PC's device and for every host in **Remote hosts**,
-- it shuts the PC down on a fault of this PC's device when **Shutdown on fault**
-  is on (a remote host's fault never powers this PC off),
-- it publishes the device on port `9876` (the app's publish port): on the LAN
-  when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off.
-
-WireView Mini plus its control panel are a small client of their own. With the
-tray menu and the control panel you can watch the device, chart its readings,
-read its on-device log, switch its screen, clear faults, edit its configuration
-and alarms, edit its display theme, update its firmware, and set up LAN
-monitoring and shutdown on fault without installing or opening the app.
-
-On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with
-no hwmon device it opens the WireView's serial port (`/dev/ttyACM*`) itself, like
-the app's direct serial mode. Your user needs access to the port, which the udev
-rule in `udev/99-wireview.rules` gives (the packages install it; see the Flatpak
-section below for installing it by hand).
-
-It reads the app's own `settings.json`, so the app and the control panel
-configure the same settings, and changes apply without restarting WireView Mini. It is meant for Windows and for
-Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it
-still gives alerts and shutdown, and leaves publishing to the daemon: its own
-listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on
-the LAN** says (it logs this once).
+## Quick usage
 
 ```bash
-wireview-mini              # run in the foreground (Ctrl+C to stop), logs to stderr
+wireview-linux                    # start the app (./WireView2 from the tarball)
+wireview-linux --page monitoring  # open on overview, monitoring, logging, device or settings
+flatpak run io.github.emaspa.WireViewLinux   # the Flatpak
+
+wireview-mini              # run WireView Mini in the foreground (Ctrl+C to stop)
 wireview-mini --install    # start it at login
-wireview-mini --uninstall  # stop starting it at login
+wireview-mini --open       # open its control panel in the browser
 wireview-mini --status     # connected device, fault state and version
-wireview-mini --open       # print the control panel's address and open it in the browser
-wireview-mini --no-tray    # run without the tray icon
-wireview-mini --version
-wireview-mini --help
 ```
 
-`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the
-`WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-on Windows (no administrator rights needed). It logs to
-`wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`.
-`--status` exits with 0 when a device is connected with no active fault, 3 when
-WireView Mini is not running, 4 when it runs without a connected device, and 5 on an
-active fault. A second copy says it is already running and exits with 1.
+Settings live in `~/.config/PowerMonitor/settings.json` on Linux and `%APPDATA%\PowerMonitor\settings.json` on Windows, shared by the app and WireView Mini.
 
-**Tray icon.** WireView Mini puts the WireView icon in the notification area. Its
-menu, top to bottom:
+## Documentation
 
-- the live state (`WireView Pro II: 123.4 W`, the fault while one is active,
-  *Serial port lent to the app* during a handover, or *No device*),
-- **Launch WireView Desktop** (starts the app, or on Windows brings the running app's
-  window forward; shown only where the app is installed),
-- **Settings and controls...**, which opens the control panel in the browser,
-- **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then
-  **Pause updates** and **Resume updates** (the device's display),
-- **Clear faults**, enabled while a fault is active (clears the active faults and
-  keeps the fault log, like the app's fault banner),
-- **Remote hosts**, a submenu shown when the settings list remote hosts, with
-  one line per host: `host: 123.4 W`, the host's fault, or `host: offline`,
-- the **Publish on the LAN**, **Shutdown on fault** and **Start at login**
-  checkboxes (with wireviewd, a disabled *LAN publishing: wireviewd, port 9876*
-  line, or *LAN publishing: wireviewd, off*, takes the place of the first),
-- **Quit**.
+- [Installation](docs/install.md): every channel, serial access, udev, building from source, troubleshooting
+- [Using the app](docs/usage.md): connection modes, pages, profiles, theme editor, logging, rendering, USB IDs, project structure
+- [WireView Mini](docs/wireview-mini.md): tray, control panel, serial handover, ports, building, settings
+- [LAN monitoring](docs/lan-monitoring.md): remote hosts, publishing, the network secret
+- [Firmware updates](docs/firmware.md): the warning, checks, `dfu-util`, udev, Windows
+- Design notes: [footprint plan](docs/footprint-plan.md), [upstream 1.0.7 port plan](docs/upstream-1.0.7-port-plan.md), [upstream 1.0.8 port plan](docs/upstream-1.0.8-port-plan.md)
 
-The tooltip carries the same live line. The
-two settings checkboxes write `settings.json` and apply at once, like the same
-switches in the app; *Start at login* is `--install`/`--uninstall`. If the app is
-open at the same time, its next settings save writes back its own copy of those
-two switches, so change them in one place while both run. On Linux the icon is a
-StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it out of the box, GNOME
-needs the AppIndicator/KStatusNotifierItem extension. On a desktop without a tray
-(or with no session bus) WireView Mini logs one line, keeps running without the
-icon and adds it when a tray shows up later. `--no-tray` turns it off.
-
-**Control panel.** A single page served by WireView Mini on its own port, opened in
-the default browser by a click on the tray icon (left click on Windows, the
-tray's activate action on Linux), by the tray's **Settings and controls...** or by
-`wireview-mini --open` (which also prints the address, for desktops without a
-tray). It works offline and answers this PC only: from any other address it
-returns 403, even while the port is open on the LAN. Each run of WireView Mini makes
-a new random access token; the tray and `--open` put it in the address (after
-`#t=`), and the page sends it with every request, so other web pages and other
-users cannot use it. When the publish port is taken (on Linux wireviewd holds
-`9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a
-loopback-only fallback port instead (the next free one of the publish port +1
-to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`,
-and moves back to the publish port once it is free (it retries every 30 s); the
-tray, `--open` and `--status` use whichever port it is on. The page shows,
-refreshed every second (Charts, Device log, Device configuration, Theme,
-Firmware and wireviewd's settings are collapsed until you click their header, and
-are read only then; the page remembers which ones you left open):
-
-- **Status**: device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`),
-  total power, current and voltage, each pin's voltage, current and power, the
-  temperatures, the fan duty, and the fault state with a **Clear faults** button,
-- **Remote hosts**: the same readings for each host in the settings, read only,
-- **Screen**: the five screens, pause and resume,
-- **Charts**: a live line chart of the readings WireView Mini keeps (see *Charts
-  and the device log* below) with the app's series and colors (total power and
-  current, each pin's voltage and current, the four temperatures) plus each
-  pin's power and the fan duty, the app's default selection (total power and
-  current), a window of 1, 5 or 15 minutes, an hour or everything kept, an
-  automatic or manual Y range per unit, a legend with the newest values, the
-  values under the pointer, and **Export CSV**,
-- **Device log**: **Read from device**, the power cycles found (labeled as in the
-  app's Logging page), the same chart for the selected cycle (the Logging page's
-  default series: the six currents and the onboard temperatures) and **Export
-  CSV** for that cycle,
-- **Device configuration**, grouped like the app's Device page: General (friendly
-  name, backlight), Fan (mode, temperature source, duty and temperature limits),
-  Display (current and power scale, theme on older firmware, rotation, timeout
-  mode, cycle screens, cycle time, timeout, averaging, default screen), the
-  fault alarm table (display, buzzer, soft off, hard off per fault type) and the
-  fault thresholds. **Apply** writes only the fields you changed, the way the
-  app does; **Store to device memory** keeps them after a power cycle; **Reload
-  from device**, **Reload from device memory** and **Reset to defaults** (asks
-  first) are there too. Out-of-range values are refused with a message,
-- **Theme** (firmware with the color theme, config V3), opened on demand: the
-  app's presets, the four colors, display inversion, the background slot (the
-  fan animation follows it, as in the app), a custom background image with the app's fit, scale and offsets, a live
-  preview of the main screen, **Apply**, **Reload from device**, **Save theme
-  file...** and **Load theme file...** (.wv2t) and **Restore factory artwork**
-  (see *Theme editor* below),
-- **Alerts and shutdown**: Shutdown on fault, Start at login (fault
-  notifications are always on),
-- **LAN monitoring**: Publish on the LAN, the port (the page follows WireView Mini to
-  a new port), the remote hosts to watch, and the network secret; with
-  wireviewd, the daemon's own settings instead of the first two (below),
-- **Firmware**: the device's and the bundled firmware (version and build), what a
-  flash would do, and **Update firmware** (see *Firmware updates* below),
-- **Tools**: Launch WireView Desktop (where the app is installed) and
-  where WireView Mini's log and settings are.
-
-Settings changed on the page are saved to `settings.json` and applied at once,
-the same path as the tray's switches (and, as with those, an app that is open
-at the same time writes back its own copy on its next settings save). Device writes go to the device the same
-way as a command from the LAN, so they work over hwmon with wireviewd and over
-direct serial alike. `GET /sensors` on the same port is unchanged.
-
-**Charts and the device log.** WireView Mini keeps the readings of this PC's
-device of the last `HistoryMinutes` minutes in memory, one sample a second: 60
-minutes by default (about 350 KB), at most 1440 (a day, about 8.5 MB), 0 turns
-it off. Set it in `settings.json` (`"HistoryMinutes": 120`); the key is written
-only when you set it, and a change applies at once. The history is not saved to
-disk, so it starts empty with WireView Mini, and it pauses while the serial port
-is lent to the app or busy with a flash, a theme transfer or a log read. The
-Charts card reads it only while it is open and the page is visible, and the new
-samples then come with the status poll, so an open chart adds no requests.
-**Export CSV** downloads every sample kept in the columns and formats of the
-app's CSV log (Timestamp, Connected, HW, FW, the totals, the four temperatures,
-then V1, I1 to V6, I6; times in UTC). **Read from device**
-in the Device log card reads the log the device keeps in its flash, as the app's
-Logging page does: the whole 8 MB log area over the serial port (about a minute and a half;
-with wireviewd WireView Mini borrows the port, which needs the `wireview`
-group), split into power cycles with the app's code. The log has no clock, so,
-as in the app, each cycle's time counts from its power-on (from 2026-01-01
-00:00 in the CSV). The result stays in WireView Mini's memory until the next
-read (a full log is at most 7.5 MB); a cycle's **Export CSV** has the columns of
-the app's Logging export. While the log is read, the other device controls, the
-theme editor and the firmware flash wait, and the app cannot borrow the port.
-
-**wireviewd's settings.** When the device is reached through hwmon with
-wireviewd, the daemon does the LAN publishing, so the **LAN monitoring** card
-says so with what answers on the daemon's port (*answering on port 9876* or
-*off*) and edits the daemon's settings in `/etc/wireview/config` in place of
-WireView Mini's own switch and port: **Publish on the LAN** (`remote_enabled`),
-**Port**, **Bind address** (empty for all addresses), **Secret** (the passphrase
-other hosts sign their writes to this PC with) and **Log retention** (days, 0
-keeps every log). **Save** writes only the changed keys through
-`wireviewctl config set` (the secret on its standard input, never on a command
-line) and wireviewd reloads them without a restart; the result line shows the
-daemon's answer, such as `config reloaded: listener on [::]:9876`, or
-wireviewctl's message when a value is refused or the file is not writable.
-**Use the same secret for remote hosts**, under WireView Mini's network secret,
-copies the daemon's secret there on Save, so this PC signs its writes to the
-other hosts with the same one. This needs wireview-hwmon 1.8 or newer (older
-versions have no `wireviewctl config`, and the card says so) and membership of
-the `wireview` group (`sudo usermod -aG wireview $USER`, then log in again).
-WireView Mini moves its own loopback listener off a port you give the daemon, and
-the page follows it. `WIREVIEW_CTL` overrides which `wireviewctl` is run.
-
-**Firmware updates.** WireView Mini ships the same firmware image as the app
-(`TG-WV-PRO2-FW.hex`, next to `wireview-mini`) and the panel's **Firmware** card
-flashes it with the same checks as the app's Device page: it refuses an image
-made for another product, refuses an image older than Noctua Edition support on
-a Noctua Edition, and flashes an older or identical build only after you tick
-*Flash the older (or same) firmware anyway*. **Update firmware** shows the same
-warning as the app first; **Flash now** restarts the device into its bootloader
-and flashes it, with a progress bar, and the device reconnects on its own. On
-Linux it needs the `dfu-util` package (the card says when it is missing); with
-wireviewd the bootloader command goes through the daemon and needs the
-`wireview` group; on Windows it uses the native WinUSB flasher, as the app does.
-While a flash runs the other device controls are off, the app cannot borrow the
-serial port, and the tray's Quit waits for the end. The tray shows *Firmware
-update available*, which opens the panel, when the bundled firmware is newer
-than the device's. The [firmware flashing warning](#features) applies here too.
-`WIREVIEW_DFU_UTIL` overrides which `dfu-util` is run.
-
-**Theme editor.** The panel's **Theme** card does what the app's theme editor
-does. Opening it, **Reload from device** and picking a slot not read yet read the
-device's colors from its configuration and the slot's artwork from its flash
-over the serial port (about a second; with wireviewd WireView Mini borrows the
-port from the daemon for it, which needs the `wireview` group; without it the
-preview shows no artwork). The status poll never reads the artwork. **Apply** writes the colors, inversion and slots
-the way the configuration's Apply does (Store to device memory keeps them). A
-custom background image is scaled in the browser to 320x170 with the app's fit
-modes, converted to the device's RGB565 and written to the selected slot's flash
-with the highlight-tinted fan frames the app makes, then the screen is redrawn;
-the transfer takes a minute or two, with a progress bar. Theme files are written
-and read with the app's code, so they open in the app and in the official Windows
-app. **Restore factory artwork** writes the selected slot and its fan frames back
-from `ext_flash.bin` (shipped next to `wireview-mini`, the same file as the app's,
-and also the Noctua Edition's factory artwork). While a theme transfer runs, the
-other device controls and the firmware flash wait, and the app cannot borrow the
-serial port.
-
-On Windows WireView Mini has no console window, so starting it at login shows
-nothing. Its options still print in a terminal; to wait for the output and get
-the exit code, use `start /wait wireview-mini --status` in cmd, or
-`wireview-mini --status | Out-Host` in PowerShell.
-
-**How the app uses it.** At startup the app asks `http://127.0.0.1:9876/sensors`
-before it opens the serial port (after hwmon on Linux). When WireView Mini answers,
-the app connects through it, shown as `mini` in the device picker and
-*Connected via WireView Mini* in the status bar, and does not open the port itself:
-two programs on one serial port corrupt each other's data. The app signs its
-commands to WireView Mini with a key WireView Mini keeps next to `settings.json`
-(`mini.key`), so writes work with no network secret set. The app does not show
-a second fault notification while WireView Mini runs.
-
-**Serial handover.** Firmware flashing, reading the device log and the theme
-editor need the serial port itself. For those the app asks WireView Mini to let go
-of the port, does the transfer and hands the port back, like the handover with
-wireviewd. Meanwhile WireView Mini keeps publishing the last reading, marked not
-connected. If the app never hands the port back (it crashed), WireView Mini takes it
-back on its own after at most 10 minutes. The handover is accepted only from
-this PC.
-
-Build it from source with:
-
-```bash
-dotnet publish WireViewMini -c Release -r linux-x64
-dotnet publish WireViewMini -c Release -r win-x64
-```
-
-On Linux this is a NativeAOT build: one native `wireview-mini` executable of
-about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so`
-next to it for the serial port. It idles at about 40 MB resident instead of
-about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang`
-plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them,
-add `-p:PublishAot=false` to get the self-contained single-file JIT build, which
-behaves the same.
-
-On Windows the default is the single-file JIT build, and it also builds from
-Linux. A NativeAOT build can only be made on Windows, with the Visual Studio
-Build Tools and their "Desktop development with C++" workload:
-
-```powershell
-dotnet publish WireViewMini -c Release -r win-x64 -p:PublishAot=true
-```
-
-Expect the Windows AOT build to lose its fault toasts: the toast library
-registers the app through COM and code generated at run time, and NativeAOT
-supports neither.
-
-## Requirements
-
-- Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
-- A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (the Noctua Edition is tested on a real unit)
-- For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later
-- Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency)
-
-## Installation
-
-### Windows (x64)
-
-A self-contained Windows build, **WireView Plus**, is published on the [Releases](https://github.com/emaspa/wireview-linux/releases) page (`wireview-plus-<version>-windows-x64.zip`). Extract it and run the executable - no installation or .NET runtime required.
-
-### Ubuntu 24.04 / 26.04 LTS (PPA)
-
-```bash
-sudo add-apt-repository ppa:sparvoli/wireview-hwmon
-sudo apt update
-sudo apt install wireview-linux
-```
-
-To also install the hwmon kernel module and daemon for system-wide sensor integration:
-
-```bash
-sudo apt install wireview-hwmon wireview-hwmon-dkms
-```
-
-### Ubuntu / Debian (.deb package)
-
-A pre-built `.deb` package is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. Download it and install:
-
-```bash
-sudo apt install ./wireview-linux_*_amd64.deb
-```
-
-### Fedora (COPR)
-
-```bash
-sudo dnf copr enable emaspa/wireview-linux
-sudo dnf install wireview-linux
-```
-
-Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page - a single RPM works on all current Fedora releases (tested on 42, 43, and 44):
-
-```bash
-sudo dnf install ./wireview-linux-*.x86_64.rpm
-```
-
-To also install the hwmon kernel module and daemon for system-wide sensor integration (same COPR repo):
-
-```bash
-sudo dnf install wireview-hwmon wireview-hwmon-dkms
-```
-
-The package is a self-contained binary - no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the Flatpak below instead.
-
-### Flatpak (Bazzite / Silverblue / immutable distros)
-
-A `.flatpak` bundle is available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page:
-
-```bash
-flatpak install ./wireview-linux-*.flatpak
-flatpak run io.github.emaspa.WireViewLinux
-```
-
-The Flatpak supports direct USB serial mode. A sandbox cannot install udev rules, so install the rule on the host once:
-
-```bash
-sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \
-  -o /etc/udev/rules.d/99-wireview.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
-
-### Arch Linux / CachyOS / EndeavourOS (AUR)
-
-[`wireview-linux-bin`](https://aur.archlinux.org/packages/wireview-linux-bin) installs the pre-built release binary (no .NET SDK, no compile) and tracks the latest release:
-
-```bash
-yay -S wireview-linux-bin
-```
-
-[`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux), started by [Arakmar](https://github.com/Arakmar) and now co-maintained here, builds the same release from source with the Arch .NET SDK. It is updated together with the binary package, so pick whichever you prefer:
-
-```bash
-yay -S wireview-linux        # builds from source, takes a few minutes
-```
-
-To also install the hwmon kernel module and daemon for system-wide sensor integration, load the module and enable the daemon after installing:
-
-```bash
-yay -S wireview-hwmon wireview-hwmon-dkms
-sudo modprobe wireview_hwmon
-sudo systemctl enable --now wireviewd
-```
-
-From the next boot onward both come up automatically (the dkms package registers the module in `modules-load.d` and the service modprobes it on start).
-
-### NixOS (flake)
-
-The repository is a flake. Its NixOS module installs the app, built from source, and the udev rule. Add [wireview-hwmon](https://github.com/emaspa/wireview-hwmon)'s module for the hwmon + daemon mode:
-
-```nix
-{
-  inputs = {
-    wireview-linux.url = "github:emaspa/wireview-linux";
-    wireview-hwmon.url = "github:emaspa/wireview-hwmon";
-  };
-
-  outputs = { nixpkgs, wireview-linux, wireview-hwmon, ... }: {
-    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        ./configuration.nix
-        wireview-linux.nixosModules.default
-        wireview-hwmon.nixosModules.default
-        {
-          programs.wireview-linux.enable = true;
-          services.wireview-hwmon.enable = true;
-          users.users.alice.extraGroups = [ "wireview" ];
-        }
-      ];
-    };
-  };
-}
-```
-
-`nix run github:emaspa/wireview-linux` starts the app without installing it, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
-
-### Serial access (package installs)
-
-The package installs above (PPA, `.deb`, `.rpm`, AUR) install the udev rule and
-the system reloads it automatically, so **serial access works out of the box**
-for the user logged in at the local seat - the rule makes the serial port
-`0660` in the distro's serial group (`dialout`, or `uucp` on Arch-based
-distros), the DFU bootloader `0660 root:dialout`, and gives the active session
-a logind `uaccess` ACL, so no group membership or logout is needed there. The
-rule installs unchanged on any distro. Arch-based distros have no `dialout`
-group, so the AUR package gives the DFU bootloader their serial group `uucp`
-instead.
-
-If access still fails in an unusual setup (for example over SSH, where the
-`uaccess` ACL doesn't apply), add yourself to the serial group and log back
-in:
-
-```bash
-# Debian, Ubuntu, Fedora and most other distros
-sudo usermod -aG dialout "$USER"
-
-# Arch-based distros
-sudo usermod -aG uucp "$USER"
-```
-
-### Option 1: Pre-built binary (no .NET required)
-
-The tarball is self-contained: the app binary, the udev rule, and a one-time
-`install.sh` that sets up USB serial access.
-
-```bash
-# Download and extract the latest release
-curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz
-cd wireview-linux-*-linux-x64
-
-# One-time USB serial setup (installs the udev rule)
-./install.sh
-
-# Run
-./WireView2
-```
-
-### Option 2: Build from source
-
-Requires [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later.
-
-```bash
-git clone https://github.com/emaspa/wireview-linux.git
-cd wireview-linux
-./install.sh
-```
-
-Run it as your own user; it uses `sudo` where it needs root. The install script will:
-1. Install the udev rule (serial port and DFU bootloader `0660` in the serial group,
-   plus a `uaccess` ACL for the user logged in at the local seat). The serial group
-   is `dialout`, or `uucp` on Arch-based distros
-2. Only when there is no local seat session (SSH, for example): add your user to that
-   group, which needs a new login to take effect
-3. Build the application
-
-Or manually step by step:
-
-```bash
-git clone https://github.com/emaspa/wireview-linux.git
-cd wireview-linux
-
-# Install udev rules (grants access to the WireView USB device)
-sudo cp udev/99-wireview.rules /etc/udev/rules.d/
-# Arch-based distros have no dialout group, their serial group is uucp
-getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-
-# Only over SSH or another session without a local seat (no uaccess ACL there):
-# join the serial group, then log in again
-# sudo usermod -aG dialout $USER
-# Arch-based distros: sudo usermod -aG uucp $USER
-
-# Build and run
-dotnet build -c Release
-dotnet run --project WireView2/ -c Release
-```
-
-### Quick permissions fix (no reboot)
-
-If you just want to test without logging out:
-
-```bash
-sudo chmod 666 /dev/ttyACM0
-```
-
-This is temporary and resets when the device is unplugged.
-
-## Usage
-
-The app has five pages accessible from the left sidebar:
-
-| Page | Description |
-|------|-------------|
-| **Overview** | Summary of total current, power, voltage, cable rating, temperatures (sensors that are not connected are hidden), and a fault status/log table with per-fault clear |
-| **Monitoring** | Real-time charts for voltage, current, power, and temperature; custom series selection, colors, and Y scaling |
-| **Logging** | Read device logs per power cycle and export to CSV |
-| **Device** | Device info, full device configuration (fan, display, alarms, thresholds), display theme editor, and firmware updates |
-| **Settings** | App theme (Auto, Light, Dark, Noctua Light, Noctua Dark; Auto follows the desktop's light/dark setting and switches to the Noctua colors while a WireView Pro II Noctua Edition is selected), startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
-
-`wireview-linux --page monitoring` opens on a given page (overview, monitoring,
-logging, device, settings) instead of Overview.
-
-### Configuration profiles
-
-On the **Device** page, you can save the current device configuration as a named profile and load it later. Profiles are stored as JSON files in `~/.local/share/PowerMonitor/profiles/`.
-
-## USB device IDs
-
-| Mode | VID | PID | Description |
-|------|-----|-----|-------------|
-| Normal | `0483` | `5740` | STM32 CDC/ACM virtual serial port |
-| DFU bootloader | `0483` | `df11` | STM32 bootloader (during firmware updates) |
-
-## Project structure
-
-```
-wireview-linux/
-├── WireView2/                  # Main Avalonia UI application
-│   ├── Views/                  # AXAML views
-│   ├── ViewModels/             # MVVM view models
-│   ├── Services/               # App settings, profiles, notifications
-│   └── Assets/                 # Icons, backgrounds
-├── WireViewDeviceLib/          # Device communication library
-│   └── Device/                 # Serial + hwmon + network devices, port finder
-├── WireViewNet/                # LAN layer - /sensors publisher, remote device client, HMAC auth
-├── udev/                       # udev rules for USB permissions
-└── install.sh                  # Installation script
-```
-
-## Tech stack
-
-- **.NET 8.0** - Runtime and build system
-- **Avalonia UI 12.0** - Cross-platform MVVM UI framework
-- **CommunityToolkit.Mvvm 8.4** - MVVM source generators
-- **Custom chart controls** - Lightweight line/gauge/bar charts drawn directly with Avalonia (no charting dependency)
-- **System.IO.Ports** - Serial communication with the device
-
-## Troubleshooting
-
-### Device not detected
-
-1. Check that the device is connected: `lsusb | grep 0483`
-2. Check that `/dev/ttyACM0` exists: `ls -la /dev/ttyACM*`
-3. Check permissions: in a local desktop session `getfacl /dev/ttyACM0` should list your
-   user (the `uaccess` ACL); over SSH, `groups` should include `dialout` (`uucp` on
-   Arch-based distros)
-4. If using a VM, ensure USB passthrough is configured for the VID/PID pair
-
-### Rendering backend
-
-On Linux the app draws with Avalonia's software renderer by default. It keeps
-Mesa out of the process (about 120 MB less resident memory, 55 MB less
-proportional), and it avoids the GL-under-XWayland glitches some Nvidia setups
-showed. It costs CPU only on the Monitoring page at fast polling (at 50 ms,
-about 10 % of one core instead of 4 % on a 1200x800 window; larger windows cost
-proportionally more). **Settings → Startup → GPU rendering** switches to the
-GPU backend at the next start. `WIREVIEW_RENDER_MODE` overrides the setting
-with a comma-separated preference list:
-
-```bash
-WIREVIEW_RENDER_MODE=egl,software wireview-linux   # Linux: software, egl, glx, vulkan
-set WIREVIEW_RENDER_MODE=software                   # Windows: software, angle, wgl, vulkan
-```
-
-Windows defaults to GPU rendering (ANGLE on Direct3D); the same setting turns
-it off.
-
-### Permission denied on /dev/ttyACM0
-
-```bash
-# Temporary fix (until the device is replugged):
-sudo setfacl -m "u:$USER:rw" /dev/ttyACM0
-
-# Permanent fix:
-sudo cp udev/99-wireview.rules /etc/udev/rules.d/
-# Arch-based distros have no dialout group, their serial group is uucp
-getent group dialout >/dev/null || sudo sed -i 's/GROUP="dialout"/GROUP="uucp"/g' /etc/udev/rules.d/99-wireview.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-# Over SSH or without a local seat session, also join the serial group and
-# log in again:
-sudo usermod -aG dialout $USER
-# Arch-based distros: sudo usermod -aG uucp $USER
-```
-
-## Thanks
+## License and credits
 
 Thanks to [Thermal Grizzly](https://www.thermal-grizzly.com/) for providing a WireView Pro II Noctua Edition unit for development.
-
-## Disclaimer
 
 This software is an unofficial, community-made Linux port of the WireView Pro II application. It is **not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs**. All trademarks belong to their respective owners.
 
 Use at your own risk. This software interacts with hardware, while every effort has been made to ensure correctness, the authors are not responsible for any damage to your device.
-
-## License
 
 This project contains code decompiled from the original WireView Pro II Windows application and code from the [WireViewDeviceLib](https://github.com/ElmorLabs-ThermalGrizzly/WireViewDeviceLib) repository. Please respect the original authors' rights. This port is provided for personal use and interoperability purposes.
