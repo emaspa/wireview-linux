@@ -157,7 +157,8 @@ needs the AppIndicator/KStatusNotifierItem extension. On a desktop without a tra
 icon and adds it when a tray shows up later. `--no-tray` turns it off.
 
 **Control panel.** A single page served by WireView Mini on its own port, opened in
-the default browser by the tray's **Settings and controls...** or by
+the default browser by a click on the tray icon (left click on Windows, the
+tray's activate action on Linux), by the tray's **Settings and controls...** or by
 `wireview-mini --open` (which also prints the address, for desktops without a
 tray). It works offline and answers this PC only: from any other address it
 returns 403, even while the port is open on the LAN. Each run of WireView Mini makes

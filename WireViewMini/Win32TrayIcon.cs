@@ -167,10 +167,16 @@ internal sealed class Win32TrayIcon : ITrayIcon
                 // Version 4: the event in LOWORD(lParam), the anchor point in
                 // wParam. Older shells: the mouse message is lParam itself.
                 uint evt = _version4 ? (uint)(lParam.ToInt64() & 0xFFFF) : (uint)lParam.ToInt64();
-                bool open = _version4
-                    ? evt is WM_CONTEXTMENU or NIN_SELECT or NIN_KEYSELECT
-                    : evt is WM_RBUTTONUP or WM_LBUTTONUP;
-                if (open)
+                // Left click (or Enter on the icon): the control panel. Right click
+                // (or Shift+F10): the menu. A double click's second press is ignored.
+                bool select = _version4 ? evt is NIN_SELECT or NIN_KEYSELECT : evt == WM_LBUTTONUP;
+                bool menu = _version4 ? evt == WM_CONTEXTMENU : evt == WM_RBUTTONUP;
+                if (select)
+                {
+                    try { _onCommand(TrayCommand.OpenPanel); }
+                    catch (Exception ex) { FileLog.Warn($"tray: {TrayCommand.OpenPanel} failed: {ex.Message}"); }
+                }
+                else if (menu)
                 {
                     int x, y;
                     if (_version4)

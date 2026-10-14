@@ -328,7 +328,9 @@ internal sealed class SniTrayIcon : ITrayIcon
         switch (request.MemberAsString)
         {
             case "Activate":
-                Dispatch(TrayCommand.OpenApp);
+                // A click (or double click, depending on the tray) on the icon
+                // opens the control panel; the app has its own menu entry.
+                Dispatch(TrayCommand.OpenPanel);
                 ReplyEmpty(context);
                 break;
             case "SecondaryActivate":
