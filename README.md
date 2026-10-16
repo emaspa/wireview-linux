@@ -44,8 +44,6 @@ Why there are two clients, and which to leave running. Device connected, one rea
 | WireView Mini on Windows | 37 MB | 0 to 0.2 % | Same; Task Manager shows 24 MB, as its Memory column leaves out the shared pages |
 | wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
 
-In short: the app is for looking at the device and WireView Mini for watching it. The daemon is the base under both on Linux: it gives the device to the whole system as hwmon sensors and on the LAN, serves the app and WireView Mini, and runs alone on a machine with no desktop.
-
 ## Install
 
 | Channel | Commands |
