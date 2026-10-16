@@ -224,7 +224,9 @@ binary, zero trimming warnings, source-generated JSON) starts at 23 MB RSS and l
 39 MB RSS / 33 MB PSS / 23 MB anonymous, 0.2 % of a core, so AOT is the default Linux publish.
 Windows gets the AOT build too when published on a Windows machine, now that the notifications come
 from the tray icon and no toast package is left (the SDK cannot compile a Windows build natively from
-Linux, so the zip made here stays the JIT build). Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+Linux, so the zip made here stays the JIT build). Measured on Windows 11 (2026-10-16, Task Manager,
+five minutes, panel closed): the JIT single-file build at 39 to 43 MB and 0.1 %, the NativeAOT build
+(9.4 MB exe, zero warnings) at 23.6 MB and 0 to 0.2 %. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
 packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 
