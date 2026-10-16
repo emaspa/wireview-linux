@@ -30,14 +30,14 @@ Both read the same `settings.json`. While WireView Mini runs, the app connects t
 
 ### Footprint
 
-Why there are two clients, and which to leave running. Measured on Linux with wireview-hwmon alongside, device connected, one reading a second (the full method and history is in [docs/footprint-plan.md](docs/footprint-plan.md)):
+Why there are two clients, and which to leave running. Device connected, one reading a second, after a few minutes. Memory is the resident set on Linux (measured with wireview-hwmon alongside) and Task Manager's figure on Windows, which counts less; proportional-set figures, the method and the history are in [docs/footprint-plan.md](docs/footprint-plan.md).
 
-| Process | Memory (RSS / PSS) | Idle CPU, one core | Notes |
+| Process | Memory | Idle CPU, one core | Notes |
 |---|---|---|---|
-| Desktop app, window visible | 150 MB / 138 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
-| Desktop app, minimized | 126 MB / 115 MB | 0.6 % | |
-| WireView Mini (Linux, ahead-of-time compiled) | 50 MB / 43 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
-| WireView Mini (Windows, ahead-of-time compiled) | 24 MB | 0 to 0.2 % | Task Manager's figures after five minutes; the single-file build compiled at run time by the .NET runtime it carries with it sits at 39 to 43 MB instead |
+| Desktop app, window visible | 150 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
+| Desktop app, minimized | 126 MB | 0.6 % | |
+| WireView Mini on Linux | 50 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
+| WireView Mini on Windows | 24 MB | 0 to 0.2 % | Same, from Task Manager |
 | wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
 
 In short: the app is for looking at the device, WireView Mini for watching it, and the daemon for machines without a desktop at all.
