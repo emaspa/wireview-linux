@@ -2,7 +2,9 @@
 
 Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application, plus **WireView Mini**, a small always-on companion with a tray icon and a browser control panel. A **Windows** build (**WireView Plus**) is also available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/). Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. For sensors in `/sys/class/hwmon/` (`sensors`, Grafana, conky, btop) and the `wireviewctl` CLI, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon).
 
-![Screenshot](docs/screenshot-v2.png)
+![The desktop app's Overview page](docs/screenshot-app.png)
+
+The app follows the connected device's look ([Noctua Edition](docs/screenshot-app-noctua.png)). WireView Mini's control panel: [first screen](docs/screenshot-mini.png), [every card open](docs/screenshot-mini-full.png).
 
 ## Features
 

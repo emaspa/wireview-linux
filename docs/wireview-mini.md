@@ -62,6 +62,10 @@ On Linux the icon is a StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it 
 
 ## Control panel
 
+![The control panel's first screen](screenshot-mini.png)
+
+The whole page with every card open: [screenshot-mini-full.png](screenshot-mini-full.png).
+
 A single page served by WireView Mini on its own port, opened in the default browser by a click on the tray icon (left click on Windows, the tray's activate action on Linux), by the tray's **Settings and controls...** or by `wireview-mini --open` (which also prints the address, for desktops without a tray).
 
 It works offline and answers this PC only: from any other address it returns 403, even while the port is open on the LAN. Each run of WireView Mini makes a new random access token; the tray and `--open` put it in the address (after `#t=`), and the page sends it with every request, so other web pages and other users cannot use it.
