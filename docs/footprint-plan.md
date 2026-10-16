@@ -233,7 +233,15 @@ working set 23 MB against 29 to 32 MB anonymous on Linux (2026-10-16, three minu
 extra is not the GC: DOTNET_GCgen0size=4 MB and DOTNET_GCHeapHardLimit=64 MB changed nothing (45.0 MB
 RSS, 28.8 MB anonymous either way; concurrent GC is already off). It comes from the process shape:
 11 threads against 4 (the D-Bus tray, the wireviewd path), OpenSSL's libcrypto for the command HMAC
-(3.5 MB resident, where Windows uses the system's CNG) and glibc's per-thread arenas. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+(3.5 MB resident, where Windows uses the system's CNG) and glibc's per-thread arenas.
+
+The official Windows app, measured the same way for comparison (2026-10-16, Thermal Grizzly's WireView2
+1.0.8 on a Windows 11 VM with a GeForce RTX 5090 passed through, device on COM5, perf counters sampled
+over 60 s after 5 minutes): window open 341 MB working set / 310 MB private working set / 594 MB
+private bytes, 2.1 % of a core, 89 threads; minimized afterwards 166 MB / 133 MB / 487 MB, 0.5 %;
+started minimized to the tray and never opened 92 MB / 32 MB, 0.03 %, trimmed by Windows to 42 MB / 7 MB
+after twelve idle minutes. So the official app idles small only until its window has been shown once,
+and keeps about half of what the window cost after it is minimized again. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
 packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
 and immutable-distro users headless alerts and shutdown without the DKMS module.
 
