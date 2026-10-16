@@ -30,14 +30,14 @@ Both read the same `settings.json`. While WireView Mini runs, the app connects t
 
 ### Footprint
 
-Why there are two clients, and which to leave running. Device connected, one reading a second, after a few minutes. Memory is the resident set on Linux (measured with wireview-hwmon alongside) and Task Manager's figure on Windows, which counts less; proportional-set figures, the method and the history are in [docs/footprint-plan.md](docs/footprint-plan.md).
+Why there are two clients, and which to leave running. Device connected, one reading a second, after a few minutes. Memory is what the process has resident, the same measure on both systems (resident set on Linux, working set on Windows); the method, the proportional-set figures and the history are in [docs/footprint-plan.md](docs/footprint-plan.md).
 
 | Process | Memory | Idle CPU, one core | Notes |
 |---|---|---|---|
-| Desktop app, window visible | 150 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
-| Desktop app, minimized | 126 MB | 0.6 % | |
+| Desktop app, window visible | 150 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Linux, with wireview-hwmon alongside. Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
+| Desktop app, minimized | 126 MB | 0.6 % | Linux, as above |
 | WireView Mini on Linux | 50 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
-| WireView Mini on Windows | 24 MB | 0 to 0.2 % | Same; Task Manager's figure leaves out shared pages, and the working set, which compares with the Linux row, is 37 MB |
+| WireView Mini on Windows | 37 MB | 0 to 0.2 % | Same; Task Manager shows 24 MB, as its Memory column leaves out the shared pages |
 | wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
 
 In short: the app is for looking at the device, WireView Mini for watching it, and the daemon for machines without a desktop at all.
