@@ -836,6 +836,25 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     // ---- Fault alerts ----
 
+    /// <summary>The control panel's Send a test notification: one notification
+    /// through the notifier the fault alerts use. Returns whether the desktop took
+    /// it and a sentence for the user (why not, as the notifier logs it).</summary>
+    public (bool Ok, string Message) TestNotification()
+    {
+        FileLog.Info("control panel: test notification");
+        if (_toast.Show("WireView Mini", "This is how a fault alert looks on this desktop."))
+            return (true, "Notification sent.");
+#if WINDOWS
+        if (Win32TrayIcon.Current == null)
+            return (false, "Not shown: WireView Mini has no tray icon (no notification area, or it runs with --no-tray).");
+#endif
+        if (_toast is NullToastNotifier)
+            return (false, "Not shown: this system has no notifier.");
+        if (_toast is LinuxToastNotifier && !LinuxToastNotifier.Found())
+            return (false, "Not shown: notify-send was not found (install libnotify-bin, or libnotify).");
+        return (false, "Not shown: the desktop refused it, see the log.");
+    }
+
     private void OnData(DeviceManager mgr, string id, DeviceData data, bool local)
     {
         FaultMonitor monitor;

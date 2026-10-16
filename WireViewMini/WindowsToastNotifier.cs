@@ -11,17 +11,27 @@ namespace WireView2.Mini;
 /// notification, as there is no notification area to show it in.</summary>
 internal sealed class WindowsToastNotifier : IToastNotifier
 {
-    public void Show(string title, string message)
+    public bool Show(string title, string message)
     {
         try
         {
             var tray = Win32TrayIcon.Current;
-            if (tray == null) FileLog.Warn($"notification not shown (no tray icon): {title}: {message}");
-            else if (!tray.ShowNotification(title, message)) FileLog.Warn($"notification refused by the shell: {title}: {message}");
+            if (tray == null)
+            {
+                FileLog.Warn($"notification not shown (no tray icon): {title}: {message}");
+                return false;
+            }
+            if (!tray.ShowNotification(title, message))
+            {
+                FileLog.Warn($"notification refused by the shell: {title}: {message}");
+                return false;
+            }
+            return true;
         }
         catch (Exception ex)
         {
             FileLog.Warn($"notification failed: {ex.Message}");
+            return false;
         }
     }
 }

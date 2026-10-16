@@ -500,6 +500,9 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
         <input type="checkbox" id="sLogin">
       </div>
       <p class="note">Fault notifications are always on while WireView Mini runs, for this PC and for the remote hosts.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="testNotify">Send a test notification</button>
+      </div>
       <p class="note hidden" id="noShutdownNote">WireView Mini was started with --no-shutdown: it logs instead of powering off.</p>
       <div class="result" id="alertResult"></div>
     </section>
@@ -1361,6 +1364,12 @@ const WVPixels = (function () {
     if (!r.ok) throw new Error(r.message);
     return r.message;
   }, [$("openApp")]));
+
+  $("testNotify").addEventListener("click", () => run("alertResult", async () => {
+    const r = await api("POST", "/api/test-notification");
+    if (!r.ok) throw new Error(r.message);
+    return r.message;
+  }, [$("testNotify")]));
 
   // ---- wireviewd settings (Linux, hwmon + daemon) ----
 

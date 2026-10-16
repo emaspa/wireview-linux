@@ -118,7 +118,7 @@ The device's and the bundled firmware (version and build), what a flash would do
 
 ### Alerts and shutdown
 
-Shutdown on fault, Start at login (fault notifications are always on).
+Shutdown on fault, Start at login (fault notifications are always on), and **Send a test notification**, which shows one notification the way a fault alert is shown, to check that notifications reach this desktop (the result line says why when they do not).
 
 ### LAN monitoring
 

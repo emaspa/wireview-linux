@@ -115,6 +115,7 @@ internal sealed class ControlPanel
                 ("POST", "/api/command") => PostCommand(req.Body),
                 ("POST", "/api/settings") => PostSettings(req.Body),
                 ("POST", "/api/open-app") => OpenApp(),
+                ("POST", "/api/test-notification") => TestNotification(),
                 ("GET", "/api/firmware") => GetFirmware(),
                 ("POST", "/api/firmware/flash") => PostFlash(req.Body),
                 ("GET", "/api/theme") => GetTheme(req.Query),
@@ -134,7 +135,7 @@ internal sealed class ControlPanel
                 ("POST", "/api/profiles") => PostProfile(req.Body),
                 ("GET", "/api/profile") => GetProfile(ParseQuery(req.Query)),
                 ("DELETE", "/api/profile") => DeleteProfile(ParseQuery(req.Query)),
-                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/daemon-config"
+                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/test-notification" or "/api/daemon-config"
                     or "/api/firmware" or "/api/firmware/flash" or "/api/theme" or "/api/theme/restore-defaults"
                     or "/api/theme/file" or "/api/theme/file/export" or "/api/history" or "/api/history.csv"
                     or "/api/devicelog" or "/api/devicelog/read" or "/api/profiles" or "/api/profile")
@@ -1231,6 +1232,12 @@ internal sealed class ControlPanel
     {
         var (started, message) = GuiLauncher.Launch();
         return Ok(new PanelMessage(started, message), MiniJsonContext.Default.PanelMessage);
+    }
+
+    private HttpResponseInfo TestNotification()
+    {
+        var (ok, message) = _mini.TestNotification();
+        return Ok(new PanelMessage(ok, message), MiniJsonContext.Default.PanelMessage);
     }
 
     // ---- Helpers ----
