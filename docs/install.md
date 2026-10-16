@@ -11,7 +11,7 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 
 ## Windows (x64)
 
-A self-contained Windows build, **WireView Plus**, is published on the [Releases](https://github.com/emaspa/wireview-linux/releases) page (`wireview-plus-<version>-windows-x64.zip`). Extract it and run the executable: no installation or .NET runtime required.
+The desktop app is not built for Windows, where the official application covers that. [WireView Mini](wireview-mini.md) is: download `wireview-mini-<version>-windows-x64.zip` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page, extract it and run `wireview-mini.exe`, or `wireview-mini --install` to start it at login. No installation or .NET runtime required.
 
 ## Ubuntu 24.04 / 26.04 LTS (PPA)
 

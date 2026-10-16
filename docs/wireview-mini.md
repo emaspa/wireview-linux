@@ -48,7 +48,7 @@ On Windows WireView Mini has no console window, so starting it at login shows no
 WireView Mini puts the WireView icon in the notification area. Its menu, top to bottom:
 
 - the live state (`WireView Pro II: 123.4 W`, the fault while one is active, *Serial port lent to the app* during a handover, or *No device*),
-- **Launch WireView Desktop** (starts the app, or on Windows brings the running app's window forward; shown only where the app is installed),
+- **Launch WireView Desktop** (starts the app; shown only where the app is installed, so on Linux),
 - **Settings and controls...**, which opens the control panel in the browser,
 - **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then **Pause updates** and **Resume updates** (the device's display),
 - **Clear faults**, enabled while a fault is active (clears the active faults and keeps the fault log, like the app's fault banner),
@@ -162,7 +162,7 @@ Firmware flashing, reading the device log and the theme editor need the serial p
 
 ## LAN publishing and ports
 
-WireView Mini publishes on port `9876`, the app's publish port: on the LAN when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off. While it runs, it publishes instead of the app (see [Publishing this host](lan-monitoring.md#publishing-this-host-windows)).
+WireView Mini publishes on port `9876`, the app's publish port: on the LAN when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off. While it runs, it publishes instead of the app (see [Publishing this host](lan-monitoring.md#publishing-this-host)).
 
 With wireviewd running it leaves publishing to the daemon: its own listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on the LAN** says (it logs this once).
 

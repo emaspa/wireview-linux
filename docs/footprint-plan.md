@@ -1,6 +1,8 @@
 # Memory and CPU footprint plan (wireview-linux and WireView Plus)
 
 Status: phase 1 (section 3) implemented 2026-10-13, measured below. Phases 2 and 3 are proposals.
+Since 2026-10-16 the Windows build of the desktop app (WireView Plus) is no longer distributed: on
+Windows the client is WireView Mini, and the official application remains the desktop app there.
 
 ## 1. Where the resources go today
 

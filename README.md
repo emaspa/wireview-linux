@@ -1,6 +1,6 @@
 # WireView Pro II - Linux Unofficial Client
 
-Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application, plus **WireView Mini**, a small always-on companion with a tray icon and a browser control panel. A **Windows** build (**WireView Plus**) is also available on the [Releases](https://github.com/emaspa/wireview-linux/releases) page. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/). Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. For sensors in `/sys/class/hwmon/` (`sensors`, Grafana, conky, btop) and the `wireviewctl` CLI, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon).
+Unofficial Linux port of the [Thermal Grizzly WireView Pro II](https://www.thermal-grizzly.com/en/wireview-pro-ii-gpu/s-tg-wv-p2) desktop application, plus **WireView Mini**, a small always-on companion with a tray icon and a browser control panel. On Windows, WireView Mini is the client; the desktop app is Linux only. Built with .NET 8.0 and [Avalonia UI](https://avaloniaui.net/). Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs. For sensors in `/sys/class/hwmon/` (`sensors`, Grafana, conky, btop) and the `wireviewctl` CLI, see [wireview-hwmon](https://github.com/emaspa/wireview-hwmon).
 
 ![The desktop app's Overview page](docs/screenshot-app.png)
 
@@ -22,7 +22,7 @@ The app follows the connected device's look ([Noctua Edition](docs/screenshot-ap
 
 ## Two apps
 
-| | Desktop app (`WireView2`, WireView Plus on Windows) | WireView Mini (`wireview-mini`) |
+| | Desktop app (`WireView2`, Linux) | WireView Mini (`wireview-mini`, Linux and Windows) |
 |---|---|---|
 | What it is | The full window: Overview, Monitoring, Logging, Device and Settings pages | A program with no window: a tray icon and a control panel in the browser |
 | When it runs | When you want to look at the device | All the time, started at login |
@@ -50,7 +50,7 @@ In short: the app is for looking at the device, WireView Mini for watching it, a
 
 | Channel | Commands |
 |---|---|
-| Windows (x64) | Download `wireview-plus-<version>-windows-x64.zip` from [Releases](https://github.com/emaspa/wireview-linux/releases), extract it, run the executable |
+| Windows (x64) | WireView Mini only: download `wireview-mini-<version>-windows-x64.zip` from [Releases](https://github.com/emaspa/wireview-linux/releases), extract it and run `wireview-mini.exe` (`wireview-mini --install` starts it at login). The official application remains the desktop app there |
 | Ubuntu 24.04 / 26.04 LTS (PPA) | `sudo add-apt-repository ppa:sparvoli/wireview-hwmon`<br>`sudo apt install wireview-linux` |
 | Ubuntu / Debian (.deb) | `sudo apt install ./wireview-linux_*_amd64.deb` (from [Releases](https://github.com/emaspa/wireview-linux/releases)) |
 | Fedora (COPR) | `sudo dnf copr enable emaspa/wireview-linux`<br>`sudo dnf install wireview-linux` |
@@ -85,7 +85,7 @@ wireview-mini --open       # open its control panel in the browser
 wireview-mini --status     # connected device, fault state and version
 ```
 
-Settings live in `~/.config/PowerMonitor/settings.json` on Linux and `%APPDATA%\PowerMonitor\settings.json` on Windows, shared by the app and WireView Mini.
+Settings live in `~/.config/PowerMonitor/settings.json` on Linux, shared by the app and WireView Mini, and in `%APPDATA%\PowerMonitor\settings.json` on Windows, where WireView Mini shares the official application's file.
 
 ## Documentation
 

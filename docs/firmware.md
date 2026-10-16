@@ -49,4 +49,4 @@ With wireviewd the bootloader command goes through the daemon and needs the `wir
 
 ### Windows: WinUSB
 
-On Windows the app and WireView Mini use the native WinUSB flasher, so `dfu-util` is not needed.
+On Windows WireView Mini uses the native WinUSB flasher, so `dfu-util` is not needed.

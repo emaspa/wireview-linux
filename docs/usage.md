@@ -72,11 +72,8 @@ The **Device** page flashes the bundled firmware over USB DFU. See [Firmware upd
 On Linux the app draws with Avalonia's software renderer by default. It keeps Mesa out of the process (about 120 MB less resident memory, 55 MB less proportional), and it avoids the GL-under-XWayland glitches some Nvidia setups showed. It costs CPU only on the Monitoring page at fast polling (at 50 ms, about 10 % of one core instead of 4 % on a 1200x800 window; larger windows cost proportionally more). **Settings → Startup → GPU rendering** switches to the GPU backend at the next start. `WIREVIEW_RENDER_MODE` overrides the setting with a comma-separated preference list:
 
 ```bash
-WIREVIEW_RENDER_MODE=egl,software wireview-linux   # Linux: software, egl, glx, vulkan
-set WIREVIEW_RENDER_MODE=software                   # Windows: software, angle, wgl, vulkan
+WIREVIEW_RENDER_MODE=egl,software wireview-linux   # software, egl, glx, vulkan
 ```
-
-Windows defaults to GPU rendering (ANGLE on Direct3D); the same setting turns it off.
 
 ## USB device IDs
 

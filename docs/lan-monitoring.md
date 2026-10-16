@@ -8,13 +8,13 @@ In **Settings → Remote hosts**, add a comma-separated list of hosts (`192.168.
 
 [WireView Mini](wireview-mini.md) watches the same remote hosts: it raises their fault notifications, lists them in its tray's **Remote hosts** submenu and in the control panel, but a remote host's fault never powers this PC off.
 
-## Publishing this host (Windows)
+## Publishing this host
 
-**Settings → Publish this host on the LAN** opens a listener (default port `9876`, configurable) so other instances can read this machine's device. **Off by default.**
+**Publish this host on the LAN**, in WireView Mini's control panel and tray menu, opens a listener (default port `9876`, configurable) so other instances can read this machine's device. **Off by default.**
 
-On Linux the `wireviewd` daemon owns publishing, so the toggle is hidden there.
+On Linux the `wireviewd` daemon owns publishing when it runs.
 
-While the [WireView Mini](wireview-mini.md) runs, it publishes instead of the app, and this toggle decides whether it listens on the LAN or on this PC only. With wireviewd running, WireView Mini leaves publishing to the daemon and keeps its own listener on `127.0.0.1`, off the daemon's port. Its port handling is described in [LAN publishing and ports](wireview-mini.md#lan-publishing-and-ports), and its control panel can edit wireviewd's own LAN settings (see [wireviewd settings](wireview-mini.md#wireviewd-settings)).
+The toggle decides whether [WireView Mini](wireview-mini.md) listens on the LAN or on this PC only. With wireviewd running, WireView Mini leaves publishing to the daemon and keeps its own listener on `127.0.0.1`, off the daemon's port. Its port handling is described in [LAN publishing and ports](wireview-mini.md#lan-publishing-and-ports), and its control panel can edit wireviewd's own LAN settings (see [wireviewd settings](wireview-mini.md#wireviewd-settings)).
 
 ## Remote control and configuration (authenticated)
 
@@ -28,6 +28,6 @@ On a host that publishes through wireviewd, the secret is the daemon's **Secret*
 
 | Port | Who listens | Where |
 |------|-------------|-------|
-| `9876` (configurable) | The app's publisher on Windows, wireviewd on Linux, or WireView Mini | The LAN when publishing is on |
+| `9876` (configurable) | wireviewd on Linux, or WireView Mini | The LAN when publishing is on |
 | `9876` on `127.0.0.1` | WireView Mini with publishing off | This PC only |
 | Publish port +1 to +10, else any free port | WireView Mini when the publish port is taken (for example by wireviewd) | This PC only |
