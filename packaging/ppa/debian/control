@@ -9,7 +9,7 @@ Homepage: https://github.com/emaspa/wireview-linux
 Package: wireview-linux
 Architecture: amd64
 Depends: ${misc:Depends}
-Recommends: wireview-hwmon, wireview-hwmon-dkms, dfu-util
+Recommends: wireview-hwmon (>= 1.8.1~), wireview-hwmon-dkms, dfu-util
 Description: WireView Pro II Linux GUI application
  Unofficial Linux GUI for the Thermal Grizzly WireView Pro II GPU power
  monitor. Features real-time monitoring with live charts, device
@@ -18,3 +18,9 @@ Description: WireView Pro II Linux GUI application
  .
  Supports direct serial and hwmon + daemon connection modes.
  Self-contained binary, no .NET runtime required.
+ .
+ Includes WireView Mini (wireview-mini), a small program with no window
+ that keeps fault alerts, shutdown on fault and LAN publishing going with
+ the app closed, with a tray icon and a control panel in the browser.
+ wireview-mini --install starts it at login. wireview-hwmon 1.8.1 or later
+ takes the LAN port back from it when wireviewd starts after it.

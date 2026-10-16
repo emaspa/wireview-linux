@@ -29,7 +29,8 @@ Requires:       fontconfig
 Requires:       freetype
 Requires:       libX11
 # Optional: hwmon kernel module + daemon for system-wide sensor integration.
-Recommends:     wireview-hwmon
+# 1.8.1 takes the LAN port back from WireView Mini on its own.
+Recommends:     wireview-hwmon >= 1.8.1
 # Optional: in-app firmware flashing (DFU download to the STM32 bootloader).
 Recommends:     dfu-util
 
@@ -42,6 +43,11 @@ Talks to the device directly over USB serial, or via the wireview-hwmon kernel
 module and daemon when present. Self-contained binary; no .NET runtime is
 required on the host.
 
+Includes WireView Mini (wireview-mini), a small program with no window that
+keeps fault alerts, shutdown on fault and LAN publishing going with the app
+closed, with a tray icon and a control panel in the browser. wireview-mini
+--install starts it at login.
+
 %prep
 %autosetup
 
@@ -53,11 +59,12 @@ required on the host.
 install -d %{buildroot}%{appdir}
 cp -a linux-x64/. %{buildroot}%{appdir}/
 find %{buildroot}%{appdir} -name '*.pdb' -delete
-chmod 0755 %{buildroot}%{appdir}/WireView2
+chmod 0755 %{buildroot}%{appdir}/WireView2 %{buildroot}%{appdir}/wireview-mini
 
-# Launcher symlink
+# Launcher symlinks (WireView Mini finds its files through the real path)
 install -d %{buildroot}%{_bindir}
 ln -sf ../lib/%{name}/WireView2 %{buildroot}%{_bindir}/%{name}
+ln -sf ../lib/%{name}/wireview-mini %{buildroot}%{_bindir}/wireview-mini
 
 # Desktop entry + icons
 install -Dm0644 wireview-linux.desktop %{buildroot}%{_datadir}/applications/%{name}.desktop
@@ -70,6 +77,7 @@ install -Dm0644 udev/99-wireview.rules %{buildroot}%{_udevrulesdir}/99-wireview.
 %files
 %{appdir}/
 %{_bindir}/%{name}
+%{_bindir}/wireview-mini
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 %{_udevrulesdir}/99-wireview.rules

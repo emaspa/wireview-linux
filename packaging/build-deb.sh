@@ -7,8 +7,11 @@
 # PPA builds come from the same files. The payload is built like the rpm's
 # (rpm/build-srpm.sh): the loose self-contained linux-x64 publish (no .pdb)
 # with the single-file, self-extracting WireView2 overlaid as the launcher,
-# plus the desktop entry, icons and udev rule from this repo, laid out like
-# the PPA source tree (see packaging/ppa/build-ppa-source.sh).
+# WireView Mini's NativeAOT wireview-mini beside it (packaging/build-mini.sh;
+# its libSystem.IO.Ports.Native.so, TG-WV-PRO2-FW.hex and ext_flash.bin are the
+# same files the app's publish already has there), plus the desktop entry,
+# icons and udev rule from this repo, laid out like the PPA source tree (see
+# packaging/ppa/build-ppa-source.sh).
 #
 # The binary package is built with dpkg-buildpackage in an ubuntu:24.04
 # container, the oldest series the PPA carries, and compressed with xz: every
@@ -19,10 +22,12 @@
 # release ("wireview-linux (<version>~resolute1) resolute; ..."). The build
 # copy rewrites only that header to "wireview-linux (<version>) unstable;".
 #
-# Requires: dotnet (8.0+ SDK), docker (or DEB_BUILDER=host with debhelper).
+# Requires: dotnet (8.0+ SDK), docker (packaging/build-mini.sh, and
+#           dpkg-buildpackage unless DEB_BUILDER=host with debhelper).
 # Usage:    packaging/build-deb.sh [version] [output-dir]
 # Env:      DEB_BUILDER=docker|host   where dpkg-buildpackage runs (default docker)
 #           DEB_IMAGE=ubuntu:24.04    container image for DEB_BUILDER=docker
+#           MINI_DIR=<dir>            reuse a packaging/build-mini.sh output
 #
 set -euo pipefail
 
@@ -59,8 +64,18 @@ dotnet publish "$REPO/WireView2/WireView2.csproj" -c Release -r linux-x64 \
 # The bundled launcher replaces the apphost, as in every released .deb/.rpm.
 install -m0755 "$WORK/single/WireView2" "$SRC/linux-x64/WireView2"
 rm -rf "$WORK/single"
-# dh_fixperms leaves .dll modes alone; only the two executables keep +x.
-find "$SRC/linux-x64" -type f ! -name WireView2 ! -name createdump -exec chmod 0644 {} +
+
+echo ">> WireView Mini"
+MINI="${MINI_DIR:-$WORK/mini}"
+[[ -n "${MINI_DIR:-}" ]] || "$HERE/build-mini.sh" "$MINI" >/dev/null
+install -m0755 "$MINI/wireview-mini" "$SRC/linux-x64/wireview-mini"
+# It reads these from its own directory; the app's publish ships the same
+# files there, so one copy serves both.
+for f in libSystem.IO.Ports.Native.so TG-WV-PRO2-FW.hex ext_flash.bin; do
+    cmp "$MINI/$f" "$SRC/linux-x64/$f" || { echo "!! $f differs between the app and WireView Mini" >&2; exit 1; }
+done
+# dh_fixperms leaves .dll modes alone; only the three executables keep +x.
+find "$SRC/linux-x64" -type f ! -name WireView2 ! -name wireview-mini ! -name createdump -exec chmod 0644 {} +
 
 echo ">> Assembling the package tree"
 cp -a "$REPO/packaging/icons/hicolor"          "$SRC/icons/hicolor"

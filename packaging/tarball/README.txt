@@ -13,6 +13,18 @@ Quick start
 
          ./WireView2
 
+  3. Optional, WireView Mini: a program with no window that keeps fault
+     alerts, shutdown on fault and LAN publishing going with the app closed,
+     with a tray icon and a control panel in the browser:
+
+         ./wireview-mini --install    # start it at login
+         ./wireview-mini              # or run it now, in the foreground
+         ./wireview-mini --help
+
+     Keep wireview-mini, libSystem.IO.Ports.Native.so, TG-WV-PRO2-FW.hex and
+     ext_flash.bin together: it reads them from its own directory. The login
+     entry points at this directory, so run --install again after moving it.
+
 Notes
 -----
 - install.sh uses sudo for the privileged step; run it as your normal user.

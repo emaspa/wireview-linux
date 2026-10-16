@@ -26,3 +26,6 @@ sudo udevadm trigger
 echo
 echo "Done. Run the app with:"
 echo "    $DIR/WireView2"
+echo "WireView Mini (tray icon, alerts, control panel in the browser):"
+echo "    $DIR/wireview-mini            # in the foreground"
+echo "    $DIR/wireview-mini --install  # start it at login"
