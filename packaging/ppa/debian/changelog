@@ -1,3 +1,22 @@
+wireview-linux (1.4.0.0~resolute1) resolute; urgency=medium
+
+  * WireView Mini, /usr/bin/wireview-mini: a program with no window that
+    owns the device, raises fault alerts, shuts the PC down on a fault when
+    set and publishes the device on the LAN while the app is closed. Its
+    tray icon and its control panel in the browser cover monitoring,
+    charts, the device log with CSV export, device configuration and
+    profiles, the theme editor, firmware flashing and wireviewd's settings.
+    wireview-mini --install starts it at login.
+  * The app connects through WireView Mini while it runs and borrows the
+    serial port from it for flashing, log reads and theme transfers.
+  * Device log: a cycle's clock starts at its first sample, so the second
+    sample no longer pushes the cycle days ahead.
+  * Theme editor: translucent background images are no longer darkened.
+  * Recommends wireview-hwmon 1.8.1 or later, whose wireviewd takes the
+    LAN port back from WireView Mini on its own.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Fri, 16 Oct 2026 16:54:24 +0000
+
 wireview-linux (1.3.2.0~resolute1) resolute; urgency=medium
 
   * Software rendering by default on Linux, about half the resident memory;

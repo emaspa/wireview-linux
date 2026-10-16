@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.3.2.0
+Version:        1.4.0.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -97,6 +97,22 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Fri Oct 16 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.0.0-1
+- WireView Mini, /usr/bin/wireview-mini: a program with no window that owns
+  the device, raises fault alerts, shuts the PC down on a fault when set and
+  publishes the device on the LAN while the app is closed. Its tray icon and
+  its control panel in the browser cover monitoring, charts, the device log
+  with CSV export, device configuration and profiles, the theme editor,
+  firmware flashing and wireviewd's settings. wireview-mini --install starts
+  it at login.
+- The app connects through WireView Mini while it runs and borrows the
+  serial port from it for flashing, log reads and theme transfers.
+- Device log: a cycle's clock starts at its first sample, so the second
+  sample no longer pushes the cycle days ahead.
+- Theme editor: translucent background images are no longer darkened.
+- Recommends wireview-hwmon 1.8.1 or later, whose wireviewd takes the LAN
+  port back from WireView Mini on its own.
+
 * Tue Oct 13 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.3.2.0-1
 - Software rendering by default on Linux, about half the resident memory;
   Settings, Startup, GPU rendering switches back at the next start, and
