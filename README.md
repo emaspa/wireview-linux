@@ -36,13 +36,13 @@ Why there are two clients, and which to leave running. Device connected, one rea
 
 | Process | Memory | Idle CPU, one core | Notes |
 |---|---|---|---|
+| Official Windows app 1.0.8, window visible | 341 MB | 2.1 % | Windows 11 with a GeForce RTX 5090, GPU rendering |
+| Official Windows app 1.0.8, minimized after use | 166 MB | 0.5 % | Started minimized and never opened it stays at 92 MB and 0.03 %, but the first look at the window costs the memory above |
 | Desktop app, window visible | 150 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Linux, with wireview-hwmon alongside. Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
 | Desktop app, minimized | 126 MB | 0.6 % | Linux, as above |
 | WireView Mini on Linux | 50 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
 | WireView Mini on Windows | 37 MB | 0 to 0.2 % | Same; Task Manager shows 24 MB, as its Memory column leaves out the shared pages |
 | wireviewd (the daemon) | 2.3 MB | 0 % | C, no GUI; publishes the device on the LAN and serves `/sys/class/hwmon/` |
-| Official Windows app 1.0.8, window visible | 341 MB | 2.1 % | Windows 11 with a GeForce RTX 5090, GPU rendering |
-| Official Windows app 1.0.8, minimized after use | 166 MB | 0.5 % | Started minimized and never opened it stays at 92 MB and 0.03 %, but the first look at the window costs the memory above |
 
 In short: the app is for looking at the device, WireView Mini for watching it, and the daemon for machines without a desktop at all.
 
