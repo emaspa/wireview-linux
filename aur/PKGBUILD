@@ -18,7 +18,7 @@ options=('!strip')
 source=("$pkgname-$pkgver-$pkgrel.tar.gz::$url/releases/download/v$pkgver/wireview-linux-$pkgver-linux-x64.tar.gz"
         "wireview-linux.desktop"
         "wireview-linux.png")
-sha256sums=('8a8d0fa8dfa27538743e9e261b7e2486f5b22fcfaf4e3b38cc1f1108c7478e77'
+sha256sums=('4098807a204098d0b0be9ddf9212f76053e8514e53254075ba722f1a8425147f'
             '57c8565769d8ef620411bb40b2e59e82272eecd71802d5e8fd3f995591df6008'
             '5bdcde4399af5bd57824af8dcacdd05c6421eddbb18993210ddab805ef1aaff3')
 
