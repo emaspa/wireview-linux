@@ -55,7 +55,8 @@ state shows a commit suffix instead of the plain version.
 
 It publishes the app like `rpm/build-srpm.sh` (the loose self-contained
 linux-x64 publish with the single-file `WireView2` overlaid as the launcher, no
-.pdb), assembles the same tree as the PPA source package (desktop entry, icons
+.pdb, plus WireView Mini's NativeAOT `wireview-mini` from
+`packaging/build-mini.sh`, linked as `/usr/bin/wireview-mini`), assembles the same tree as the PPA source package (desktop entry, icons
 and udev rule from the repo), rewrites the top changelog header to
 `wireview-linux (<version>) unstable;` in its build copy, and runs
 `dpkg-buildpackage -b` in an `ubuntu:24.04` container (`DEB_BUILDER=host` builds

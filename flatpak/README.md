@@ -72,6 +72,11 @@ filter.
 
 ## Notes
 
+- The Flatpak carries the app only. **WireView Mini** is left out: the manifest
+  gives the sandbox no network access (no `--share=network`), so the browser
+  could not reach its control panel on `127.0.0.1`, and `wireview-mini --install`
+  would write its login entry inside the sandbox's own config directory. The
+  tarball's `wireview-mini` runs on the host instead.
 - Only **direct USB serial** mode is supported under Flatpak. The hwmon path
   needs the `wireview-hwmon` kernel module on the host, which is out of scope on
   immutable distros.

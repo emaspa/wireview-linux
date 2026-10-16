@@ -356,7 +356,10 @@ Left:
 
 - 4.1 (wireviewd `shutdown-on-fault`, fault events, `wireviewctl watch --notify`) lives in the
   wireview-hwmon repo and is not part of this change.
-- Packaging: WireView Mini is in no package or zip yet.
+- Packaging: done in 1.4.0.0. The tarball, .deb/PPA, .rpm/COPR and AUR packages carry the
+  NativeAOT `wireview-mini` (built on Ubuntu 22.04, glibc 2.35), and the Windows zip the
+  NativeAOT `wireview-mini.exe`. Not in the Flatpak (no network in its sandbox, so no control
+  panel) or the Nix flake.
 - Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
   through the handover, the tray icon and its menu (including the submenus) and the control
   panel's browser launch. Built and published for win-x64 from Linux only.

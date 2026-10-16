@@ -13,7 +13,16 @@ WireView Mini plus its control panel are a small client of their own. With the t
 
 On Linux it needs neither the wireview-hwmon kernel module nor wireviewd: with no hwmon device it opens the WireView's serial port (`/dev/ttyACM*`) itself, like the app's direct serial mode. Your user needs access to the port, which the udev rule in `udev/99-wireview.rules` gives (the packages install it; see the [Flatpak section](install.md#flatpak) for installing it by hand).
 
-It reads the app's own `settings.json`, so the app and the control panel configure the same settings, and changes apply without restarting WireView Mini. It is meant for Windows and for Linux without wireviewd (Flatpak, immutable distros); with wireviewd running it still gives alerts and shutdown, and leaves publishing to the daemon.
+It reads the app's own `settings.json`, so the app and the control panel configure the same settings, and changes apply without restarting WireView Mini. It is meant for Windows and for Linux without wireviewd (immutable distros, from the tarball); with wireviewd running it still gives alerts and shutdown, and leaves publishing to the daemon.
+
+## Installing
+
+- **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, next to the files it reads). See [Installation](install.md#wireview-mini).
+- **Pre-built tarball**: `wireview-mini` is next to `WireView2`; keep the files of the directory together.
+- **Windows**: `wireview-mini-<version>-windows-x64.zip` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page, with `wireview-mini.exe`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin`. Extract it anywhere and run `wireview-mini.exe`.
+- **Flatpak and Nix**: not included. The Flatpak sandbox has no network access, so the browser could not reach the control panel; the Nix flake builds the app only for now.
+
+Nothing starts it on its own: `wireview-mini --install` adds the login entry, and `wireview-mini` starts it now. With wireview-hwmon, use 1.8.1 or later: its wireviewd takes port `9876` back from WireView Mini on its own when it starts while WireView Mini holds the port (see [LAN publishing and ports](#lan-publishing-and-ports)).
 
 ## Running it
 
@@ -170,7 +179,7 @@ When the publish port is taken (on Linux wireviewd holds `9876`), WireView Mini 
 
 ## Building
 
-Build it from source with:
+The packages need no build: see [Installing](#installing). Build it from source with:
 
 ```bash
 dotnet publish WireViewMini -c Release -r linux-x64
@@ -178,6 +187,8 @@ dotnet publish WireViewMini -c Release -r win-x64
 ```
 
 On Linux this is a NativeAOT build: one native `wireview-mini` executable of about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so` next to it for the serial port. It idles at about 40 MB resident instead of about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang` plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them, add `-p:PublishAot=false` to get the self-contained single-file JIT build, which behaves the same.
+
+A NativeAOT executable needs at least the glibc of the system that built it, so a build on a recent distro does not run on an older one. The release packages build it with `packaging/build-mini.sh`, in an Ubuntu 22.04 container (glibc 2.35, `packaging/mini/Dockerfile`), which also checks that the publish has no IL warnings.
 
 On Windows the same command makes a NativeAOT build too, when run on a Windows machine with the Visual Studio Build Tools and their "Desktop development with C++" workload (the .NET SDK cannot compile a Windows build natively from Linux; the Windows build made on Linux is the single-file JIT build, and `-p:PublishAot=false` asks for it on Windows as well):
 
@@ -206,6 +217,7 @@ WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.j
 
 - If the app is open at the same time, its next settings save writes back its own copy of the **Publish on the LAN** and **Shutdown on fault** switches (and of the settings changed on the control panel), so change them in one place while both run.
 - On GNOME the tray icon needs the AppIndicator/KStatusNotifierItem extension.
+- It is not in the Flatpak or the Nix flake (see [Installing](#installing)).
 - The chart history lives in memory only and starts empty with each run.
 - A remote host's fault raises a notification but never powers this PC off.
 - The control panel answers this PC only.

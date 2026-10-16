@@ -75,6 +75,10 @@ sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 
+The package installs the app as `wireview-linux` and WireView Mini as
+`wireview-mini` (both in `/usr/lib/wireview-linux/`, linked from `/usr/bin`);
+`wireview-mini --install` starts WireView Mini at login.
+
 After install, the udev rule is in place: the serial port and the DFU bootloader
 are `0660 root:dialout` plus a `uaccess` ACL for the user logged in at the local
 seat, so a desktop session needs no group. SSH and other remote sessions get no

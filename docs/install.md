@@ -6,8 +6,14 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 
 - Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (the Noctua Edition is tested on a real unit)
-- For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later
+- For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later; 1.8.1 or later alongside WireView Mini, whose wireviewd takes the LAN port back from it on its own
 - Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency). See [firmware updates](firmware.md)
+
+## WireView Mini
+
+[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/`, and sits next to `WireView2` in the pre-built tarball. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
+
+It is one native executable (no .NET runtime) built against glibc 2.35, so it runs on any distro with that glibc or a newer one (tested on Ubuntu 22.04, 24.04 and 26.04, Fedora 43 and 44, and Arch), and on immutable distros straight from the tarball. With wireview-hwmon installed, use 1.8.1 or later: its wireviewd takes the LAN port back from WireView Mini when it starts while WireView Mini holds it.
 
 ## Windows (x64)
 
@@ -65,7 +71,7 @@ flatpak install ./wireview-linux-*.flatpak
 flatpak run io.github.emaspa.WireViewLinux
 ```
 
-The Flatpak supports direct USB serial mode. A sandbox cannot install udev rules, so install the rule on the host once:
+The Flatpak supports direct USB serial mode and carries the app only, without [WireView Mini](wireview-mini.md): the sandbox has no network access, so the browser could not reach WireView Mini's control panel. For the same reason the Flatpak app cannot connect through a WireView Mini started from the tarball on the same PC; the two then compete for the serial port, so run one or the other. A sandbox cannot install udev rules, so install the rule on the host once:
 
 ```bash
 sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \
@@ -126,11 +132,11 @@ The repository is a flake. Its NixOS module installs the app, built from source,
 }
 ```
 
-`nix run github:emaspa/wireview-linux` starts the app without installing it, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
+The flake builds the app only; WireView Mini is not in it yet. `nix run github:emaspa/wireview-linux` starts the app without installing it, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
 
 ## Pre-built binary (no .NET required)
 
-The tarball is self-contained: the app binary, the udev rule, and a one-time `install.sh` that sets up USB serial access.
+The tarball is self-contained: the app binary, WireView Mini (`wireview-mini` and the three files it reads from its own directory), the udev rule, and a one-time `install.sh` that sets up USB serial access.
 
 ```bash
 # Download and extract the latest release
@@ -142,7 +148,13 @@ cd wireview-linux-*-linux-x64
 
 # Run
 ./WireView2
+
+# WireView Mini: start it at login, and now
+./wireview-mini --install
+./wireview-mini
 ```
+
+Keep `wireview-mini`, `libSystem.IO.Ports.Native.so`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin` in one directory; the login entry points at it, so run `--install` again after moving the directory.
 
 ## Build from source
 

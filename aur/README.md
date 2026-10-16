@@ -3,6 +3,9 @@
 A binary AUR package that installs the pre-built release tarball - no `dotnet-sdk`
 build dependency and no compile step, so it installs in seconds.
 
+It installs the app as `wireview-linux` and WireView Mini as `wireview-mini`
+(both in `/usr/lib/wireview-linux/`, linked from `/usr/bin`).
+
 It `provides`/`conflicts` `wireview-linux`, so it coexists with the community
 source-built [`wireview-linux`](https://aur.archlinux.org/packages/wireview-linux)
 package (maintained separately); users pick whichever they prefer.
