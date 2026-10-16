@@ -38,7 +38,8 @@ internal sealed class Win32TrayIcon : ITrayIcon
     private const uint TPM_RIGHTBUTTON = 0x0002, TPM_RETURNCMD = 0x0100, TPM_NONOTIFY = 0x0080;
 
     private const uint WS_POPUP = 0x80000000, WS_EX_TOOLWINDOW = 0x00000080;
-    private const int SM_CXSMICON = 49;
+    private const int SM_CXSMICON = 49, SM_CXICON = 11;
+    private const uint NIIF_INFO = 0x01;
 
     // The window class keeps a raw pointer to the window procedure: the delegate
     // must stay alive as long as the class is registered, so it lives in a static.
@@ -52,7 +53,8 @@ internal sealed class Win32TrayIcon : ITrayIcon
     private TrayState _state;
     private string _shownTip = "";
     private IntPtr _hwnd;
-    private IntPtr _icon;
+    private IntPtr _icon;        // the small icon in the notification area
+    private IntPtr _balloonIcon; // the large one a notification shows
     private uint _taskbarCreated;
     private bool _version4;
     private bool _added;
@@ -119,7 +121,8 @@ internal sealed class Win32TrayIcon : ITrayIcon
                 return;
             }
             lock (_lock) _hwnd = hwnd;
-            _icon = LoadTrayIcon();
+            _icon = LoadIcon(SM_CXSMICON, 16);
+            _balloonIcon = LoadIcon(SM_CXICON, 32);
             AddIcon();
             _ready.Set();
 
@@ -137,7 +140,8 @@ internal sealed class Win32TrayIcon : ITrayIcon
         {
             _ready.Set();
             if (_icon != IntPtr.Zero) DestroyIcon(_icon);
-            _icon = IntPtr.Zero;
+            if (_balloonIcon != IntPtr.Zero) DestroyIcon(_balloonIcon);
+            _icon = _balloonIcon = IntPtr.Zero;
         }
     }
 
@@ -327,16 +331,28 @@ internal sealed class Win32TrayIcon : ITrayIcon
     /// <summary>A notification from the icon, with the app's icon: Windows 10 and
     /// 11 show it as a toast and keep it in the notification center. Any thread.
     /// False when the icon is not in the notification area (no Explorer yet) or
-    /// the shell refused it.</summary>
+    /// the shell refused it. The custom icon must be the large size when
+    /// NIIF_LARGE_ICON is set (the shell answers "incorrect size" otherwise), so
+    /// the balloon gets its own icon; refused anyway, the notification is sent
+    /// again with the stock information icon.</summary>
     public bool ShowNotification(string title, string message)
     {
         if (!_added) return false;
         var data = NewData(NIF_INFO);
         data.szInfoTitle = title.Length > 63 ? title[..63] : title;      // 64 chars with the terminator
         data.szInfo = message.Length > 255 ? message[..255] : message;   // 256
-        data.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON;
-        data.hBalloonIcon = _icon;
-        return Shell_NotifyIconW(NIM_MODIFY, ref data);
+        if (_balloonIcon != IntPtr.Zero)
+        {
+            data.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON;
+            data.hBalloonIcon = _balloonIcon;
+            if (Shell_NotifyIconW(NIM_MODIFY, ref data)) return true;
+            FileLog.Warn($"tray: notification with the app's icon refused (error {Marshal.GetLastWin32Error()}), retrying with the stock icon");
+        }
+        data.dwInfoFlags = NIIF_INFO;
+        data.hBalloonIcon = IntPtr.Zero;
+        if (Shell_NotifyIconW(NIM_MODIFY, ref data)) return true;
+        FileLog.Warn($"tray: notification refused (error {Marshal.GetLastWin32Error()})");
+        return false;
     }
 
     private void UpdateTip()
@@ -357,13 +373,14 @@ internal sealed class Win32TrayIcon : ITrayIcon
         _added = false;
     }
 
-    /// <summary>The embedded .ico's entry for the small-icon size (16 px at 100 %
-    /// scaling), as an HICON.</summary>
-    private static IntPtr LoadTrayIcon()
+    /// <summary>The embedded .ico's entry for a system icon size (SM_CXSMICON, 16
+    /// px at 100 % scaling, for the notification area; SM_CXICON, 32 px, for a
+    /// notification), as an HICON.</summary>
+    private static IntPtr LoadIcon(int metric, int fallback)
     {
         if (TrayIconImage.Ico is not { } ico) return IntPtr.Zero;
-        int size = GetSystemMetrics(SM_CXSMICON);
-        if (size <= 0) size = 16;
+        int size = GetSystemMetrics(metric);
+        if (size <= 0) size = fallback;
         if (TrayIconImage.Pick(ico, size) is not { } entry) return IntPtr.Zero;
         byte[] bits = ico.AsSpan(entry.Offset, entry.Size).ToArray();
         return CreateIconFromResourceEx(bits, (uint)bits.Length, true, 0x00030000, size, size, 0);
@@ -443,7 +460,7 @@ internal sealed class Win32TrayIcon : ITrayIcon
         public uint lPrivate;
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern bool Shell_NotifyIconW(uint dwMessage, ref NOTIFYICONDATAW lpData);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
