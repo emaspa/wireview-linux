@@ -14,7 +14,7 @@ a NuGet restore. The trade-off: the SRPM is large (~80 MB) and is x86_64-only.
 |------|---------|
 | `wireview-linux.spec` | The RPM spec (installs the pre-built bundle + desktop file + icons + udev rule). |
 | `build-srpm.sh` | Publishes the app, assembles the source tarball, and builds the `.src.rpm`. |
-| `../packaging/` | Shared static assets (desktop entry, hicolor icons) used by this and other packaging. |
+| `../packaging/` | Shared static assets (desktop entries, hicolor icons) used by this and other packaging. |
 
 ## Build the SRPM locally
 

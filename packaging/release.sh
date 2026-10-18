@@ -248,10 +248,31 @@ fi
 echo "--- OK"
 EOF
 chmod +x "$STAGE/check-mini.sh"
-run_check() { # image, script; /out is dist/, /check-mini.sh the checks
+# The packages' WireView Mini launcher entry: installed and valid. Installs
+# desktop-file-utils with the image's package manager.
+cat > "$STAGE/check-desktop.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+entry=/usr/share/applications/wireview-mini.desktop
+if command -v apt-get >/dev/null; then
+    apt-get install -y -qq --no-install-recommends desktop-file-utils > /tmp/dfu.log 2>&1
+elif command -v dnf >/dev/null; then
+    dnf -y -q install desktop-file-utils > /tmp/dfu.log 2>&1
+else
+    pacman -S --noconfirm --needed desktop-file-utils > /tmp/dfu.log 2>&1
+fi || { tail -20 /tmp/dfu.log; echo "!! cannot install desktop-file-utils"; exit 1; }
+echo "--- desktop-file-validate $entry"
+[[ -f "$entry" ]] || { echo "!! $entry is not installed"; exit 1; }
+out="$(desktop-file-validate "$entry" 2>&1)" || { echo "$out"; echo "!! $entry is not valid"; exit 1; }
+[[ -z "$out" ]] || { echo "$out"; echo "!! desktop-file-validate reports issues"; exit 1; }
+grep -E '^(Exec|Icon)=' "$entry"
+EOF
+chmod +x "$STAGE/check-desktop.sh"
+run_check() { # image, script; /out is dist/, /check-mini.sh and /check-desktop.sh the checks
     local image="$1" script="$2"
     step "6. $image: $3"
     "${DOCKER[@]}" run "${SANDBOX[@]}" -v "$OUT:/out:ro" -v "$STAGE/check-mini.sh:/check-mini.sh:ro" \
+        -v "$STAGE/check-desktop.sh:/check-desktop.sh:ro" \
         -v "$STAGE/aur:/aur:ro" -v "$STAGE/aur-out:/aurout" "$image" bash -c "$script" 2>&1 | tee "$STAGE/check-${image//[:\/]/-}-$4.log"
     grep -q -- '--- OK' "$STAGE/check-${image//[:\/]/-}-$4.log" || fail "$image: $3 failed"
 }
@@ -260,11 +281,13 @@ APP_IN_PKG=/usr/bin/wireview-linux
 run_check ubuntu:24.04 "set -e; export DEBIAN_FRONTEND=noninteractive; apt-get update -qq;
     apt-get install -y -qq /out/$DEB xvfb xauth libfontconfig1 > /tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
     dpkg -s wireview-linux | grep -E '^(Version|Recommends):'; ls -l /usr/bin/wireview-linux /usr/bin/wireview-mini
+    /check-desktop.sh
     /check-mini.sh /usr/bin/wireview-mini $APP_IN_PKG" "the .deb" deb
 
 for image in fedora:44 fedora:43; do
     run_check "$image" "set -e; dnf -y -q install /out/$RPM xorg-x11-server-Xvfb xorg-x11-xauth > /tmp/dnf.log 2>&1 || { tail -20 /tmp/dnf.log; exit 1; }
         rpm -q wireview-linux; ls -l /usr/bin/wireview-linux /usr/bin/wireview-mini
+        /check-desktop.sh
         /check-mini.sh /usr/bin/wireview-mini $APP_IN_PKG" "the .rpm" rpm
 done
 
@@ -279,6 +302,7 @@ run_check archlinux:latest "set -e; pacman -Sy --noconfirm --needed base-devel g
     cp /home/builder/aur/.SRCINFO /aurout/.SRCINFO
     pacman -U --noconfirm /home/builder/aur/wireview-linux-bin-$VERSION-1-x86_64.pkg.tar.zst > /dev/null
     pacman -Qi wireview-linux-bin | grep -E '^(Version|Optional Deps)'; pacman -Ql wireview-linux-bin | grep -E 'bin/|wireview-mini|Ports.Native|\.hex|ext_flash'
+    /check-desktop.sh
     /check-mini.sh /usr/bin/wireview-mini $APP_IN_PKG" "the AUR package (makepkg)" aur
 
 if (( PIN )); then

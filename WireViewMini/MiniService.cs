@@ -266,7 +266,13 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     /// <summary>The control panel's address, with the token in the fragment, or
     /// null while WireView Mini is not listening.</summary>
-    public string? PanelUrl => _publish.Endpoint is { } ep ? $"http://127.0.0.1:{ep.Port}/#t={PanelToken}" : null;
+    public string? PanelUrl => _publish.Endpoint is { } ep ? ControlPanel.Address(ep.Port, PanelToken) : null;
+
+    /// <summary>Called once with <see cref="PanelUrl"/>, on the tick thread, the
+    /// first time the listener is bound (the wanted port or the loopback
+    /// fallback). Set it before <see cref="Run"/>: wireview-mini --launch opens
+    /// the control panel with it.</summary>
+    public Action<string>? PanelReady { get; set; }
 
     /// <summary>The debounced fault text for a local device id, null when clear.</summary>
     public string? LocalFaultText(string id)
@@ -697,6 +703,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 : daemon ? $"listening on 127.0.0.1:{want.Port} only (wireviewd does the LAN publishing)"
                 : $"publishing on 127.0.0.1:{want.Port} only (LAN publishing off)");
             WritePanelFile();
+            RaisePanelReady();
         }
         catch (Exception ex)
         {
@@ -736,9 +743,19 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                              (_portHolder != null ? $"served by {_portHolder})" : "in use)"));
             _lastFallbackPort = bound;
             WritePanelFile();
+            RaisePanelReady();
             return;
         }
         FileLog.Warn("no fallback port could be bound either: the control panel is unavailable until the next retry");
+    }
+
+    /// <summary>Runs <see cref="PanelReady"/> once the listener is up, the first time only.</summary>
+    private void RaisePanelReady()
+    {
+        if (PanelReady is not { } ready || PanelUrl is not { } url) return;
+        PanelReady = null;
+        try { ready(url); }
+        catch (Exception ex) { FileLog.Warn($"control panel ready: {ex.Message}"); }
     }
 
     /// <summary>Writes the panel token and the port in use for --open and --status.</summary>

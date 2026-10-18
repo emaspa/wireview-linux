@@ -58,7 +58,7 @@ Why there are two clients, and which to leave running. Device connected, one rea
 | Pre-built tarball | Extract the `linux-x64.tar.gz` release, then `./install.sh` and `./WireView2` (`./wireview-mini` for WireView Mini) |
 | Build from source | `git clone https://github.com/emaspa/wireview-linux.git`<br>`cd wireview-linux && ./install.sh` |
 
-The PPA, .deb, COPR/.rpm and AUR packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login), and the tarball carries it beside `WireView2`. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
+The PPA, .deb, COPR/.rpm and AUR packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it, or opens its control panel when it runs. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
 
 ## Connection modes
 
@@ -80,6 +80,7 @@ flatpak run io.github.emaspa.WireViewLinux   # the Flatpak
 wireview-mini              # run WireView Mini in the foreground (Ctrl+C to stop)
 wireview-mini --install    # start it at login
 wireview-mini --open       # open its control panel in the browser
+wireview-mini --launch     # the launcher entry: start it, or open the running one's control panel
 wireview-mini --status     # connected device, fault state and version
 ```
 

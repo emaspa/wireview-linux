@@ -5,8 +5,9 @@
 # The tarball extracts to a single directory containing the app binary
 # (WireView2), WireView Mini (wireview-mini with libSystem.IO.Ports.Native.so,
 # TG-WV-PRO2-FW.hex and ext_flash.bin next to it, where it looks for them), the
-# udev rule, and a one-time install.sh, so the precompiled path needs no extra
-# downloads to get USB serial access working. The AUR package installs from
+# udev rule, the desktop entries of both with the app's 128x128 icon, and a
+# one-time install.sh, so the precompiled path needs no extra downloads to get
+# USB serial access and launcher entries working. The AUR package installs from
 # this tarball.
 #
 # Requires: dotnet (8.0 SDK) on PATH, docker for packaging/build-mini.sh.
@@ -45,6 +46,11 @@ for f in libSystem.IO.Ports.Native.so TG-WV-PRO2-FW.hex ext_flash.bin; do
     install -m0644 "$MINI/$f"                    "$STAGE/$f"
 done
 install -m0644 "$REPO/udev/99-wireview.rules"    "$STAGE/99-wireview.rules"
+# install.sh writes per-user launcher entries from these, pointing at this
+# directory.
+install -m0644 "$HERE/wireview-linux.desktop"    "$STAGE/wireview-linux.desktop"
+install -m0644 "$HERE/wireview-mini.desktop"     "$STAGE/wireview-mini.desktop"
+install -m0644 "$HERE/icons/hicolor/128x128/apps/wireview-linux.png" "$STAGE/wireview-linux.png"
 install -m0755 "$HERE/tarball/install.sh"        "$STAGE/install.sh"
 install -m0644 "$HERE/tarball/README.txt"        "$STAGE/README.txt"
 

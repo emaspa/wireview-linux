@@ -66,8 +66,9 @@ install -d %{buildroot}%{_bindir}
 ln -sf ../lib/%{name}/WireView2 %{buildroot}%{_bindir}/%{name}
 ln -sf ../lib/%{name}/wireview-mini %{buildroot}%{_bindir}/wireview-mini
 
-# Desktop entry + icons
+# Desktop entries + icons (WireView Mini's uses the app's icon)
 install -Dm0644 wireview-linux.desktop %{buildroot}%{_datadir}/applications/%{name}.desktop
+install -Dm0644 wireview-mini.desktop %{buildroot}%{_datadir}/applications/wireview-mini.desktop
 install -d %{buildroot}%{_datadir}/icons
 cp -a icons/hicolor %{buildroot}%{_datadir}/icons/
 
@@ -79,6 +80,7 @@ install -Dm0644 udev/99-wireview.rules %{buildroot}%{_udevrulesdir}/99-wireview.
 %{_bindir}/%{name}
 %{_bindir}/wireview-mini
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/applications/wireview-mini.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 %{_udevrulesdir}/99-wireview.rules
 

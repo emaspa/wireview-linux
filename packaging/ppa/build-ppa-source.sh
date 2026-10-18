@@ -4,7 +4,7 @@
 # wireview-linux release that is already published on GitHub.
 #
 # The PPA package is a repack of the released .deb: the self-contained .NET
-# publish, desktop file, icons and udev rule are taken from
+# publish, desktop files, icons and udev rule are taken from
 # wireview-linux_<version>_amd64.deb, so the PPA installs the exact bits of the
 # GitHub release. Launchpad builders have no .NET SDK and no network, so the
 # "source" package carries the binaries (format 3.0 (native), amd64 only, no
@@ -58,6 +58,7 @@ for series in "${SERIES_LIST[@]}"; do
     cp -a "$OUT/deb/usr/lib/wireview-linux"                  "$src/linux-x64"
     cp -a "$OUT/deb/usr/share/icons/hicolor"                 "$src/icons/hicolor"
     cp -a "$OUT/deb/usr/share/applications/wireview-linux.desktop" "$src/"
+    cp -a "$OUT/deb/usr/share/applications/wireview-mini.desktop"  "$src/"
     cp -a "$OUT/deb/lib/udev/rules.d/99-wireview.rules"      "$src/udev/"
     cp -a "$HERE/debian"                                     "$src/debian"
     # Only the top entry decides the target series; older entries stay as uploaded.

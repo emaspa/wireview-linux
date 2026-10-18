@@ -11,7 +11,7 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 
 ## WireView Mini
 
-[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/`, and sits next to `WireView2` in the pre-built tarball. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
+[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/`, and sits next to `WireView2` in the pre-built tarball. The packages add a **WireView Mini** entry to the application launcher, which starts it, or opens its control panel when it runs; the tarball's `install.sh` adds it for the current user. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then the launcher entry or `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
 
 It is one native executable (no .NET runtime) built against glibc 2.35, so it runs on any distro with that glibc or a newer one (tested on Ubuntu 22.04, 24.04 and 26.04, Fedora 43 and 44, and Arch), and on immutable distros straight from the tarball. With wireview-hwmon installed, use 1.8.1 or later: its wireviewd takes the LAN port back from WireView Mini when it starts while WireView Mini holds it.
 
@@ -136,14 +136,14 @@ The flake builds the app only; WireView Mini is not in it yet. `nix run github:e
 
 ## Pre-built binary (no .NET required)
 
-The tarball is self-contained: the app binary, WireView Mini (`wireview-mini` and the three files it reads from its own directory), the udev rule, and a one-time `install.sh` that sets up USB serial access.
+The tarball is self-contained: the app binary, WireView Mini (`wireview-mini` and the three files it reads from its own directory), the udev rule, the desktop entries, and a one-time `install.sh` that sets up USB serial access and adds **WireView Pro II** and **WireView Mini** to the application launcher for the current user (`~/.local/share/applications/`).
 
 ```bash
 # Download and extract the latest release
 curl -sL $(curl -s https://api.github.com/repos/emaspa/wireview-linux/releases/latest | grep -o 'https://.*linux-x64.tar.gz') | tar xz
 cd wireview-linux-*-linux-x64
 
-# One-time USB serial setup (installs the udev rule)
+# One-time setup: the udev rule for USB serial access, and the launcher entries
 ./install.sh
 
 # Run
@@ -154,7 +154,7 @@ cd wireview-linux-*-linux-x64
 ./wireview-mini
 ```
 
-Keep `wireview-mini`, `libSystem.IO.Ports.Native.so`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin` in one directory; the login entry points at it, so run `--install` again after moving the directory.
+Keep `wireview-mini`, `libSystem.IO.Ports.Native.so`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin` in one directory. The login entry and the launcher entries point at it, so after moving the directory run `--install` and `./install.sh` again.
 
 ## Build from source
 

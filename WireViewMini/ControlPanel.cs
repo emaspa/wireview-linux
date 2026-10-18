@@ -66,6 +66,11 @@ internal sealed class ControlPanel
 
     public ControlPanel(MiniService mini) => _mini = mini;
 
+    /// <summary>The control panel's address on <paramref name="port"/>, with the
+    /// run's token in the fragment (the page reads it from there, it never reaches
+    /// the server).</summary>
+    public static string Address(int port, string token) => $"http://127.0.0.1:{port}/#t={token}";
+
     /// <summary>Marks every answer of ours: the page knows an answer without it
     /// (wireviewd's 404 once it took port 9876 back) is not WireView Mini's.</summary>
     private const string PanelHeader = "X-Mini-Panel";

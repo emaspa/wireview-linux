@@ -52,6 +52,7 @@ done
 
 # Static packaging assets from the repo.
 cp "$REPO/packaging/wireview-linux.desktop" "$SRC/wireview-linux.desktop"
+cp "$REPO/packaging/wireview-mini.desktop"  "$SRC/wireview-mini.desktop"
 cp -r "$REPO/packaging/icons/hicolor"       "$SRC/icons/hicolor"
 cp "$REPO/udev/99-wireview.rules"           "$SRC/udev/99-wireview.rules"
 

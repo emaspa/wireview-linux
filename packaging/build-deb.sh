@@ -9,7 +9,7 @@
 # with the single-file, self-extracting WireView2 overlaid as the launcher,
 # WireView Mini's NativeAOT wireview-mini beside it (packaging/build-mini.sh;
 # its libSystem.IO.Ports.Native.so, TG-WV-PRO2-FW.hex and ext_flash.bin are the
-# same files the app's publish already has there), plus the desktop entry,
+# same files the app's publish already has there), plus the desktop entries,
 # icons and udev rule from this repo, laid out like the PPA source tree (see
 # packaging/ppa/build-ppa-source.sh).
 #
@@ -80,6 +80,7 @@ find "$SRC/linux-x64" -type f ! -name WireView2 ! -name wireview-mini ! -name cr
 echo ">> Assembling the package tree"
 cp -a "$REPO/packaging/icons/hicolor"          "$SRC/icons/hicolor"
 cp -a "$REPO/packaging/wireview-linux.desktop" "$SRC/"
+cp -a "$REPO/packaging/wireview-mini.desktop"  "$SRC/"
 cp -a "$REPO/udev/99-wireview.rules"           "$SRC/udev/"
 cp -a "$DEBIAN_TEMPLATE"                       "$SRC/debian"
 sed -i "1s/^wireview-linux ([^)]*) [a-z]*;/wireview-linux ($VERSION) unstable;/" "$SRC/debian/changelog"

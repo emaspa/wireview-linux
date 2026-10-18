@@ -46,8 +46,9 @@ package() {
   sed -i 's/GROUP="dialout"/GROUP="uucp"/g' "$pkgdir/usr/lib/udev/rules.d/99-wireview.rules"
   grep -q 'GROUP="uucp"' "$pkgdir/usr/lib/udev/rules.d/99-wireview.rules"
 
-  # Desktop entry + icon
+  # Desktop entries + icon (WireView Mini's entry, from the tarball, uses the app's icon)
   install -Dm644 "$srcdir/wireview-linux.desktop" "$pkgdir/usr/share/applications/wireview-linux.desktop"
+  install -Dm644 "$src/wireview-mini.desktop" "$pkgdir/usr/share/applications/wireview-mini.desktop"
   install -Dm644 "$srcdir/wireview-linux.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/wireview-linux.png"
 
   # License / notes

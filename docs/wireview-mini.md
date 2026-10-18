@@ -17,12 +17,12 @@ It reads the app's own `settings.json`, so the app and the control panel configu
 
 ## Installing
 
-- **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, next to the files it reads). See [Installation](install.md#wireview-mini).
-- **Pre-built tarball**: `wireview-mini` is next to `WireView2`; keep the files of the directory together.
+- **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, next to the files it reads), with a **WireView Mini** entry in the application launcher. See [Installation](install.md#wireview-mini).
+- **Pre-built tarball**: `wireview-mini` is next to `WireView2`; keep the files of the directory together. Its `install.sh` adds the **WireView Mini** launcher entry for the current user, pointing at the directory.
 - **Windows**: `wireview-mini-<version>-windows-x64.zip` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page, with `wireview-mini.exe`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin`. Extract it anywhere and run `wireview-mini.exe`.
 - **Flatpak and Nix**: not included. The Flatpak sandbox has no network access, so the browser could not reach the control panel; the Nix flake builds the app only for now.
 
-Nothing starts it on its own: `wireview-mini --install` adds the login entry, and `wireview-mini` starts it now. With wireview-hwmon, use 1.8.1 or later: its wireviewd takes port `9876` back from WireView Mini on its own when it starts while WireView Mini holds the port (see [LAN publishing and ports](#lan-publishing-and-ports)).
+Nothing starts it on its own: `wireview-mini --install` adds the login entry, and the **WireView Mini** launcher entry or `wireview-mini` starts it now. The launcher entry runs `wireview-mini --launch`: it starts WireView Mini and opens its control panel in the browser, or, when WireView Mini already runs, opens that one's control panel. Its **Control panel** action is `wireview-mini --open`. The login entry starts it without opening the browser. With wireview-hwmon, use 1.8.1 or later: its wireviewd takes port `9876` back from WireView Mini on its own when it starts while WireView Mini holds the port (see [LAN publishing and ports](#lan-publishing-and-ports)).
 
 ## Running it
 
@@ -32,12 +32,13 @@ wireview-mini --install    # start it at login
 wireview-mini --uninstall  # stop starting it at login
 wireview-mini --status     # connected device, fault state and version
 wireview-mini --open       # print the control panel's address and open it in the browser
+wireview-mini --launch     # start it and open the control panel, or open the running one's
 wireview-mini --no-tray    # run without the tray icon
 wireview-mini --version
 wireview-mini --help
 ```
 
-`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the `WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (no administrator rights needed). It logs to `wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`. A second copy says it is already running and exits with 1.
+`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the `WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (no administrator rights needed). It logs to `wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`. A second copy says it is already running and exits with 1; `--launch` opens the running copy's control panel instead.
 
 ### Exit codes of --status
 
@@ -75,7 +76,7 @@ On Linux the icon is a StatusNotifierItem: KDE, XFCE, Cinnamon and LXQt show it 
 
 The whole page with every card open: [screenshot-mini-full.png](screenshot-mini-full.png).
 
-A single page served by WireView Mini on its own port, opened in the default browser by a click on the tray icon (left click on Windows, the tray's activate action on Linux), by the tray's **Settings and controls...** or by `wireview-mini --open` (which also prints the address, for desktops without a tray).
+A single page served by WireView Mini on its own port, opened in the default browser by a click on the tray icon (left click on Windows, the tray's activate action on Linux), by the tray's **Settings and controls...**, by the **WireView Mini** launcher entry (`wireview-mini --launch`, which also starts WireView Mini when it is not running) or by `wireview-mini --open` (which also prints the address, for desktops without a tray).
 
 It works offline and answers this PC only: from any other address it returns 403, even while the port is open on the LAN. Each run of WireView Mini makes a new random access token; the tray and `--open` put it in the address (after `#t=`), and the page sends it with every request, so other web pages and other users cannot use it.
 

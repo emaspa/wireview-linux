@@ -28,10 +28,13 @@ internal static class Program
         "The WireView app connects through it while it runs. Its tray icon shows the\n" +
         "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
         "Its control panel, a local web page, edits the device configuration, alarms\n" +
-        "and LAN monitoring, and flashes the bundled firmware: open it from the tray\n" +
-        "or with --open.\n" +
+        "and LAN monitoring, and flashes the bundled firmware: open it from the tray,\n" +
+        "with --open or with --launch.\n" +
         "\n" +
         "  (no option)    run in the foreground until Ctrl+C or SIGTERM\n" +
+        "  --launch       the desktop launcher's command: start WireView Mini and open its\n" +
+        "                 control panel in the browser, or open the control panel of the\n" +
+        "                 running one\n" +
         "  --install      start WireView Mini at login (Linux: XDG autostart entry,\n" +
         "                 Windows: HKCU Run key)\n" +
         "  --uninstall    remove that login entry\n" +
@@ -49,7 +52,8 @@ internal static class Program
         "\n" +
         "Exit codes: 0 ok, 1 error or already running, 2 bad usage,\n" +
         "--status only: 3 not running, 4 no device connected, 5 active fault.\n" +
-        "--open: 3 when WireView Mini is not running.\n" +
+        "--open: 3 when WireView Mini is not running; --launch: 3 when it runs but its\n" +
+        "control panel does not answer.\n" +
         "\n" +
         "Unofficial, community-made software by emaspa, https://github.com/emaspa/wireview-linux.\n" +
         "Not affiliated with, endorsed by, or supported by Thermal Grizzly or ElmorLabs.\n" +
@@ -77,6 +81,8 @@ internal static class Program
                 return StatusCommand.Run();
             case "--open":
                 return OpenPanel();
+            case "--launch":
+                return Run(noShutdown: false, noTray: false, launch: true);
             case "--install":
                 return MiniInstaller.Install();
             case "--uninstall":
@@ -109,7 +115,7 @@ internal static class Program
                 : "wireview-mini is not running. Start it first (wireview-mini, or --install to start it at login).");
             return ExitNotRunning;
         }
-        string url = $"http://127.0.0.1:{port}/#t={token}";
+        string url = ControlPanel.Address(port, token);
         Console.WriteLine(url);
         if (GuiLauncher.OpenUrl(url) is { } error)
             Console.Error.WriteLine($"wireview-mini: cannot open the browser ({error}); open the address above.");
@@ -123,11 +129,16 @@ internal static class Program
         return ExitUsage;
     }
 
-    private static int Run(bool noShutdown, bool noTray)
+    /// <summary>A foreground run. With <paramref name="launch"/> (<c>--launch</c>, the
+    /// desktop launcher's command) it opens the control panel in the browser once
+    /// the listener is up, and when WireView Mini already runs it opens that one's
+    /// control panel instead, like <c>--open</c>.</summary>
+    private static int Run(bool noShutdown, bool noTray, bool launch = false)
     {
         using var instance = MiniInstance.TryAcquire();
         if (instance == null)
         {
+            if (launch) return OpenPanel();
             Console.Error.WriteLine("wireview-mini: already running");
             return ExitError;
         }
@@ -155,6 +166,7 @@ internal static class Program
         {
             var notifier = CreateNotifier();
             using var service = new MiniService(Version, notifier, noShutdown);
+            if (launch) service.PanelReady = OpenPanelOnLaunch;
             // The tray's Quit takes the same way out as a signal.
             using var tray = noTray ? null : TrayController.Start(service, notifier, () =>
             {
@@ -169,10 +181,21 @@ internal static class Program
             FileLog.Warn($"fatal: {ex}");
             return ExitError;
         }
-        finally
+    }
+
+    /// <summary>--launch: the control panel in the browser, once the listener is up.
+    /// A browser that does not open is logged; WireView Mini runs on.</summary>
+    private static void OpenPanelOnLaunch(string url)
+    {
+        if (GuiLauncher.OpenUrl(url) is { } error)
         {
-            try { instance.ReleaseMutex(); } catch { }
+            // The address without its token: the log may end up in a bug report.
+            string address = url.Split('#')[0];
+            FileLog.Warn($"cannot open the control panel in the browser ({error}): it is on {address}, " +
+                         "wireview-mini --open prints the address with its token");
+            return;
         }
+        FileLog.Info("opened the control panel in the browser");
     }
 
     private static IToastNotifier CreateNotifier()

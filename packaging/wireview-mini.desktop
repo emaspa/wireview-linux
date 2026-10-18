@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=WireView Mini
+Comment=WireView Pro II monitor in the tray: fault alerts, shutdown on fault, LAN publishing, control panel
+Exec=wireview-mini --launch
+Icon=wireview-linux
+Terminal=false
+Type=Application
+Categories=System;Monitor;
+Keywords=WireView;Thermal Grizzly;GPU;power;
+StartupNotify=false
+Actions=Panel;
+
+[Desktop Action Panel]
+Name=Control panel
+Exec=wireview-mini --open
