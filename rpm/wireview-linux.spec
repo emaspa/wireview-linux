@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.4.0.0
+Version:        1.4.1.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -99,6 +99,16 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Sun Oct 18 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.1.0-1
+- WireView Mini: an entry in the application launcher. It starts WireView Mini
+  and opens its control panel in the browser, or opens the running one's
+  control panel (wireview-mini --launch); its Control panel action runs
+  wireview-mini --open.
+- WireView Mini: a second copy started while one runs exits with "already
+  running" in the ahead-of-time build too. The single-instance lock is a file
+  lock next to settings.json instead of a named mutex, which that build does
+  not honour.
+
 * Fri Oct 16 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.0.0-1
 - WireView Mini, /usr/bin/wireview-mini: a program with no window that owns
   the device, raises fault alerts, shuts the PC down on a fault when set and

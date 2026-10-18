@@ -43,6 +43,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.4.1.0" date="2026-10-18">
+      <description>
+        <p>The app detects a running WireView Mini through a lock file next to settings.json. WireView Mini itself, with its new application launcher entry, is in the other packages.</p>
+      </description>
+    </release>
     <release version="1.4.0.0" date="2026-10-16">
       <description>
         <p>A device log cycle's clock starts at its first sample, so the second sample no longer pushes the cycle days ahead. The theme editor no longer darkens translucent background images. WireView Mini, the new always-on companion in the other packages, is not part of the Flatpak.</p>

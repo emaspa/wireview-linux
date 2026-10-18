@@ -1,3 +1,16 @@
+wireview-linux (1.4.1.0~resolute1) resolute; urgency=medium
+
+  * WireView Mini: an entry in the application launcher. It starts
+    WireView Mini and opens its control panel in the browser, or opens the
+    running one's control panel (wireview-mini --launch); its Control panel
+    action runs wireview-mini --open.
+  * WireView Mini: a second copy started while one runs exits with "already
+    running" in the ahead-of-time build too. The single-instance lock is a
+    file lock next to settings.json instead of a named mutex, which that
+    build does not honour.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Sun, 18 Oct 2026 06:44:39 +0000
+
 wireview-linux (1.4.0.0~resolute1) resolute; urgency=medium
 
   * WireView Mini, /usr/bin/wireview-mini: a program with no window that
