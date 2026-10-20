@@ -1,8 +1,11 @@
 # Memory and CPU footprint plan (wireview-linux and WireView Plus)
 
-Status: phase 1 (section 3) implemented 2026-10-13, measured below. Phases 2 and 3 are proposals.
-Since 2026-10-16 the Windows build of the desktop app (WireView Plus) is no longer distributed: on
-Windows the client is WireView Mini, and the official application remains the desktop app there.
+Status: phase 1 (section 3) shipped in 1.3.2.0 (2026-10-13), measured below. Phase 2's WireView
+Mini (section 4.2) shipped in 1.4.0.0 (2026-10-16) for Linux and Windows, both ahead-of-time
+compiled; its wireviewd half (section 4.1) is not started. Phase 3 is a proposal. Since 1.4.0.0
+the Windows build of the desktop app (WireView Plus) is no longer distributed: on Windows the
+client is WireView Mini, and the official application remains the desktop app there. Section 6
+has the state of each step.
 
 ## 1. Where the resources go today
 
@@ -107,7 +110,7 @@ measured separately before it is kept; the ones that do not pay for themselves a
    smaller surface. COPR and Nix builds compile from source, so the ILCompiler package must be
    restorable there; the PPA repacks the release binary and is unaffected.
 
-Effort: about a week including measurements. Ships as 1.3.2.
+Effort: about a week including measurements. Shipped in 1.3.2.0.
 
 ### Phase 1 results (2026-10-13)
 
@@ -226,7 +229,7 @@ binary, zero trimming warnings, source-generated JSON) starts at 23 MB RSS and l
 39 MB RSS / 33 MB PSS / 23 MB anonymous, 0.2 % of a core, so AOT is the default Linux publish.
 Windows gets the AOT build too when published on a Windows machine, now that the notifications come
 from the tray icon and no toast package is left (the SDK cannot compile a Windows build natively from
-Linux, so the zip made here stays the JIT build). Measured on Windows 11 (2026-10-16, Task Manager,
+Linux, so the release zip is built on a Windows machine). Measured on Windows 11 (2026-10-16, Task Manager,
 five minutes, panel closed): the JIT single-file build at 39 to 43 MB and 0.1 %, the NativeAOT build
 (9.4 MB exe, zero warnings) at 23.6 MB and 0 to 0.2 %. The complete Linux AOT build, tray icon and an hour
 of chart history included, settles at 50 MB RSS / 43 MB PSS (the README's figure). Measured alike, the
@@ -243,11 +246,13 @@ over 60 s after 5 minutes): window open 341 MB working set / 310 MB private work
 private bytes, 2.1 % of a core, 89 threads; minimized afterwards 166 MB / 133 MB / 487 MB, 0.5 %;
 started minimized to the tray and never opened 92 MB / 32 MB, 0.03 %, trimmed by Windows to 42 MB / 7 MB
 after twelve idle minutes. So the official app idles small only until its window has been shown once,
-and keeps about half of what the window cost after it is minimized again. Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
-packaging (one zip with both executables). WireView Mini also runs on Linux as-is, which gives Flatpak
-and immutable-distro users headless alerts and shutdown without the DKMS module.
+and keeps about half of what the window cost after it is minimized again.
 
-### Phase 2 status (2026-10-13): 4.2 implemented
+Effort: about a week for WireView Mini, two to three days for the GUI probe, handover and
+packaging. WireView Mini also runs on Linux as-is, which gives immutable-distro users (from the
+tarball) headless alerts and shutdown without the DKMS module.
+
+### Phase 2 status: 4.2 shipped in 1.4.0.0
 
 Done, in this repo:
 
@@ -266,8 +271,10 @@ Done, in this repo:
   the local `DeviceManager` (hwmon first, then serial), a second one for the remote hosts,
   publishes always (all interfaces with LAN publishing on, loopback otherwise), alerts, shuts
   down on a local fault, `--install`/`--uninstall` (XDG autostart, HKCU Run key),
-  `--status`, `--version`, `--help`, named-mutex single instance, clean exit on
-  SIGINT/SIGTERM.
+  `--status`, `--version`, `--help`, a single instance, clean exit on SIGINT/SIGTERM. The
+  single instance is a named mutex on Windows and, since 1.4.1.0, a lock on
+  `wireview-mini.lock` next to `settings.json` on Linux: the NativeAOT build ignores named
+  mutexes there, so 1.4.0.0 let a second copy run.
 - Tray icon with no UI framework: Win32 `Shell_NotifyIcon` through P/Invoke on Windows, a
   StatusNotifierItem plus `com.canonical.dbusmenu` over the session bus on Linux
   (`Tmds.DBus.Protocol`, the low-level library, no code generation). Menu: live state line
@@ -326,7 +333,7 @@ Done, in this repo:
   current bytes (`MergeConfigChanges`), so a round trip is byte-identical. The page's
   edit logic (`ConfigEditorValues`, `ApplyChanges`, the device-string helpers) moved from
   `DeviceViewModel` to `DeviceConfigEditor` in the same library; the view model calls it.
-- Cost: page never opened, the same idle as before (RSS 64 to 68 MB, PSS 53 to 57 MB,
+- Cost (JIT build): page never opened, the same idle as before (RSS 64 to 68 MB, PSS 53 to 57 MB,
   anonymous 15 to 18 MB, 15 threads, about 1 % of one core); after the page has been used and
   closed, about +17 MB RSS (flat afterwards). +0.15 MB on each single file.
 - wireviewd's settings in the control panel (Linux, hwmon + daemon): `DaemonConfigService` runs
@@ -346,37 +353,42 @@ Done, in this repo:
   now on `ISerialPortOwner`), fault clearing, config and screen commands. No GUI fault toast
   while WireView Mini runs; the GUI publisher steps aside when WireView Mini holds the port.
 
-Measured on Linux (self-contained single file, not trimmed, hwmon device, 1 s poll, one
-unreachable remote host): RSS 51 to 69 MB, PSS 45 to 58 MB, anonymous 10 to 17 MB, 15 threads,
-0.8 % of one core. About 29 MB of that is the mapped single-file bundle and 9 MB the JIT's
-double mapping, so trimming and NativeAOT (step 5) are where the rest of the gap to the 25 to
-40 MB estimate is.
+Measured on Linux before NativeAOT (self-contained single file, not trimmed, hwmon device, 1 s
+poll, one unreachable remote host): RSS 51 to 69 MB, PSS 45 to 58 MB, anonymous 10 to 17 MB, 15
+threads, 0.8 % of one core. About 29 MB of that was the mapped single-file bundle and 9 MB the
+JIT's double mapping. The NativeAOT build that shipped removed both; its figures are in 4.2.
 
 Left:
 
 - 4.1 (wireviewd `shutdown-on-fault`, fault events, `wireviewctl watch --notify`) lives in the
-  wireview-hwmon repo and is not part of this change.
+  wireview-hwmon repo and is not started (wireview-hwmon 1.8.1 has none of it).
 - Packaging: done in 1.4.0.0. The tarball, .deb/PPA, .rpm/COPR and AUR packages carry the
   NativeAOT `wireview-mini` (built on Ubuntu 22.04, glibc 2.35), and the Windows zip the
-  NativeAOT `wireview-mini.exe`. Not in the Flatpak (no network in its sandbox, so no control
-  panel) or the Nix flake.
-- Not verified on real Windows: toasts, the Run key, the windowless start, the WinUSB flash
-  through the handover, the tray icon and its menu (including the submenus) and the control
-  panel's browser launch. Built and published for win-x64 from Linux only.
+  NativeAOT `wireview-mini.exe`, built on a Windows machine at the release tag. 1.4.1.0 adds a
+  WireView Mini entry to the application launcher (`wireview-mini --launch`) in the .deb, .rpm
+  and AUR packages, and the tarball's `install.sh` writes one per user. Not in the Flatpak (no
+  network in its sandbox, so no control panel) or the Nix flake.
+- Windows: run on Windows 11 by the maintainer, the JIT build on 2026-10-14 and the NativeAOT
+  build on 2026-10-16, tray icon, menu and control panel included. The tray notification shows
+  since 1.4.0.0 gave it a 32 px icon (the shell refuses the 16 px one). Not yet confirmed there:
+  the WinUSB flash through the handover.
 - Direct serial on Linux verified on hardware (2026-10-14) with wireviewd stopped, both with the
   kernel module unloaded and loaded: WireView Mini opens `/dev/ttyACM0`, the panel reads and writes
   the config byte-exact, screen commands work. With the module loaded but the daemon stopped
   the manager can list a read-only hwmon entry next to the serial port; the panel and the
   command relay prefer the device that takes commands.
-- The control panel's memory after use: source-generated JSON and a collection once the page
-  closes could take back most of the +17 MB.
+- The control panel's memory after use (+17 MB, measured on the JIT build): not remeasured on
+  the NativeAOT build, which has source-generated JSON; a collection once the page closes could
+  take back most of what is left.
 - After a flash through WireView Mini the Device page shows the old firmware version until the
   device is selected again (WireView Mini's device never disconnects from the GUI's side).
-- Trimming or NativeAOT for WireView Mini.
+- NativeAOT for the desktop app (Phase 1, item 7): not started.
 
 ## 5. Phase 3 (optional): WireView Mini in Rust
 
-Only if the .NET mini's 25 to 40 MB is still judged too much. Scope is small and fully specified
+Only if the .NET mini's 25 to 40 MB is still judged too much. As shipped it settles at about
+24 MB on Windows and 45 to 50 MB RSS on Linux with the tray and an hour of history (section 4.2),
+so there is no case for it yet. Scope is small and fully specified
 by then: the serial protocol (`serialport` crate), the `/sensors` JSON API with HMAC (`axum` or
 `tiny_http`, `hmac`, `sha2`), toasts (`tauri-winrt-notification`, `notify-rust`), shutdown, the
 logon task. Two reference implementations (wireviewd.c and the .NET mini) and the existing
@@ -388,14 +400,15 @@ there has no user-visible benefit.
 
 ## 6. Order of work
 
-1. Measurement script and baseline table (section 3, item 0). Half a day.
-2. Phase 1 items 1 to 6, each measured. One week. Release 1.3.2.
+1. Measurement script and baseline table (section 3, item 0). Half a day. Done.
+2. Phase 1 items 1 to 6, each measured. One week. Done, released in 1.3.2.0.
 3. `FaultMonitor` and `AppSettings` extraction into shared code, then `WireViewMini` for Windows
-   with the localhost probe in the GUI. One to two weeks. Release 1.4.0 with WireView Mini in the
-   Windows zip.
+   with the localhost probe in the GUI. One to two weeks. Done, released in 1.4.0.0 with
+   WireView Mini in every Linux package as well as the Windows zip.
 4. wireviewd `shutdown-on-fault` and fault events, `wireviewctl watch --notify`. In the
-   wireview-hwmon repo, a few days.
-5. NativeAOT: mini first, GUI after. One week with the packaging checks.
-6. Rust mini, only on evidence from step 3.
+   wireview-hwmon repo, a few days. Not started.
+5. NativeAOT: mini first, GUI after. One week with the packaging checks. WireView Mini done
+   (1.4.0.0, Linux and Windows); the GUI not started.
+6. Rust mini, only on evidence from step 3. Not needed so far (section 5).
 
 Steps 2, 3 and 4 are independent and can be interleaved; 5 and 6 depend on 3.
