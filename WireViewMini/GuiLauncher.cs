@@ -9,8 +9,9 @@ namespace WireView2.Mini;
 /// The tray's "Launch WireView Desktop": starts the GUI, or brings a running one forward
 /// where the GUI supports that.
 ///
-/// Where the GUI is, in order: next to WireView Mini (the Windows zip ships
-/// <c>wireview2-plus.exe</c>, a dev build is <c>WireView2.exe</c>; the Linux
+/// Where the GUI is, in order: next to WireView Mini (on Windows
+/// <c>wireview2-plus.exe</c> from a zip of 1.3.2.0 or older, a dev build is
+/// <c>WireView2.exe</c>; the Linux
 /// tarball and packages ship <c>WireView2</c>), then on Linux the package path
 /// <c>/usr/lib/wireview-linux/WireView2</c>, <c>wireview-linux</c> on PATH (the
 /// package's and the Flatpak's launcher) and the installed Flatpak

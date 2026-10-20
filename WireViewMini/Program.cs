@@ -24,7 +24,7 @@ internal static class Program
         "Usage: wireview-mini [option]\n" +
         "\n" +
         "WireView Mini, the headless WireView Pro II client: owns the device, publishes it on the LAN,\n" +
-        "raises fault alerts and, when set in the app, shuts the PC down on a fault.\n" +
+        "raises fault alerts and, when set, shuts the PC down on a fault.\n" +
         "The WireView app connects through it while it runs. Its tray icon shows the\n" +
         "live power and has the main switches (Linux: needs a StatusNotifierItem tray).\n" +
         "Its control panel, a local web page, edits the device configuration, alarms\n" +
