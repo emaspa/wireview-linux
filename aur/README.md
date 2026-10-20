@@ -18,7 +18,7 @@ package (maintained separately); users pick whichever they prefer.
 | `.SRCINFO` | Generated metadata (`makepkg --printsrcinfo`). Must be regenerated on every change. |
 | `wireview-linux.desktop`, `wireview-linux.png` | Desktop entry and icon, shipped in the AUR repo. |
 
-## Publish (first time)
+## Publish (first time, done for 1.0.6.0; kept for reference)
 
 Requires an [AUR account](https://aur.archlinux.org/) with your SSH public key
 registered.
@@ -34,15 +34,17 @@ git push
 
 ## Update for a new release
 
+`pkgver` (with `pkgrel=1`) is bumped in the version commit, and
+`packaging/release.sh <version>` pins the tarball's sha256 in `PKGBUILD`,
+regenerates `.SRCINFO` and checks `makepkg` in an Arch container. Once the
+release is live, from the repository root:
+
 ```bash
-# 1. bump pkgver (and reset pkgrel=1) in PKGBUILD
-# 2. refresh checksums from the new release tarball
-updpkgsums
-# 3. regenerate metadata
-makepkg --printsrcinfo > .SRCINFO
-# 4. verify it still builds
-makepkg -f
-# 5. commit + push to the AUR repo
+git clone ssh://aur@aur.archlinux.org/wireview-linux-bin.git /tmp/aur-wv
+cp aur/{PKGBUILD,.SRCINFO,wireview-linux.desktop,wireview-linux.png} /tmp/aur-wv/
+cd /tmp/aur-wv
+makepkg -f    # downloads the release tarball and checks the pinned sha256
+git add -A && git commit -m "Update to <version>" && git push origin HEAD:master
 ```
 
 ## Build / test locally

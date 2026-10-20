@@ -5,6 +5,10 @@ Analysis date: 2026-09-29. Source: decompiled `~/WireView2-SW_1.0.8` vs `~/WireV
 `https://tgrizzly.com/WireView2-SW-latest` still redirected to the 1.0.7 zip on that date; the
 1.0.8 zip is linked from the product page.
 
+Status: ported and shipped in v1.3.0.0 (2026-09-30). Every item of the recommended order below is
+done. The "current state" notes and the open questions describe the code and the questions before
+the port; each is settled by the maintainer decisions or by the code as shipped.
+
 ## Maintainer decisions (2026-09-29)
 
 - Port everything for the two Pro II editions.

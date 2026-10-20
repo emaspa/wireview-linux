@@ -3,7 +3,7 @@
 # Build a source RPM (.src.rpm) for wireview-linux.
 #
 # Like the Debian/PPA flow, this ships a *pre-built* self-contained .NET binary
-# inside the source tarball — the RPM itself performs no compilation, so it builds
+# inside the source tarball: the RPM itself performs no compilation, so it builds
 # in a COPR/mock chroot that has neither the .NET SDK nor network access.
 # WireView Mini's NativeAOT wireview-mini (packaging/build-mini.sh) goes in the
 # same directory as the app; it reads libSystem.IO.Ports.Native.so,

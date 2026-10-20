@@ -35,8 +35,8 @@ Produce a single distributable bundle (attach to a GitHub release):
 ```bash
 flatpak-builder --repo=repo --force-clean build-dir \
   flatpak/io.github.emaspa.WireViewLinux.yaml
-flatpak build-bundle repo wireview-linux.flatpak io.github.emaspa.WireViewLinux
-# users then: flatpak install ./wireview-linux.flatpak
+flatpak build-bundle repo wireview-linux-<version>-x86_64.flatpak io.github.emaspa.WireViewLinux
+# users then: flatpak install ./wireview-linux-<version>-x86_64.flatpak
 ```
 
 ## Important: USB serial access
@@ -80,11 +80,10 @@ filter.
 - Only **direct USB serial** mode is supported under Flatpak. The hwmon path
   needs the `wireview-hwmon` kernel module on the host, which is out of scope on
   immutable distros.
-- The version and `sha256` in the manifest must be bumped to match each new
-  release tarball. To attach the bundle to the release when it is created,
-  build it from a copy of the manifest whose tarball source is
-  `path: <local tarball>` with the same `sha256`, then commit the manifest
-  with the release URL once the release is live. Both give the same app
-  files.
+- The manifest's tarball URL is bumped in the version commit.
+  `packaging/release.sh <version>` builds the bundle from a copy of the
+  manifest whose tarball source is the local tarball (same `sha256`) and pins
+  that `sha256` in the manifest; commit the pin once the release is live.
+  Both give the same app files.
 - Publishing to **Flathub** additionally requires submitting this manifest to
   the flathub repo; expect review of the `--device=all` permission.

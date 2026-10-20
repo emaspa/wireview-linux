@@ -6,20 +6,21 @@ through a [COPR](https://copr.fedorainfracloud.org/) repository.
 Like the Debian/PPA packaging, the source tarball ships a **pre-built,
 self-contained .NET 8 binary** and the RPM performs no compilation. This is
 because COPR/mock build chroots have neither the .NET SDK nor network access for
-a NuGet restore. The trade-off: the SRPM is large (~80 MB) and is x86_64-only.
+a NuGet restore. The trade-off: the SRPM is large (~90 MB) and is x86_64-only.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `wireview-linux.spec` | The RPM spec (installs the pre-built bundle + desktop file + icons + udev rule). |
-| `build-srpm.sh` | Publishes the app, assembles the source tarball, and builds the `.src.rpm`. |
+| `wireview-linux.spec` | The RPM spec (installs the pre-built app and WireView Mini, both desktop entries, icons and the udev rule). |
+| `build-srpm.sh` | Publishes the app, builds WireView Mini, assembles the source tarball, and builds the `.src.rpm`. |
 | `../packaging/` | Shared static assets (desktop entries, hicolor icons) used by this and other packaging. |
 
 ## Build the SRPM locally
 
 Requires `dotnet` (8.0 SDK) and `rpmbuild` (`sudo dnf install rpm-build`, or
-`sudo apt install rpm` on Debian/Ubuntu) on PATH:
+`sudo apt install rpm` on Debian/Ubuntu) on PATH, and docker (WireView Mini is
+built in a container by `packaging/build-mini.sh`):
 
 ```bash
 rpm/build-srpm.sh            # version is read from WireView2.csproj
@@ -31,22 +32,24 @@ artifact and is git-ignored).
 
 ### Build in Docker (no Fedora host needed)
 
-Publish the app with the host `dotnet`, then build the RPM inside a Fedora
-container. This is how the package is validated on non-Fedora machines:
+Build the SRPM on the host, then the binary RPM inside a Fedora container.
+`packaging/release.sh` does the same for a release:
 
 ```bash
-# 1. publish + assemble the source tree (host has the .NET SDK), then
-#    drop it under a staging dir laid out as an rpmbuild tree (see build-srpm.sh)
-# 2. build inside Fedora:
-docker run --rm -v "$PWD/rpm/build:/work" fedora:42 bash -c '
+rpm/build-srpm.sh    # leaves rpm/build/ as an rpmbuild tree (SOURCES, SPECS)
+docker run --rm -v "$PWD/rpm/build:/work" fedora:44 bash -c "
   dnf -y install rpm-build &&
-  rpmbuild -ba --define "_topdir /work" /work/SPECS/wireview-linux.spec'
+  rpmbuild -ba --define '_topdir /work' /work/SPECS/wireview-linux.spec &&
+  chown -R $(id -u):$(id -g) /work"
 ```
+
+The `chown` gives the files back to you, so the next `build-srpm.sh` can clear
+`rpm/build/`.
 
 A clean-room install check in a fresh container:
 
 ```bash
-docker run --rm -v "$PWD/rpm/build:/work" fedora:42 \
+docker run --rm -v "$PWD/rpm/build:/work" fedora:44 \
   dnf -y install /work/RPMS/x86_64/wireview-linux-*.rpm
 ```
 
@@ -62,9 +65,11 @@ One-time setup:
 Each release:
 
 ```bash
-rpm/build-srpm.sh
-copr-cli build emaspa/wireview-linux rpm/build/SRPMS/wireview-linux-*.src.rpm
+copr-cli build emaspa/wireview-linux dist/wireview-linux-<version>-1.src.rpm   # from packaging/release.sh <version>
 ```
+
+Upload the SRPM `packaging/release.sh` built and tested rather than a fresh
+`rpm/build-srpm.sh` one: a rebuild gives different checksums.
 
 COPR rebuilds the binary RPM for every enabled Fedora release.
 

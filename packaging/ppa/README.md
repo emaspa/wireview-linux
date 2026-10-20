@@ -69,7 +69,9 @@ directories and 0644 libraries.
 ## Release steps
 
 1. Add the changelog entry at the top of `packaging/ppa/debian/changelog`
-   (`dch` or by hand), with the current UTC date (`date -uR`):
+   (`dch` or by hand), with the current UTC date (`date -uR`), and commit it
+   with the version bump before tagging: the release builds read it from the
+   tag:
 
    ```
    wireview-linux (<version>~resolute1) resolute; urgency=medium
@@ -81,9 +83,9 @@ directories and 0644 libraries.
 
    Keep `debian/control` in line with what the release ships (Recommends).
 
-   Build the release .deb (`packaging/build-deb.sh <version> dist/`) and attach
-   it to the GitHub release. The rest of these steps run once that release is
-   live.
+   The release .deb is the one `packaging/release.sh <version>` leaves in
+   `dist/` (built from the tag and install-checked); attach that file to the
+   GitHub release. The rest of these steps run once that release is live.
 
 2. Build both source packages:
 
@@ -118,5 +120,3 @@ directories and 0644 libraries.
 
    Needs launchpadlib credentials at `~/.config/launchpadlib-wireview.creds`.
    Use `/usr/bin/python3`: a Homebrew python3 has no launchpadlib.
-
-5. Commit the changelog entry.
