@@ -30,11 +30,11 @@ The app has five pages accessible from the left sidebar:
 | **Monitoring** | Real-time charts for voltage, current, power, and temperature; custom series selection, colors, and Y scaling |
 | **Logging** | Read device logs per power cycle and export to CSV |
 | **Device** | Device info, full device configuration (fan, display, alarms, thresholds), display theme editor, and firmware updates |
-| **Settings** | App theme (Auto, Light, Dark, Noctua Light, Noctua Dark; Auto follows the desktop's light/dark setting and switches to the Noctua colors while a WireView Pro II Noctua Edition is selected), startup behavior, background, and LAN settings (remote hosts, publish toggle/port, network secret, log retention) |
+| **Settings** | App theme (Auto, Light, Dark, Noctua Light, Noctua Dark; Auto follows the desktop's light/dark setting and switches to the Noctua colors while a WireView Pro II Noctua Edition is selected), background, startup behavior and GPU rendering, shutdown on fault, the power tray icon, and LAN settings (remote hosts, network secret, log retention; the publish toggle and port while WireView Mini runs) |
 
 `wireview-linux --page monitoring` opens on a given page (overview, monitoring, logging, device, settings) instead of Overview.
 
-The app keeps its settings in `settings.json` in the `PowerMonitor` folder: `~/.config/PowerMonitor/settings.json` on Linux, `%APPDATA%\PowerMonitor\settings.json` on Windows. [WireView Mini](wireview-mini.md) reads and writes the same file.
+The app keeps its settings in `~/.config/PowerMonitor/settings.json`. [WireView Mini](wireview-mini.md) reads and writes the same file (on Windows, `%APPDATA%\PowerMonitor\settings.json`, the official application's file).
 
 ## Real-time monitoring
 
@@ -44,7 +44,7 @@ Voltage, current, and power readings across all 6 pins with live charts, plus cu
 
 The **Device** page edits the device configuration: fan speed, display settings, fault alarms, thresholds.
 
-On the **Device** page, you can save the current device configuration as a named profile, load it later, and manage the saved profiles. Profiles are stored as JSON files in `~/.config/PowerMonitor/profiles/` (`%APPDATA%\PowerMonitor\profiles\` on Windows). WireView Mini's control panel lists, saves and loads the same profiles in its Device configuration card.
+On the **Device** page, you can save the current device configuration as a named profile, load it later, and manage the saved profiles. Profiles are stored as JSON files in `~/.config/PowerMonitor/profiles/`. WireView Mini's control panel lists, saves and loads the same profiles in its Device configuration card (on Windows from `%APPDATA%\PowerMonitor\profiles\`).
 
 ## Theme editor
 
@@ -91,8 +91,8 @@ wireview-linux/
 │   ├── ViewModels/             # MVVM view models
 │   ├── Services/               # Logging, autostart, discovery, theme files
 │   └── Assets/                 # Icons, backgrounds
-├── WireViewDeviceLib/          # Device communication library
-│   └── Device/                 # Serial + hwmon + network devices, port finder
+├── WireViewDeviceLib/WireViewDeviceLib/   # Device communication library
+│   └── Device/                 # Serial + hwmon devices, DFU flashing, port finder
 ├── WireViewNet/                # LAN layer - /sensors publisher, remote device client, HMAC auth; shared settings and device profiles
 ├── WireViewMini/               # WireView Mini - tray icon, control panel, always-on service
 ├── udev/                       # udev rules for USB permissions

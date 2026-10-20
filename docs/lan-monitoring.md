@@ -4,15 +4,15 @@ Beyond the single local device, the app can monitor and control **WireViews on o
 
 ## Reading remote devices
 
-In **Settings → Remote hosts**, add a comma-separated list of hosts (`192.168.1.50`, or `host:port` for a custom port; default `9876`). Each remote device appears in the device picker as `lan @ host` alongside local ones, with full live monitoring. A remote host is typically the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or another copy of this app with publishing enabled (Windows).
+In **Settings → Remote hosts**, add a comma-separated list of hosts (`192.168.1.50`, or `host:port` for a custom port; default `9876`). Each remote device appears in the device picker as `lan @ host` alongside local ones, with full live monitoring. A remote host is typically the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon (Linux/Unraid) or [WireView Mini](wireview-mini.md) with publishing on (Windows, or Linux without wireviewd).
 
 [WireView Mini](wireview-mini.md) watches the same remote hosts: it raises their fault notifications, lists them in its tray's **Remote hosts** submenu and in the control panel, but a remote host's fault never powers this PC off.
 
 ## Publishing this host
 
-**Publish this host on the LAN**, in WireView Mini's control panel and tray menu, opens a listener (default port `9876`, configurable) so other instances can read this machine's device. **Off by default.**
+**Publish this host on the LAN**, in WireView Mini's control panel and tray menu (and in the app's Settings while WireView Mini runs), opens a listener (default port `9876`, configurable) so other instances can read this machine's device. **Off by default.**
 
-On Linux the `wireviewd` daemon owns publishing when it runs.
+On Linux the `wireviewd` daemon owns publishing when it runs. The app does not publish by itself: without wireviewd or WireView Mini, nothing listens.
 
 The toggle decides whether [WireView Mini](wireview-mini.md) listens on the LAN or on this PC only. With wireviewd running, WireView Mini leaves publishing to the daemon and keeps its own listener on `127.0.0.1`, off the daemon's port. Its port handling is described in [LAN publishing and ports](wireview-mini.md#lan-publishing-and-ports), and its control panel can edit wireviewd's own LAN settings (see [wireviewd settings](wireview-mini.md#wireviewd-settings)).
 

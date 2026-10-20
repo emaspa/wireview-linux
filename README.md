@@ -26,7 +26,7 @@ The app follows the connected device's look ([Noctua Edition](docs/screenshot-ap
 |---|---|---|
 | What it is | The full window: Overview, Monitoring, Logging, Device and Settings pages | A program with no window: a tray icon and a control panel in the browser |
 | When it runs | When you want to look at the device | All the time, started at login |
-| What it does | Monitoring, charts, device log, configuration and profiles, theme editor, firmware updates, LAN monitoring | Monitoring, fault alerts, shutdown on fault, device configuration and profiles, firmware updates, theme editor, charts, device log, CSV export, LAN publishing |
+| What it does | Monitoring, charts, fault alerts, shutdown on fault, device log, configuration and profiles, theme editor, firmware updates, LAN monitoring | Monitoring, fault alerts, shutdown on fault, device configuration and profiles, firmware updates, theme editor, charts, device log, CSV export, LAN publishing and monitoring |
 
 Both read the same `settings.json`. While WireView Mini runs, the app connects through it instead of opening the serial port. Details: [docs/wireview-mini.md](docs/wireview-mini.md).
 
@@ -38,7 +38,7 @@ Why there are two clients, and which to leave running. Device connected, one rea
 |---|---|---|---|
 | Official Windows app 1.0.8, window visible | 341 MB | 2.1 % | Windows 11 with a GeForce RTX 5090, GPU rendering |
 | Official Windows app 1.0.8, minimized after use | 166 MB | 0.5 % | Started minimized and never opened it stays at 92 MB and 0.03 %, but the first look at the window costs the memory above |
-| Desktop app, window visible | 150 MB | 2.3 % (software rendering), 1.1 to 2.7 % (GPU) | Linux, with wireview-hwmon alongside. Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
+| Desktop app, window visible | 150 MB (software rendering), 275 MB (GPU) | 2.3 % (software), 2.1 to 2.7 % (GPU) | Linux, with wireview-hwmon alongside. Overview page; the Monitoring page at 50 ms polling costs 4 to 10 % |
 | Desktop app, minimized | 126 MB | 0.6 % | Linux, as above |
 | WireView Mini on Linux | 50 MB | 0.1 to 0.2 % | Tray icon and one hour of chart history included; the control panel adds nothing while closed, and the browser does the drawing while open |
 | WireView Mini on Windows | 37 MB | 0 to 0.2 % | Same; Task Manager shows 24 MB, as its Memory column leaves out the shared pages |
@@ -58,7 +58,7 @@ Why there are two clients, and which to leave running. Device connected, one rea
 | Pre-built tarball | Extract the `linux-x64.tar.gz` release, then `./install.sh` and `./WireView2` (`./wireview-mini` for WireView Mini) |
 | Build from source | `git clone https://github.com/emaspa/wireview-linux.git`<br>`cd wireview-linux && ./install.sh` |
 
-The PPA, .deb, COPR/.rpm and AUR packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it, or opens its control panel when it runs. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
+The PPA, .deb, COPR/.rpm and AUR packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
 
 ## Connection modes
 

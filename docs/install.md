@@ -7,11 +7,11 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 - Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (the Noctua Edition is tested on a real unit)
 - For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later; 1.8.1 or later alongside WireView Mini, whose wireviewd takes the LAN port back from it on its own
-- Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency). See [firmware updates](firmware.md)
+- Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it and the Nix package puts it on the PATH; the deb, rpm and AUR `wireview-linux-bin` packages list it as a recommended or optional dependency, and the source-built AUR `wireview-linux` depends on it). See [firmware updates](firmware.md)
 
 ## WireView Mini
 
-[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/`, and sits next to `WireView2` in the pre-built tarball. The packages add a **WireView Mini** entry to the application launcher, which starts it, or opens its control panel when it runs; the tarball's `install.sh` adds it for the current user. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then the launcher entry or `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
+[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/` (`/opt/wireview-linux/` for the source-built AUR `wireview-linux`), and sits next to `WireView2` in the pre-built tarball. The packages add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel; the tarball's `install.sh` adds it for the current user. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then the launcher entry or `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
 
 It is one native executable (no .NET runtime) built against glibc 2.35, so it runs on any distro with that glibc or a newer one (tested on Ubuntu 22.04, 24.04 and 26.04, Fedora 43 and 44, and Arch), and on immutable distros straight from the tarball. With wireview-hwmon installed, use 1.8.1 or later: its wireviewd takes the LAN port back from WireView Mini when it starts while WireView Mini holds it.
 
@@ -48,7 +48,7 @@ sudo dnf copr enable emaspa/wireview-linux
 sudo dnf install wireview-linux
 ```
 
-Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page. A single RPM works on all current Fedora releases (tested on 42, 43, and 44):
+Or grab the standalone `.rpm` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page. A single RPM works on all current Fedora releases (tested on 43 and 44):
 
 ```bash
 sudo dnf install ./wireview-linux-*.x86_64.rpm
@@ -60,7 +60,7 @@ To also install the hwmon kernel module and daemon for system-wide sensor integr
 sudo dnf install wireview-hwmon wireview-hwmon-dkms
 ```
 
-The package is a self-contained binary: no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the [Flatpak](#flatpak) instead.
+The package is a self-contained binary: no .NET runtime is required. For immutable, atomic distros (Bazzite, Silverblue, Kinoite), use the [Flatpak](#flatpak), or the [tarball](#pre-built-binary-no-net-required) for WireView Mini.
 
 ## Flatpak
 
@@ -71,7 +71,7 @@ flatpak install ./wireview-linux-*.flatpak
 flatpak run io.github.emaspa.WireViewLinux
 ```
 
-The Flatpak supports direct USB serial mode and carries the app only, without [WireView Mini](wireview-mini.md): the sandbox has no network access, so the browser could not reach WireView Mini's control panel. For the same reason the Flatpak app cannot connect through a WireView Mini started from the tarball on the same PC; the two then compete for the serial port, so run one or the other. A sandbox cannot install udev rules, so install the rule on the host once:
+The Flatpak supports direct USB serial mode and carries the app only, without [WireView Mini](wireview-mini.md): the sandbox has no network access, so the browser could not reach WireView Mini's control panel. For the same reason the Flatpak app cannot connect through a WireView Mini started from the tarball on the same PC; the two then compete for the serial port, so run one or the other. A sandbox cannot install udev rules, so install the rule on the host once. Shutdown on fault does not work inside the sandbox (it cannot power the host off), and the Flatpak keeps its settings in `~/.var/app/io.github.emaspa.WireViewLinux/config/PowerMonitor/` instead of `~/.config/PowerMonitor/`:
 
 ```bash
 sudo curl -fsSL https://raw.githubusercontent.com/emaspa/wireview-linux/main/udev/99-wireview.rules \

@@ -5,7 +5,7 @@
 ## What it does
 
 - It owns the device (hwmon through wireviewd when that runs, otherwise the serial port, the same choice the app makes).
-- It raises the fault notification (Windows toast, `notify-send` on Linux) for this PC's device and for every host in **Remote hosts**.
+- It raises the fault notification (a notification from the tray icon on Windows, `notify-send` on Linux) for this PC's device and for every host in **Remote hosts**.
 - It shuts the PC down on a fault of this PC's device when **Shutdown on fault** is on (a remote host's fault never powers this PC off).
 - It publishes the device on port `9876` (the app's publish port): on the LAN when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off. See [LAN publishing and ports](#lan-publishing-and-ports).
 
@@ -17,7 +17,7 @@ It reads the app's own `settings.json`, so the app and the control panel configu
 
 ## Installing
 
-- **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, next to the files it reads), with a **WireView Mini** entry in the application launcher. See [Installation](install.md#wireview-mini).
+- **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin` and `wireview-linux`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, `/opt/wireview-linux/wireview-mini` for the source-built `wireview-linux`, next to the files it reads), with a **WireView Mini** entry in the application launcher. See [Installation](install.md#wireview-mini).
 - **Pre-built tarball**: `wireview-mini` is next to `WireView2`; keep the files of the directory together. Its `install.sh` adds the **WireView Mini** launcher entry for the current user, pointing at the directory.
 - **Windows**: `wireview-mini-<version>-windows-x64.zip` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page, with `wireview-mini.exe`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin`. Extract it anywhere and run `wireview-mini.exe`.
 - **Flatpak and Nix**: not included. The Flatpak sandbox has no network access, so the browser could not reach the control panel; the Nix flake builds the app only for now.
@@ -34,11 +34,12 @@ wireview-mini --status     # connected device, fault state and version
 wireview-mini --open       # print the control panel's address and open it in the browser
 wireview-mini --launch     # start it and open the control panel, or open the running one's
 wireview-mini --no-tray    # run without the tray icon
+wireview-mini --no-shutdown  # run, but never power off (for testing shutdown on fault); combines with --no-tray
 wireview-mini --version
 wireview-mini --help
 ```
 
-`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the `WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (no administrator rights needed). It logs to `wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`. A second copy says it is already running and exits with 1; `--launch` opens the running copy's control panel instead.
+`--install` writes `~/.config/autostart/wireview-mini.desktop` on Linux and the `WireView Mini` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (no administrator rights needed). It logs to `wireview-mini-YYYY-MM-DD.log` in the `logs` folder next to `settings.json`. A second copy says it is already running and exits with 1; `--launch` opens the running copy's control panel instead. On Linux the check is a lock on `wireview-mini.lock` next to `settings.json`, which spans login sessions and goes away when the process dies; on Windows it is a named mutex.
 
 ### Exit codes of --status
 
@@ -49,6 +50,8 @@ wireview-mini --help
 | 4 | It runs without a connected device |
 | 5 | An active fault |
 
+`--open` exits with 3 when WireView Mini is not running, `--launch` with 3 when it runs but its control panel does not answer; for every option 1 is an error or already running, 2 bad usage.
+
 ### Windows notes
 
 On Windows WireView Mini has no console window, so starting it at login shows nothing. Its options still print in a terminal; to wait for the output and get the exit code, use `start /wait wireview-mini --status` in cmd, or `wireview-mini --status | Out-Host` in PowerShell.
@@ -57,7 +60,7 @@ On Windows WireView Mini has no console window, so starting it at login shows no
 
 WireView Mini puts the WireView icon in the notification area. Its menu, top to bottom:
 
-- the live state (`WireView Pro II: 123.4 W`, the fault while one is active, *Serial port lent to the app* during a handover, or *No device*),
+- the live state (`WireView Pro II: 123.4 W`, the fault while one is active, *Updating the firmware: 42 %* during a flash, *Serial port lent to the app* during a handover, or *No device*),
 - **Launch WireView Desktop** (starts the app; shown only where the app is installed, so on Linux),
 - **Settings and controls...**, which opens the control panel in the browser,
 - **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then **Pause updates** and **Resume updates** (the device's display),
@@ -164,7 +167,7 @@ The version, the author, the same disclaimer as the app's Settings page and the 
 
 ## How the app uses it
 
-At startup the app asks `http://127.0.0.1:9876/sensors` before it opens the serial port (after hwmon on Linux). When WireView Mini answers, the app connects through it, shown as `mini` in the device picker and *Connected via WireView Mini* in the status bar, and does not open the port itself: two programs on one serial port corrupt each other's data. The app signs its commands to WireView Mini with a key WireView Mini keeps next to `settings.json` (`mini.key`), so writes work with no network secret set. The app does not show a second fault notification while WireView Mini runs.
+At startup the app asks WireView Mini's `/sensors` on `127.0.0.1` before it opens the serial port (after hwmon): on the port WireView Mini recorded in `mini-panel.token` next to `settings.json` (the publish port `9876`, or its fallback port), else on the publish port. When WireView Mini answers, the app connects through it, shown as `mini` in the device picker and *Connected via WireView Mini* in the status bar, and does not open the port itself: two programs on one serial port corrupt each other's data. The app signs its commands to WireView Mini with a key WireView Mini keeps next to `settings.json` (`mini.key`), so writes work with no network secret set. The app does not show a second fault notification while WireView Mini runs.
 
 ## Serial handover
 
@@ -172,11 +175,11 @@ Firmware flashing, reading the device log and the theme editor need the serial p
 
 ## LAN publishing and ports
 
-WireView Mini publishes on port `9876`, the app's publish port: on the LAN when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off. While it runs, it publishes instead of the app (see [Publishing this host](lan-monitoring.md#publishing-this-host)).
+WireView Mini publishes on port `9876`, the app's publish port: on the LAN when **Publish this host on the LAN** is on, on `127.0.0.1` only when it is off. The app itself does not publish (see [Publishing this host](lan-monitoring.md#publishing-this-host)).
 
 With wireviewd running it leaves publishing to the daemon: its own listener stays on `127.0.0.1` and off the daemon's port, whatever **Publish on the LAN** says (it logs this once).
 
-When the publish port is taken (on Linux wireviewd holds `9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a loopback-only fallback port instead (the next free one of the publish port +1 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`, and moves back to the publish port once it is free (it retries every 30 s); the tray, `--open` and `--status` use whichever port it is on. A control panel page left open follows it: while the page cannot reach WireView Mini, it asks the publish port and the ten after it (on this PC only, without the token) which one answers as the same run, and goes there. A restarted WireView Mini has a new token, so that page says to open the panel again from the tray.
+When the publish port is taken (on Linux wireviewd holds `9876`), WireView Mini serves the panel, `/sensors` and the app's connection on a loopback-only fallback port instead (the next free one of the publish port +1 to +10, else any free port), logs `control panel on http://127.0.0.1:<port>`, and moves back to the publish port once it is free (it retries every 30 s); the tray, `--open`, `--status` and the app use whichever port it is on. A control panel page left open follows it: while the page cannot reach WireView Mini, it asks the publish port and the ten after it (on this PC only, without the token) which one answers as the same run, and goes there. A restarted WireView Mini has a new token, so that page says to open the panel again from the tray.
 
 ## Building
 
@@ -187,7 +190,7 @@ dotnet publish WireViewMini -c Release -r linux-x64
 dotnet publish WireViewMini -c Release -r win-x64
 ```
 
-On Linux this is a NativeAOT build: one native `wireview-mini` executable of about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so` next to it for the serial port. It idles at about 40 MB resident instead of about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang` plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them, add `-p:PublishAot=false` to get the self-contained single-file JIT build, which behaves the same.
+On Linux this is a NativeAOT build: one native `wireview-mini` executable of about 11 MB that needs no .NET runtime, plus `libSystem.IO.Ports.Native.so` next to it for the serial port. It settles at about 50 MB resident with the tray icon and an hour of chart history (the README's figure); before those, the NativeAOT build idled at about 40 MB against about 90 MB for the JIT build. It needs a C toolchain and zlib (`gcc` or `clang` plus `zlib1g-dev` on Debian and Ubuntu, `zlib-devel` on Fedora). Without them, add `-p:PublishAot=false` to get the self-contained single-file JIT build, which behaves the same.
 
 A NativeAOT executable needs at least the glibc of the system that built it, so a build on a recent distro does not run on an older one. The release packages build it with `packaging/build-mini.sh`, in an Ubuntu 22.04 container (glibc 2.35, `packaging/mini/Dockerfile`), which also checks that the publish has no IL warnings.
 
@@ -210,7 +213,7 @@ WireView Mini ships the firmware image `TG-WV-PRO2-FW.hex` and the factory artwo
 
 ## Settings
 
-WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.json` on Linux, `%APPDATA%\PowerMonitor\settings.json` on Windows). Next to it are WireView Mini's `logs` folder and `mini.key`, the key the app signs its commands with.
+WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.json` on Linux, `%APPDATA%\PowerMonitor\settings.json` on Windows). Next to it are WireView Mini's `logs` folder, `mini.key` (the key the app signs its commands with), `mini-panel.token` (the control panel's token and current port, for `--open`, `--status` and the app) and, on Linux, `wireview-mini.lock`.
 
 `HistoryMinutes` sets how much chart history WireView Mini keeps in memory: 60 minutes by default (about 350 KB), at most 1440 (a day, about 8.5 MB), 0 turns it off. Set it in `settings.json` (`"HistoryMinutes": 120`); the key is written only when you set it, and a change applies at once.
 
@@ -222,5 +225,5 @@ WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.j
 - The chart history lives in memory only and starts empty with each run.
 - A remote host's fault raises a notification but never powers this PC off.
 - The control panel answers this PC only.
-- On Windows the fault notification comes from the tray icon, so it needs the notification area: without Explorer there is none.
+- On Windows the fault notification comes from the tray icon, so it needs the notification area: without Explorer, or with `--no-tray`, there is none.
 - While a flash, a theme transfer or a log read runs, the other device controls wait and the app cannot borrow the serial port.

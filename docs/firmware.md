@@ -21,7 +21,7 @@ The app and WireView Mini run the same checks:
 - they compare the bundled and device firmware by version and build date,
 - they refuse an image made for another product,
 - they refuse an image older than Noctua Edition support on a Noctua Edition,
-- they warn before downgrades: an older or identical build is flashed only after you confirm (in WireView Mini, by ticking *Flash the older (or same) firmware anyway*).
+- they warn before downgrades: an older or identical build is flashed only after you confirm (in WireView Mini, by ticking *Flash the older firmware anyway* or *Flash the same firmware anyway*).
 
 ## In the app
 
@@ -31,17 +31,17 @@ Flash the bundled firmware from the **Device** page. Requires the `dfu-util` pac
 
 The panel's **Firmware** card shows the device's and the bundled firmware (version and build), what a flash would do, and **Update firmware**. **Update firmware** shows the same warning as the app first; **Flash now** restarts the device into its bootloader and flashes it, with a progress bar, and the device reconnects on its own.
 
-While a flash runs the other device controls are off, the app cannot borrow the serial port, and the tray's Quit waits for the end. The tray shows *Firmware update available*, which opens the panel, when the bundled firmware is newer than the device's. See [WireView Mini](wireview-mini.md#firmware).
+While a flash runs the other device controls are off, the app cannot borrow the serial port, and the tray's Quit is refused until it ends (a notification says so). The tray shows *Firmware update available*, which opens the panel, when the bundled firmware is newer than the device's. See [WireView Mini](wireview-mini.md#firmware).
 
 ## Requirements
 
 ### Linux: dfu-util
 
-Flashing needs the `dfu-util` package (WireView Mini's card says when it is missing). The Flatpak bundles it; deb/rpm/AUR packages list it as a recommended/optional dependency. `WIREVIEW_DFU_UTIL` overrides which `dfu-util` WireView Mini runs.
+Flashing needs the `dfu-util` package (WireView Mini's card says when it is missing). The Flatpak bundles it and the Nix package puts it on the PATH; the deb, rpm and AUR `wireview-linux-bin` packages list it as a recommended or optional dependency, and the source-built AUR `wireview-linux` depends on it. `WIREVIEW_DFU_UTIL` overrides which `dfu-util` the app and WireView Mini run.
 
 ### Linux: udev rule for the bootloader
 
-During a flash the device re-enumerates as the STM32 DFU bootloader, `0483:df11` (see [USB device IDs](usage.md#usb-device-ids)). The udev rule `udev/99-wireview.rules` makes it `0660 root:dialout`, plus the `uaccess` ACL for the user at the local seat; the AUR package uses `uucp` instead of `dialout`. See [Serial access](install.md#serial-access).
+During a flash the device re-enumerates as the STM32 DFU bootloader, `0483:df11` (see [USB device IDs](usage.md#usb-device-ids)). The udev rule `udev/99-wireview.rules` makes it `0660 root:dialout`, plus the `uaccess` ACL for the user at the local seat; the AUR packages and the install scripts use `uucp` instead of `dialout` on Arch-based distros. See [Serial access](install.md#serial-access).
 
 ### Linux: wireviewd
 
