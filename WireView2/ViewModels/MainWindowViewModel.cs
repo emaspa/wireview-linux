@@ -50,8 +50,6 @@ public partial class MainWindowViewModel : ViewModelBase
         set => Set(ref _currentPageViewModel, value);
     }
 
-    public string Greeting { get; } = "Welcome to WireView II!";
-
     public MainWindowViewModel()
     {
         Overview = new OverviewViewModel(ConnectionStatus);
