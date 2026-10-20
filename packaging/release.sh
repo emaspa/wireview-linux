@@ -37,7 +37,7 @@
 # the files of one run and commit that run's pins.
 #
 # Requires: git, dotnet (8.0+ SDK), docker (or sudo docker), rpmbuild,
-#           flatpak-builder with org.freedesktop.Sdk//24.08, ostree, python3.
+#           flatpak-builder with org.freedesktop.Sdk//26.08, ostree, python3.
 #
 set -euo pipefail
 

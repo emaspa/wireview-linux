@@ -22,7 +22,7 @@ Icons are pulled from `../packaging/icons`.
 Requires `flatpak` and `flatpak-builder`, plus the freedesktop runtime/SDK:
 
 ```bash
-flatpak install -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+flatpak install -y flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
 
 flatpak-builder --user --install --force-clean \
   build-dir flatpak/io.github.emaspa.WireViewLinux.yaml
