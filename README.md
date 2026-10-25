@@ -104,3 +104,5 @@ This software is an unofficial, community-made Linux port of the WireView Pro II
 Use at your own risk. This software interacts with hardware, while every effort has been made to ensure correctness, the authors are not responsible for any damage to your device.
 
 This project contains code decompiled from the original WireView Pro II Windows application and code from the [WireViewDeviceLib](https://github.com/ElmorLabs-ThermalGrizzly/WireViewDeviceLib) repository. Please respect the original authors' rights. This port is provided for personal use and interoperability purposes.
+
+WireView Mini, WireViewNet and the packaging are MIT licensed. The parts derived from the official application and WireViewDeviceLib are not. See [LICENSE](LICENSE) for which files fall under which terms.

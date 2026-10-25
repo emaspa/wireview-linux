@@ -1,0 +1,82 @@
+wireview-linux licensing
+========================
+
+This repository holds two kinds of code under different terms:
+
+  1. Code written from scratch for this project, licensed under the MIT
+     License (Part 1).
+  2. Code and assets derived from the official WireView Pro II Windows
+     application (Thermal Grizzly) and from the WireViewDeviceLib repository
+     (ElmorLabs), which are not covered by the MIT License (Part 2).
+
+A built binary that combines both (the desktop app, and WireView Mini, which
+links WireViewDeviceLib) is subject to both parts.
+
+
+Part 1: MIT License
+-------------------
+
+Applies to:
+
+  - WireViewMini/
+  - WireViewNet/, except WireViewNet/Services/AppSettings.cs and
+    WireViewNet/Services/XdgAutostart.cs
+  - packaging/, aur/, rpm/, flatpak/, nix/, flake.nix, udev/, tools/,
+    install.sh
+  - docs/ and README.md
+
+Copyright (c) 2026 Emanuele Sparvoli
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+Part 2: Derived code and assets (not MIT)
+-----------------------------------------
+
+Applies to everything not listed in Part 1, including:
+
+  - WireView2/ (the desktop application), including its firmware images
+    (WireView2/Firmware/) and background artwork (WireView2/Assets/Backgrounds/)
+  - WireViewDeviceLib/
+  - WireViewNet/Services/AppSettings.cs and WireViewNet/Services/XdgAutostart.cs
+  - themes/
+
+This code is derived from the original WireView Pro II Windows application by
+Thermal Grizzly and from WireViewDeviceLib
+(https://github.com/ElmorLabs-ThermalGrizzly/WireViewDeviceLib). Neither is
+published under an open-source license, and the rights of the original authors
+are reserved. The Linux-specific changes in these files are copyright (c) 2026
+Emanuele Sparvoli.
+
+These files are provided for personal use and for interoperability with
+WireView Pro II hardware on Linux. No license to the original authors' code,
+firmware or artwork is granted by this repository.
+
+This project is not affiliated with, endorsed by, or supported by Thermal
+Grizzly or ElmorLabs. WireView and Thermal Grizzly are trademarks of their
+respective owners.
+
+
+Third-party components
+----------------------
+
+  - Inter font (WireView2/Assets/Fonts/Inter-Regular.ttf): SIL Open Font
+    License 1.1, see WireView2/Assets/Fonts/Inter-LICENSE.txt.
+  - .NET, Avalonia UI and the other NuGet packages bundled in release builds
+    are distributed under their own licenses (MIT, BSD, Apache-2.0 and others).
