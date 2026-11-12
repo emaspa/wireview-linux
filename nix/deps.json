@@ -120,6 +120,11 @@
     "hash": "sha256-0sAwUHBaAhI2vIRlSD/HtNBrJHa132JTzfnWIDaPJXY="
   },
   {
+    "pname": "Microsoft.NET.ILLink.Tasks",
+    "version": "8.0.31",
+    "hash": "sha256-sq5bVfjBI+EPALp1mfVoH/bXSVe6otA6Gfe2y5ajtEY="
+  },
+  {
     "pname": "Microsoft.NETCore.App.Host.linux-arm64",
     "version": "8.0.31",
     "hash": "sha256-2FWhduT40HVnt18J46uxhF5RxK9kdUojw8w24s+77zU="
