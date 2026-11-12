@@ -83,6 +83,7 @@ public class App : Application
             // Before the tray starts the device manager: the probe for
             // wireview-mini must be in place before the first serial probe.
             WireViewDiscoveryService.Shared.Start();
+            Dispatcher.UIThread.UnhandledException += OnUiThreadUnhandledException;
             InitializeTray(desktop);
             AppSettings.Saved += OnSettingsSaved;
             WireViewPublishService.Shared.Start();
@@ -93,6 +94,26 @@ public class App : Application
             }
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    // Avalonia registers each tray icon on D-Bus from an async void method, so a
+    // refused registration (a sandbox that may not own the StatusNotifierItem
+    // name, #6) would otherwise take the whole app down. Run without that tray
+    // icon instead, and show the window once, since with no tray icon it is the
+    // only way into the app.
+    private bool _trayFailed;
+
+    private void OnUiThreadUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        if (e.Exception.StackTrace?.Contains("Avalonia.FreeDesktop.DBusTrayIconImpl", StringComparison.Ordinal) != true)
+            return;
+        e.Handled = true;
+        string message = $"Tray icon registration failed, running without it: {e.Exception.GetType().Name}: {e.Exception.Message}";
+        Console.Error.WriteLine(message);
+        WireView2.Net.FileLog.Warn(message);
+        if (_trayFailed || _desktop == null) return;
+        _trayFailed = true;
+        ShowMainWindow(_desktop);
     }
 
     private void OnSettingsSaved(object? sender, EventArgs e)

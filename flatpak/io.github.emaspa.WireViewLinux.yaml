@@ -5,17 +5,22 @@ sdk: org.freedesktop.Sdk
 command: wireview-linux
 
 finish-args:
-  # Display
-  - --socket=wayland
-  - --socket=fallback-x11
+  # Display. Avalonia has no Wayland backend on Linux, so the app needs the X11
+  # socket (XWayland on a Wayland session). fallback-x11 would withhold it
+  # whenever Wayland is available: XOpenDisplay failed at startup (#6).
+  - --socket=x11
   - --share=ipc
   - --device=dri
   # USB serial access to the WireView device (/dev/ttyACM*). Flatpak has no
   # finer-grained tty filter, so device=all is required. The host udev rule
   # still has to be installed separately (a sandbox cannot write /etc/udev).
   - --device=all
-  # System-tray icon (StatusNotifierItem) and desktop notifications
+  # System-tray icon (StatusNotifierItem) and desktop notifications. Avalonia
+  # registers each tray icon as org.kde.StatusNotifierItem-<pid>-<n>, and n
+  # grows each time the power icon is switched off and on again, so no fixed
+  # list of names covers it.
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.*
   - --talk-name=org.freedesktop.Notifications
 
 modules:
