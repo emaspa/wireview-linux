@@ -1,0 +1,167 @@
+[
+  {
+    "pname": "Microsoft.AspNetCore.App.Ref",
+    "version": "8.0.31",
+    "hash": "sha256-vMnNfXlEkZq5fpys8z5SnCn9q/BYXLw+CXcEdGeD6hg="
+  },
+  {
+    "pname": "Microsoft.AspNetCore.App.Runtime.linux-arm64",
+    "version": "8.0.31",
+    "hash": "sha256-gPPxKQRPdKXBKlGyLe4jg/gNZ4vYa3iCwshiRPmkH4s="
+  },
+  {
+    "pname": "Microsoft.AspNetCore.App.Runtime.linux-x64",
+    "version": "8.0.31",
+    "hash": "sha256-0sAwUHBaAhI2vIRlSD/HtNBrJHa132JTzfnWIDaPJXY="
+  },
+  {
+    "pname": "Microsoft.DotNet.ILCompiler",
+    "version": "8.0.31",
+    "hash": "sha256-bgxw7Rx+x7HUieeEx5zDfMzO2bYPRyzszckd4RorUU8="
+  },
+  {
+    "pname": "Microsoft.NET.ILLink.Tasks",
+    "version": "8.0.31",
+    "hash": "sha256-sq5bVfjBI+EPALp1mfVoH/bXSVe6otA6Gfe2y5ajtEY="
+  },
+  {
+    "pname": "Microsoft.NETCore.App.Host.linux-arm64",
+    "version": "8.0.31",
+    "hash": "sha256-2FWhduT40HVnt18J46uxhF5RxK9kdUojw8w24s+77zU="
+  },
+  {
+    "pname": "Microsoft.NETCore.App.Host.linux-x64",
+    "version": "8.0.31",
+    "hash": "sha256-MGH8ZnjM4fZFp63mbLNpkojI2T7TvpvNgvpjOGfrTIE="
+  },
+  {
+    "pname": "Microsoft.NETCore.App.Ref",
+    "version": "8.0.31",
+    "hash": "sha256-oChiwq8Hnb0R+Fx61PlO1VMFUw4M8Gcd4nnxoSlPIMY="
+  },
+  {
+    "pname": "Microsoft.NETCore.App.Runtime.linux-arm64",
+    "version": "8.0.31",
+    "hash": "sha256-yIr6s/EZUrzm1k3H0CImh1vtcomBgECs37q4B3hnQwI="
+  },
+  {
+    "pname": "Microsoft.NETCore.App.Runtime.linux-x64",
+    "version": "8.0.31",
+    "hash": "sha256-J6iRM18YDWcyxaU7SEd5B1O276obx8P4FAE6qWjWqjY="
+  },
+  {
+    "pname": "Microsoft.WindowsDesktop.App.Ref",
+    "version": "8.0.31",
+    "hash": "sha256-mJAE7Z8teEcdbsJaTxGnPk+1bWI6WhSm8Zdf63JkeJ4="
+  },
+  {
+    "pname": "runtime.android-arm.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-96EggbMmAMPfgy6jf8BhjOkDNgFbxzkPx7RK86U3dU4="
+  },
+  {
+    "pname": "runtime.android-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-p6aPucXJPd5i//hOX7TS1CvVvrAK6NuQbv2aEcPAHKs="
+  },
+  {
+    "pname": "runtime.android-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-dsfgvdY37GxvGuezIbD2qmNh+lqVLxpsjwhrJGoHZjU="
+  },
+  {
+    "pname": "runtime.android-x86.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-UYoEahFFmpwvF35SCaiQGe0OqrJfjc8POX8WsO6f6sc="
+  },
+  {
+    "pname": "runtime.linux-arm.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-cG5vwnqcBvxzBRIfCrx3YpE0lgNIqhp38HKTazdtFG4="
+  },
+  {
+    "pname": "runtime.linux-arm64.Microsoft.DotNet.ILCompiler",
+    "version": "8.0.31",
+    "hash": "sha256-oxkScF6OzoZH7ktS/Jo8p+lrw8D+Urjn+KV3pAGdozI="
+  },
+  {
+    "pname": "runtime.linux-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-8c1X/aATE/t/S4npuOADPTB2Stz+bieifEiXzQHov4A="
+  },
+  {
+    "pname": "runtime.linux-bionic-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-URs1iaIIV8vnp6cmPaYrs6i53IRhc4nCw0Igv7JvrE4="
+  },
+  {
+    "pname": "runtime.linux-bionic-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-5kF0FnM16WyRPWummL4Spx0lwDBfxU5bv5eXHln1UiE="
+  },
+  {
+    "pname": "runtime.linux-musl-arm.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-v+Tt1axrvT3MQkQOd+U3YNRmP7+vgcGUCH4qS5vRPPI="
+  },
+  {
+    "pname": "runtime.linux-musl-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-TtJLK9L1xWZIA1SyWSELooy/NXHhRKUxGzQDwZeuElU="
+  },
+  {
+    "pname": "runtime.linux-musl-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-y5xmYxiK7bcqYTBM0e8Ylym4xaLS6oMM2jpR4OztcsA="
+  },
+  {
+    "pname": "runtime.linux-x64.Microsoft.DotNet.ILCompiler",
+    "version": "8.0.31",
+    "hash": "sha256-/Gpl205ThZgPkNQfjxUxYs6rBIS6CVEdBehD5s8PawE="
+  },
+  {
+    "pname": "runtime.linux-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-bpDW7HmIkaz4YWcGRaoPy0y2zOcAs8KwtqYzVeeoQ9o="
+  },
+  {
+    "pname": "runtime.maccatalyst-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-lz2nzyHeWm3mwqZnbWMm73xJGzQMzGsV7FLCH2Oeowo="
+  },
+  {
+    "pname": "runtime.maccatalyst-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-fFir+pC7pLmCiYpLoLf0eaBe6vxXb7UHkilpGu13i2c="
+  },
+  {
+    "pname": "runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-ZF5G9P02vQJwkIBQBcGNTAy5fm+pzxpst2gof2Y3nP8="
+  },
+  {
+    "pname": "runtime.osx-arm64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-BXE+w07BH2Ywm7M/2X7YPtsE0qWZ+XumPXabIhju5qw="
+  },
+  {
+    "pname": "runtime.osx-x64.runtime.native.System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-nk3TR2KAPia+pEpdLk0Ae0UWbk+qhu4UWXNl+caCtuw="
+  },
+  {
+    "pname": "System.IO.Pipelines",
+    "version": "8.0.0",
+    "hash": "sha256-LdpB1s4vQzsOODaxiKstLks57X9DTD5D6cPx8DE1wwE="
+  },
+  {
+    "pname": "System.IO.Ports",
+    "version": "10.0.2",
+    "hash": "sha256-7qjZWd3lIy6TBVnxLw2qqHl3xgSelvdwwRvtr0IlI+w="
+  },
+  {
+    "pname": "Tmds.DBus.Protocol",
+    "version": "0.95.1",
+    "hash": "sha256-LUum1jB4RxzgfoqwxKoTRe7UdhTikbBh5Em7g4gvp3U="
+  }
+]

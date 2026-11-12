@@ -11,7 +11,7 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 
 ## WireView Mini
 
-[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/` (`/opt/wireview-linux/` for the source-built AUR `wireview-linux`), and sits next to `WireView2` in the pre-built tarball. The packages add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel; the tarball's `install.sh` adds it for the current user. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then the launcher entry or `wireview-mini` to start it now. The [Flatpak](#flatpak) and the [Nix flake](#nixos-flake) carry the app only.
+[WireView Mini](wireview-mini.md) (`wireview-mini`) comes with the app in the PPA, `.deb`, COPR/`.rpm` and AUR packages, installed as `/usr/bin/wireview-mini` with its files in `/usr/lib/wireview-linux/` (`/opt/wireview-linux/` for the source-built AUR `wireview-linux`), and sits next to `WireView2` in the pre-built tarball. The packages add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel; the tarball's `install.sh` adds it for the current user. Nothing starts it on its own: run `wireview-mini --install` once to start it at login (an entry in `~/.config/autostart/`), then the launcher entry or `wireview-mini` to start it now. The [Nix flake](#nixos-flake) installs it too, with the launcher entry; the [Flatpak](#flatpak) carries the app only.
 
 It is one native executable (no .NET runtime) built against glibc 2.35, so it runs on any distro with that glibc or a newer one (tested on Ubuntu 22.04, 24.04 and 26.04, Fedora 43 and 44, and Arch), and on immutable distros straight from the tarball. With wireview-hwmon installed, use 1.8.1 or later: its wireviewd takes the LAN port back from WireView Mini when it starts while WireView Mini holds it.
 
@@ -132,7 +132,7 @@ The repository is a flake. Its NixOS module installs the app, built from source,
 }
 ```
 
-The flake builds the app only; WireView Mini is not in it yet. `nix run github:emaspa/wireview-linux` starts the app without installing it, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
+The package also installs WireView Mini as `wireview-mini`, compiled ahead of time like in the other packages, with its **WireView Mini** launcher entry. `wireview-mini --install` writes the login entry with the `wireview-mini` of your profile (such as `/run/current-system/sw/bin/wireview-mini`), not the store path, so it keeps working after upgrades; the app's own start-at-login option does the same. `nix run github:emaspa/wireview-linux` starts the app without installing it, and `nix shell github:emaspa/wireview-linux -c wireview-mini` starts WireView Mini, but direct serial access still needs the udev rule from the module. The package is marked unfree because it contains decompiled upstream code and Thermal Grizzly's firmware. The flake allows it on its own, so no `allowUnfree` setting is needed.
 
 ## Pre-built binary (no .NET required)
 

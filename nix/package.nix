@@ -3,6 +3,8 @@
 #   nix build .#default.fetch-deps && ./result nix/deps.json
 {
   lib,
+  callPackage,
+  makeWrapper,
   buildDotnetModule,
   dotnetCorePackages,
   dfu-util,
@@ -16,10 +18,16 @@
   libXext,
   libXi,
   libXrandr,
+  libnotify,
+  openssl,
+  xdg-utils,
   src,
   version,
 }:
 
+let
+  mini = callPackage ./mini.nix { inherit src version; };
+in
 buildDotnetModule {
   pname = "wireview-linux";
   inherit version src;
@@ -55,6 +63,7 @@ buildDotnetModule {
     install -Dm644 packaging/wireview-linux.desktop $out/share/applications/wireview-linux.desktop
     substituteInPlace $out/share/applications/wireview-linux.desktop \
       --replace-fail "Exec=/usr/lib/wireview-linux/WireView2" "Exec=wireview-linux"
+    install -Dm644 packaging/wireview-mini.desktop -t $out/share/applications/
     mkdir -p $out/share/icons
     cp -r packaging/icons/hicolor $out/share/icons/
 
@@ -68,12 +77,26 @@ buildDotnetModule {
     fi
   '';
 
+  nativeBuildInputs = [ makeWrapper ];
+
   postFixup = ''
     ln -s $out/bin/WireView2 $out/bin/wireview-linux
+
+    # WireView Mini: its executable stays in its own store path, with the
+    # firmware image and artwork it reads from there. dfu-util flashes; the
+    # app's launcher is how Launch WireView Desktop finds it; xdg-open and
+    # notify-send come after the user's own, as fallbacks. The ahead-of-time
+    # build loads libssl at start (it aborts without one).
+    makeWrapper ${mini}/lib/wireview-mini/wireview-mini $out/bin/wireview-mini \
+      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ openssl ]} \
+      --prefix PATH : ${lib.makeBinPath [ dfu-util ]} \
+      --suffix PATH : $out/bin:${lib.makeBinPath [ xdg-utils libnotify ]}
   '';
 
+  passthru = { inherit mini; };
+
   meta = {
-    description = "Unofficial Linux GUI for the Thermal Grizzly WireView Pro II";
+    description = "Unofficial Linux GUI for the Thermal Grizzly WireView Pro II, with WireView Mini";
     homepage = "https://github.com/emaspa/wireview-linux";
     # Contains code decompiled from the upstream Windows client and Thermal
     # Grizzly's firmware image; see the README's License section.

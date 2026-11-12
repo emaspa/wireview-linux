@@ -8,10 +8,11 @@
       lib = nixpkgs.lib;
       systems = [ "x86_64-linux" "aarch64-linux" ];
       # The package is unfree (decompiled upstream code, Thermal Grizzly's
-      # firmware); allow exactly this one.
+      # firmware); allow exactly these (the app and WireView Mini).
       pkgsFor = system: import nixpkgs {
         inherit system;
-        config.allowUnfreePredicate = pkg: lib.getName pkg == "wireview-linux";
+        config.allowUnfreePredicate = pkg:
+          builtins.elem (lib.getName pkg) [ "wireview-linux" "wireview-mini" ];
       };
       forAllSystems = f: lib.genAttrs systems (system: f (pkgsFor system));
       version = builtins.head (builtins.match ".*<Version>([^<]+)</Version>.*"

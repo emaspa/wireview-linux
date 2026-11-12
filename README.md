@@ -54,11 +54,11 @@ Why there are two clients, and which to leave running. Device connected, one rea
 | Fedora (COPR) | `sudo dnf copr enable emaspa/wireview-linux`<br>`sudo dnf install wireview-linux` |
 | Flatpak (Bazzite, Silverblue) | `flatpak install ./wireview-linux-*.flatpak` (from [Releases](https://github.com/emaspa/wireview-linux/releases)), then the [host udev rule](docs/install.md#flatpak). The app only, no WireView Mini |
 | Arch / CachyOS / EndeavourOS (AUR) | `yay -S wireview-linux-bin` (or `yay -S wireview-linux` to build from source) |
-| NixOS (flake) | `nix run github:emaspa/wireview-linux`, or the [NixOS module](docs/install.md#nixos-flake). The app only, no WireView Mini yet |
+| NixOS (flake) | `nix run github:emaspa/wireview-linux`, or the [NixOS module](docs/install.md#nixos-flake). With WireView Mini |
 | Pre-built tarball | Extract the `linux-x64.tar.gz` release, then `./install.sh` and `./WireView2` (`./wireview-mini` for WireView Mini) |
 | Build from source | `git clone https://github.com/emaspa/wireview-linux.git`<br>`cd wireview-linux && ./install.sh` |
 
-The PPA, .deb, COPR/.rpm and AUR packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
+The PPA, .deb, COPR/.rpm, AUR and Nix packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
 
 ## Connection modes
 

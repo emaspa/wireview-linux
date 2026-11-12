@@ -20,7 +20,8 @@ internal static class MiniInstaller
     private static readonly XdgAutostart Xdg = new(
         "wireview-mini.desktop",
         "WireView Mini",
-        "WireView Pro II WireView Mini: fault alerts, shutdown on fault, LAN publishing");
+        "WireView Pro II WireView Mini: fault alerts, shutdown on fault, LAN publishing",
+        "wireview-mini");
 
     /// <summary>Whether the login entry exists (the tray's "Start at login").</summary>
     public static bool IsInstalled()

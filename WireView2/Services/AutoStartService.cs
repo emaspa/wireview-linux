@@ -8,7 +8,8 @@ public static class AutoStartService
     private static readonly XdgAutostart Entry = new(
         "wireview2.desktop",
         "WireView Pro II",
-        "WireView Pro II power monitoring application");
+        "WireView Pro II power monitoring application",
+        "wireview-linux");
 
     public static void SetAutoStart(bool enabled) => Entry.Set(enabled);
 

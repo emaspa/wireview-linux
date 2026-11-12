@@ -20,7 +20,8 @@ It reads the app's own `settings.json`, so the app and the control panel configu
 - **Linux packages**: the PPA, `.deb`, COPR/`.rpm` and AUR (`wireview-linux-bin` and `wireview-linux`) packages install it with the app, as `/usr/bin/wireview-mini` (a link to `/usr/lib/wireview-linux/wireview-mini`, `/opt/wireview-linux/wireview-mini` for the source-built `wireview-linux`, next to the files it reads), with a **WireView Mini** entry in the application launcher. See [Installation](install.md#wireview-mini).
 - **Pre-built tarball**: `wireview-mini` is next to `WireView2`; keep the files of the directory together. Its `install.sh` adds the **WireView Mini** launcher entry for the current user, pointing at the directory.
 - **Windows**: `wireview-mini-<version>-windows-x64.zip` from the [Releases](https://github.com/emaspa/wireview-linux/releases) page, with `wireview-mini.exe`, `TG-WV-PRO2-FW.hex` and `ext_flash.bin`. Extract it anywhere and run `wireview-mini.exe`.
-- **Flatpak and Nix**: not included. The Flatpak sandbox has no network access, so the browser could not reach the control panel; the Nix flake builds the app only for now.
+- **Nix**: the flake's package installs it with the app as `wireview-mini`, with the **WireView Mini** launcher entry. See [NixOS](install.md#nixos-flake).
+- **Flatpak**: not included. The Flatpak sandbox has no network access, so the browser could not reach the control panel.
 
 Nothing starts it on its own: `wireview-mini --install` adds the login entry, and the **WireView Mini** launcher entry or `wireview-mini` starts it now. The launcher entry runs `wireview-mini --launch`: it starts WireView Mini and opens its control panel in the browser, or, when WireView Mini already runs, opens that one's control panel. Its **Control panel** action is `wireview-mini --open`. The login entry starts it without opening the browser. With wireview-hwmon, use 1.8.1 or later: its wireviewd takes port `9876` back from WireView Mini on its own when it starts while WireView Mini holds the port (see [LAN publishing and ports](#lan-publishing-and-ports)).
 
@@ -221,7 +222,7 @@ WireView Mini uses the app's `settings.json` (`~/.config/PowerMonitor/settings.j
 
 - If the app is open at the same time, its next settings save writes back its own copy of the **Publish on the LAN** and **Shutdown on fault** switches (and of the settings changed on the control panel), so change them in one place while both run.
 - On GNOME the tray icon needs the AppIndicator/KStatusNotifierItem extension.
-- It is not in the Flatpak or the Nix flake (see [Installing](#installing)).
+- It is not in the Flatpak (see [Installing](#installing)).
 - The chart history lives in memory only and starts empty with each run.
 - A remote host's fault raises a notification but never powers this PC off.
 - The control panel answers this PC only.
