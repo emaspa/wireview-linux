@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.4.1.0
+Version:        1.4.2.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -99,6 +99,14 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Thu Nov 12 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.2.0-1
+- Flatpak: the app starts on a Wayland session. The sandbox got only the
+  Wayland socket there, and the app draws through X11 (XWayland), so it stopped
+  with "XOpenDisplay failed". It now gets the X11 socket and may register its
+  tray icons (#6).
+- A tray icon the desktop does not accept no longer closes the app: it runs
+  without that icon and opens its window.
+
 * Sun Oct 18 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.1.0-1
 - WireView Mini: an entry in the application launcher. It starts WireView Mini
   and opens its control panel in the browser, or opens the running one's

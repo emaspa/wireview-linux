@@ -1,3 +1,14 @@
+wireview-linux (1.4.2.0~resolute1) resolute; urgency=medium
+
+  * Flatpak: the app starts on a Wayland session. The sandbox got only the
+    Wayland socket there, and the app draws through X11 (XWayland), so it
+    stopped with "XOpenDisplay failed". It now gets the X11 socket and may
+    register its tray icons (#6).
+  * A tray icon the desktop does not accept no longer closes the app: it runs
+    without that icon and opens its window.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Thu, 12 Nov 2026 15:54:08 +0000
+
 wireview-linux (1.4.1.0~resolute1) resolute; urgency=medium
 
   * WireView Mini: an entry in the application launcher. It starts

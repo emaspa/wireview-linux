@@ -43,6 +43,11 @@
   </screenshots>
 
   <releases>
+    <release version="1.4.2.0" date="2026-11-12">
+      <description>
+        <p>The app starts on a Wayland session: the Flatpak gets the X11 socket it draws through and may register its tray icons. A tray icon the desktop does not accept no longer closes the app.</p>
+      </description>
+    </release>
     <release version="1.4.1.0" date="2026-10-18">
       <description>
         <p>The app detects a running WireView Mini through a lock file next to settings.json. WireView Mini itself, with its new application launcher entry, is in the other packages.</p>
