@@ -59,7 +59,7 @@ modules:
     sources:
       - type: archive
         url: https://github.com/emaspa/wireview-linux/releases/download/v1.4.2.0/wireview-linux-1.4.2.0-linux-x64.tar.gz
-        sha256: 2810c92a3bdf377c9761795037d173dd0450253b092de41b77e9ae4e4334871b
+        sha256: 6edc04f8217ba080a7203dcc8801a956eb254b0a0f454a177835b4c472bbe26d
         # strips the top-level wireview-linux-<ver>-linux-x64/ directory
         strip-components: 1
       - type: file
