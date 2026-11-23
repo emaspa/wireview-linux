@@ -296,10 +296,14 @@ internal sealed class ControlPanel
 
     private PanelDevice? LocalDevice()
     {
-        // Lent to the app, or closed for a firmware flash: the last readings.
-        if (_mini.PortSuspended)
+        // Lent to the app, or the shown unit closed for a firmware flash: the last readings.
+        string? closedUid = _mini.ShownUnitClosedForFlash();
+        if (_mini.HandoverActive || closedUid != null)
         {
-            var frozen = _mini.Publisher.BuildSnapshot().Devices.FirstOrDefault();
+            string? uid = closedUid ?? _mini.SelectedUid;
+            var devices = _mini.Publisher.BuildSnapshot().Devices;
+            var frozen = devices.FirstOrDefault(d => !d.Connected && string.Equals(d.Id, uid, StringComparison.OrdinalIgnoreCase))
+                         ?? devices.FirstOrDefault();
             return new PanelDevice(
                 Name: frozen?.Name,
                 Firmware: frozen?.FwVer,

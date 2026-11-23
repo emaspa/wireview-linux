@@ -106,7 +106,7 @@ The five screens, pause and resume.
 
 A live line chart of the readings WireView Mini keeps, with the app's series and colors (total power and current, each pin's voltage and current, the four temperatures) plus each pin's power and the fan duty, the app's default selection (total power and current), a window of 1, 5 or 15 minutes, an hour or everything kept, an automatic or manual Y range per unit, a legend with the newest values, the values under the pointer, and **Export CSV**.
 
-WireView Mini keeps the readings of this PC's device of the last `HistoryMinutes` minutes in memory, one sample a second (see [Settings](#settings)). The history is not saved to disk, so it starts empty with WireView Mini, and it pauses while the serial port is lent to the app or busy with a flash, a theme transfer or a log read. The Charts card reads it only while it is open and the page is visible, and the new samples then come with the status poll, so an open chart adds no requests.
+WireView Mini keeps the readings of this PC's device of the last `HistoryMinutes` minutes in memory, one sample a second (see [Settings](#settings)). The history is not saved to disk, so it starts empty with WireView Mini, and it pauses while the serial port is lent to the app or busy with a theme transfer or a log read. A flash pauses only the history of the unit being flashed. The Charts card reads it only while it is open and the page is visible, and the new samples then come with the status poll, so an open chart adds no requests.
 
 **Export CSV** downloads every sample kept in the columns and formats of the app's CSV log (Timestamp, Connected, HW, FW, the totals, the four temperatures, then V1, I1 to V6, I6; times in UTC).
 

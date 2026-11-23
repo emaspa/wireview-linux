@@ -33,7 +33,7 @@ With several WireViews attached, the flash goes to the device shown, and the con
 
 The panel's **Firmware** card shows the device's and the bundled firmware (version and build), what a flash would do, and **Update firmware**. **Update firmware** shows the same warning as the app first; **Flash now** restarts the device into its bootloader and flashes it, with a progress bar, and the device reconnects on its own.
 
-While a flash runs the other device controls are off, the app cannot borrow the serial port, and the tray's Quit is refused until it ends (a notification says so). The tray shows *Firmware update available*, which opens the panel, when the bundled firmware is newer than the device's. See [WireView Mini](wireview-mini.md#firmware).
+While a flash runs the other device controls are off, the app cannot borrow the serial port, and the tray's Quit is refused until it ends (a notification says so). With several WireViews attached, only the unit being flashed goes offline: the others keep their readings, charts, fault alerts and LAN publishing, and the LAN still shows the flashed unit's last reading, marked not connected, until it is back. The tray shows *Firmware update available*, which opens the panel, when the bundled firmware is newer than the device's. See [WireView Mini](wireview-mini.md#firmware).
 
 ## Requirements
 

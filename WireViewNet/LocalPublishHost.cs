@@ -19,8 +19,11 @@ namespace WireView2.Net
         private readonly string _appVersion;
         private readonly object _gate = new();
         private SensorPublisher? _publisher;
-        // Devices as last seen before the serial port was handed over (mini only).
-        private List<WireViewSensorDto>? _frozen;
+        // Devices as last seen before they were closed (mini only: the serial
+        // handover closes every one, a firmware flash one unit), marked not
+        // connected and published until they are back.
+        private readonly List<WireViewSensorDto> _frozen = new();
+        private bool _serialSuspended;
 
         /// <param name="manager">Whose devices to publish.</param>
         /// <param name="appVersion">Sent as the snapshot's <c>appVersion</c>.</param>
@@ -104,12 +107,12 @@ namespace WireView2.Net
             }
         }
 
-        // ---- Serial handover view (mini) ----
+        // ---- Closed devices (mini) ----
 
         /// <summary>True between <see cref="FreezeDevices"/> and <see cref="Unfreeze"/>.</summary>
         public bool SerialSuspended
         {
-            get { lock (_gate) return _frozen != null; }
+            get { lock (_gate) return _serialSuspended; }
         }
 
         /// <summary>Keeps publishing the devices as they are now, marked not
@@ -117,35 +120,79 @@ namespace WireView2.Net
         /// readers (and the GUI) keep the device listed instead of dropping it.</summary>
         public void FreezeDevices()
         {
-            var devices = CurrentDevices();
+            var devices = LiveDevices();
             foreach (var d in devices) d.Connected = false;
-            lock (_gate) _frozen ??= devices;
+            lock (_gate)
+            {
+                if (_serialSuspended) return;
+                _serialSuspended = true;
+                _frozen.Clear();
+                _frozen.AddRange(devices);
+            }
         }
 
-        /// <summary>Back to publishing the manager's live devices.</summary>
+        /// <summary>Like <see cref="FreezeDevices"/>, for one unit (by chip UID) that
+        /// is closed for a firmware flash; the others stay live.</summary>
+        public void FreezeDevice(string uniqueId)
+        {
+            var d = LiveDevices().FirstOrDefault(x => SameId(x.Id, uniqueId));
+            if (d == null) return;
+            d.Connected = false;
+            lock (_gate)
+            {
+                _frozen.RemoveAll(x => SameId(x.Id, uniqueId));
+                _frozen.Add(d);
+            }
+        }
+
+        /// <summary>Back to publishing the manager's live devices only.</summary>
         public void Unfreeze()
         {
-            lock (_gate) _frozen = null;
+            lock (_gate)
+            {
+                _frozen.Clear();
+                _serialSuspended = false;
+            }
         }
+
+        /// <summary>Every frozen device is live again with readings (true when none is frozen).</summary>
+        public bool FrozenDevicesBack()
+        {
+            var live = LiveDevices();
+            lock (_gate) return _frozen.All(f => live.Any(d => SameId(d.Id, f.Id)));
+        }
+
+        private static bool SameId(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
         // ---- The publisher's callbacks ----
 
         /// <summary>The <c>GET /sensors</c> payload.</summary>
         public WireViewHostSnapshot BuildSnapshot()
         {
-            List<WireViewSensorDto>? frozen;
-            lock (_gate) frozen = _frozen;
+            bool suspended;
+            lock (_gate) suspended = _serialSuspended;
             return new WireViewHostSnapshot
             {
                 Host = Environment.MachineName,
                 AppVersion = _appVersion,
                 Mini = MiniVersion,
-                SerialSuspended = frozen != null,
-                Devices = frozen != null ? new List<WireViewSensorDto>(frozen) : CurrentDevices(),
+                SerialSuspended = suspended,
+                Devices = CurrentDevices(),
             };
         }
 
+        /// <summary>The live devices, then the frozen ones that are not live again.</summary>
         private List<WireViewSensorDto> CurrentDevices()
+        {
+            var list = LiveDevices();
+            lock (_gate)
+                foreach (var f in _frozen)
+                    if (!list.Any(d => SameId(d.Id, f.Id)))
+                        list.Add(f);
+            return list;
+        }
+
+        private List<WireViewSensorDto> LiveDevices()
         {
             var list = new List<WireViewSensorDto>();
             foreach (var md in _manager.Devices)

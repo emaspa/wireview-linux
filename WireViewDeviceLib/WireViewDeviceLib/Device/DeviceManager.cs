@@ -49,6 +49,12 @@ namespace WireView2.Device
         // Serial sources holding a WireView this app does not support yet (WireView II,
         // product 7/8). Not re-probed every tick; forgotten once the port disappears.
         private readonly Dictionary<string, (byte VendorId, byte ProductId)> _unsupportedSources = new();
+        // One unit closed for a firmware flash (see PauseUnit): its sources, and
+        // every serial port not open yet, are left alone until ResumeUnit.
+        private readonly HashSet<string> _pausedSources = new();
+        private bool _serialPaused;
+        // Held for a whole discovery pass, so PauseUnit can wait for one in flight.
+        private readonly object _passLock = new();
 
         private CancellationTokenSource? _cts;
         private Task? _worker;
@@ -143,6 +149,9 @@ namespace WireView2.Device
                 foreach (var gone in _unsupportedSources.Keys
                              .Where(s => !ports.Contains(s["serial:".Length..])).ToList())
                     _unsupportedSources.Remove(gone);
+                // A unit is in its bootloader for a flash: open no port until it is
+                // done, so nothing races the flasher (or wireviewd) for its port.
+                if (_serialPaused) yield break;
             }
             foreach (var port in ports)
             {
@@ -173,7 +182,7 @@ namespace WireView2.Device
         }
 
         /// <summary>Drive one discovery + prune pass synchronously (used by tests).</summary>
-        public void Tick() { Discover(); Prune(); }
+        public void Tick() { lock (_passLock) { Discover(); Prune(); } }
 
         /// <summary>Raised (on a background thread) when a device is added or removed.</summary>
         public event EventHandler? DevicesChanged;
@@ -276,8 +285,62 @@ namespace WireView2.Device
                 _byId.Clear();
                 _openSources.Clear();
                 _unsupportedSources.Clear();
+                _pausedSources.Clear();
+                _serialPaused = false;
                 _selectedId = null;
             }
+        }
+
+        /// <summary>Closes the entries <paramref name="match"/> picks (one unit, for
+        /// a firmware flash) and keeps discovery off their sources, and off every
+        /// serial port not open yet, until <see cref="ResumeUnit"/>. The other devices
+        /// keep running. Waits up to <paramref name="passWait"/> for a discovery pass
+        /// in flight, so no port is opened after this returns. Returns the entries
+        /// it closed.</summary>
+        public IReadOnlyList<ManagedDevice> PauseUnit(Func<ManagedDevice, bool> match, TimeSpan passWait)
+        {
+            lock (_gate) _serialPaused = true;
+            bool entered = false;
+            List<ManagedDevice> closed;
+            try
+            {
+                Monitor.TryEnter(_passLock, passWait, ref entered);
+                lock (_gate)
+                {
+                    closed = _byId.Values.Where(md => !md.IsRemote && match(md)).ToList();
+                    foreach (var md in closed)
+                    {
+                        _pausedSources.Add(md.Source);
+                        Drop(md);
+                    }
+                }
+            }
+            finally
+            {
+                if (entered) Monitor.Exit(_passLock);
+            }
+            if (closed.Count > 0)
+            {
+                DevicesChanged?.Invoke(this, EventArgs.Empty);
+                SelectedChanged?.Invoke(this, EventArgs.Empty);
+            }
+            return closed;
+        }
+
+        /// <summary>Ends <see cref="PauseUnit"/>: the next pass opens the unit again.</summary>
+        public void ResumeUnit()
+        {
+            lock (_gate)
+            {
+                _pausedSources.Clear();
+                _serialPaused = false;
+            }
+        }
+
+        private bool IsPaused(string source)
+        {
+            lock (_gate)
+                return _pausedSources.Contains(source) || (_serialPaused && source.StartsWith("serial:", StringComparison.Ordinal));
         }
 
         /// <summary>The poll interval applied to local devices, in ms.</summary>
@@ -300,7 +363,7 @@ namespace WireView2.Device
         {
             while (!ct.IsCancellationRequested)
             {
-                try { Discover(); Prune(); } catch { /* ignore and retry */ }
+                try { lock (_passLock) { Discover(); Prune(); } } catch { /* ignore and retry */ }
                 await Task.Delay(_pollMs, ct).ConfigureAwait(false);
             }
         }
@@ -318,7 +381,7 @@ namespace WireView2.Device
             for (int i = 0; i < probes.Count; i++)
             foreach (var (device, source) in probes[i](held))
             {
-                if (HoldsSource(source)) { Dispose(device); continue; }
+                if (HoldsSource(source) || (i == 0 && IsPaused(source))) { Dispose(device); continue; }
                 ApplyPoll(device);
                 // The first probe is this PC's (hwmon, WireView Mini, serial); the
                 // registered ones reach other hosts.
@@ -358,7 +421,9 @@ namespace WireView2.Device
                     // own device discovered over the LAN. (Re-probing a held source is
                     // already skipped; this just guards races.)
                     string id = source;
-                    if (_byId.ContainsKey(id))
+                    // Paused while it connected: a flash started meanwhile.
+                    if (_byId.ContainsKey(id) || (!isRemote && (_pausedSources.Contains(source)
+                            || (_serialPaused && source.StartsWith("serial:", StringComparison.Ordinal)))))
                     {
                         Dispose(device);
                         return;

@@ -18,11 +18,12 @@ internal enum FlashRoute
 /// <summary>This PC's device as the firmware gates see it, taken at one moment.</summary>
 /// <param name="Port">Its serial port, <paramref name="UsbPath"/> its USB port path
 /// (e.g. "3-4") and <paramref name="UsbSerial"/> its USB serial number, null where
-/// unknown; <paramref name="Attached"/> the number of WireViews on this PC.</param>
+/// unknown; <paramref name="Attached"/> the number of WireViews on this PC;
+/// <paramref name="UniqueId"/> its chip UID.</param>
 internal sealed record FlashTarget(
     string Id, string Name, byte VendorId, byte ProductId, string FirmwareVersion, string BuildString,
     bool Connected, FlashRoute Route, string? Port = null, string? UsbPath = null, string? UsbSerial = null,
-    int Attached = 1)
+    int Attached = 1, string? UniqueId = null)
 {
     /// <summary>The name, with its USB serial and port when several WireViews are
     /// attached, so a confirmation names the unit.</summary>
@@ -57,22 +58,24 @@ internal interface IFlashHost
     /// <summary>The serial port is lent to the GUI (suspendSerial).</summary>
     bool HandoverActive { get; }
 
-    /// <summary>This PC's device the panel drives, or null when there is none.</summary>
-    FlashTarget? FlashTarget();
+    /// <summary>This PC's device the panel drives, or the one with chip UID
+    /// <paramref name="uniqueId"/> when given; null when there is none.</summary>
+    FlashTarget? FlashTarget(string? uniqueId = null);
 
     /// <summary>Daemon route: the bootloader command through wireviewd.</summary>
     DaemonResult EnterBootloaderThroughDaemon();
 
-    /// <summary>Closes WireView Mini's serial port and pauses device discovery
-    /// for at most <paramref name="seconds"/>. False while the GUI holds the port.</summary>
-    bool SuspendForFlash(int seconds);
+    /// <summary>Closes <paramref name="device"/> and keeps discovery off it for at
+    /// most <paramref name="seconds"/>; the other WireViews keep running. False
+    /// while the GUI holds the port.</summary>
+    bool SuspendForFlash(FlashTarget device, int seconds);
 
     /// <summary>Serial route, after <see cref="SuspendForFlash"/>: opens
     /// <paramref name="port"/> directly and sends the bootloader command. Null on
     /// success, else the status line.</summary>
     string? EnterBootloaderDirect(string? port);
 
-    /// <summary>Ends <see cref="SuspendForFlash"/>: device discovery resumes.</summary>
+    /// <summary>Ends <see cref="SuspendForFlash"/>: discovery opens the device again.</summary>
     void ResumeAfterFlash();
 
     /// <summary>WireView Mini is moving theme artwork over the serial port
@@ -143,6 +146,7 @@ internal sealed class FirmwareService
     private readonly object _lock = new();       // _state, _generation, the caches
     private readonly object _startLock = new();  // one Start at a time, gates included
     private FlashState _state = FlashState.Idle;
+    private FlashTarget? _target;
     private int _generation;
     private Task? _task;
 
@@ -169,6 +173,12 @@ internal sealed class FirmwareService
 
     /// <summary>A flash is between its start and its end.</summary>
     public bool Running => State.Running;
+
+    /// <summary>The chip UID of the device a running flash is for, else null.</summary>
+    public string? RunningUid
+    {
+        get { lock (_lock) return _state.Running ? _target?.UniqueId : null; }
+    }
 
     /// <summary>The flash task (for a test harness to wait on), null before the first.</summary>
     internal Task? CurrentTask
@@ -414,6 +424,7 @@ internal sealed class FirmwareService
             lock (_lock)
             {
                 generation = ++_generation;
+                _target = device;
                 _state = new FlashState(FlashPhase.EnteringBootloader, 0, "Restarting device into DFU bootloader...");
                 _task = Task.Run(() => RunAsync(generation, device, imageLabel, baseAddress, image));
                 return new FlashStart(202, null, _state);
@@ -475,16 +486,16 @@ internal sealed class FirmwareService
                     Fail(generation, $"Could not restart the device into its bootloader: {boot.Describe()}.");
                     return;
                 }
-                // Pause discovery while the device is gone, so WireView Mini does
-                // not race wireviewd for the serial port when it comes back.
-                suspended = _host.SuspendForFlash(FlashSuspendSeconds);
+                // Keep discovery off the device while it is gone, so WireView Mini
+                // does not race wireviewd for the serial port when it comes back.
+                suspended = _host.SuspendForFlash(device, FlashSuspendSeconds);
             }
             else
             {
-                // WireView Mini's own port: close it (the handover mechanism, so
-                // discovery stays off), then the bootloader command over a direct
-                // connection, as the app does through WireView Mini.
-                if (!_host.SuspendForFlash(FlashSuspendSeconds))
+                // WireView Mini's own port: close it (discovery stays off it), then
+                // the bootloader command over a direct connection, as the app does
+                // through WireView Mini.
+                if (!_host.SuspendForFlash(device, FlashSuspendSeconds))
                 {
                     Fail(generation, "The serial port is lent to the WireView app. Nothing was flashed.");
                     return;
@@ -546,18 +557,18 @@ internal sealed class FirmwareService
             }
         }
 
-        if (flashed) await ReportReconnectAsync(generation).ConfigureAwait(false);
+        if (flashed) await ReportReconnectAsync(generation, device).ConfigureAwait(false);
     }
 
     /// <summary>After a flash, like the app: once the device is back, say so with
     /// its new firmware version (only while no newer flash has started).</summary>
-    private async Task ReportReconnectAsync(int generation)
+    private async Task ReportReconnectAsync(int generation, FlashTarget device)
     {
         var until = DateTime.UtcNow + ReconnectWait;
         while (DateTime.UtcNow < until)
         {
             await Task.Delay(500).ConfigureAwait(false);
-            if (_host.FlashTarget() is { Connected: true } back)
+            if (_host.FlashTarget(device.UniqueId) is { Connected: true } back)
             {
                 string fw = back.Version.HasValue ? BundledFirmware.FormatVersion(back.Version) : "";
                 Set(generation, FlashPhase.Done, 1, fw.Length > 0

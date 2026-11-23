@@ -74,8 +74,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     private DateTime? _handoverUntil;     // set while the port is lent out
     private DateTime? _unfreezeBy;        // after a handover: stop showing the frozen readings by then
     private volatile bool _handoverActive; // _handoverUntil != null, readable without _gate
-    private DateTime? _flashUntil;        // set while a firmware flash keeps the port closed
+    private DateTime? _flashUntil;        // set while a firmware flash keeps one unit closed
     private volatile bool _flashSuspended; // _flashUntil != null, readable without _gate
+    private volatile string? _flashUid;   // the chip UID of that unit, while _flashSuspended
 
     // Last shown fault status per local device id (guarded by _monitors).
     private readonly Dictionary<string, ushort> _localFault = new();
@@ -200,7 +201,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 ResumeFlashLocked();
             }
             if (_unfreezeBy is { } by &&
-                (DateTime.UtcNow >= by || _local.Devices.Any(d => d.Latest != null)))
+                (DateTime.UtcNow >= by || _publish.FrozenDevicesBack()))
             {
                 _unfreezeBy = null;
                 _publish.Unfreeze();
@@ -265,8 +266,24 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     public bool SerialTransferBusy => Theme.Busy || DeviceLog.Busy;
 
     /// <summary>The local device is out of use: lent to the GUI, or closed for a
-    /// firmware flash. The panel shows the last readings meanwhile.</summary>
+    /// firmware flash.</summary>
     public bool PortSuspended => _handoverActive || _flashSuspended;
+
+    /// <summary>The chip UID of the unit a firmware update works on, from its start
+    /// until discovery is back on it; null otherwise.</summary>
+    internal string? FlashingUid => _flashUid ?? Firmware.RunningUid;
+
+    private bool FlashBusy => _flashSuspended || Firmware.Running;
+
+    /// <summary>The unit a firmware flash keeps closed, when it is the one the
+    /// panel shows (it is selected, or nothing is): its chip UID, else null. The
+    /// panel shows its last readings meanwhile.</summary>
+    internal string? ShownUnitClosedForFlash()
+    {
+        if (!_flashSuspended || _flashUid is not { } uid) return null;
+        string? selected = _selectedUid;
+        return selected == null || string.Equals(selected, uid, StringComparison.OrdinalIgnoreCase) ? uid : null;
+    }
 
     /// <summary>Why the publisher is not on the wanted port (the bind error, and
     /// the fallback port while one is used), null while it is.</summary>
@@ -447,10 +464,12 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     // ---- Firmware flashing (IFlashHost) ----
 
-    FlashTarget? IFlashHost.FlashTarget()
+    FlashTarget? IFlashHost.FlashTarget(string? uniqueId)
     {
         if (PortSuspended) return null;
-        var md = PreferredLocal();
+        var md = uniqueId == null
+            ? PreferredLocal()
+            : LocalUnits().FirstOrDefault(d => string.Equals(d.Device.UniqueId, uniqueId, StringComparison.OrdinalIgnoreCase));
         if (md == null) return null;
         var dev = md.Device;
         var ports = Stm32PortFinder.FindMatchingPorts();
@@ -466,7 +485,8 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 HwmonDevice { DaemonAvailable: true } => FlashRoute.Daemon,
                 _ => FlashRoute.ReadOnly,
             },
-            port, usb?.UsbPath, usb?.UsbSerial, Math.Max(ports.Count, 1));
+            port, usb?.UsbPath, usb?.UsbSerial, Math.Max(ports.Count, 1),
+            string.IsNullOrEmpty(dev.UniqueId) ? null : dev.UniqueId);
     }
 
     DaemonResult IFlashHost.EnterBootloaderThroughDaemon()
@@ -475,10 +495,12 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         return hwmon?.EnterBootloader() ?? DaemonResult.NotConnected;
     }
 
-    /// <summary>Like <see cref="Suspend"/>, but for WireView Mini's own flash: its
-    /// own window (a GUI resumeSerial does not end it) and refused while the GUI
-    /// holds the port. Returns once the port is closed.</summary>
-    bool IFlashHost.SuspendForFlash(int seconds)
+    /// <summary>For WireView Mini's own flash: closes the unit being flashed and
+    /// keeps discovery off it (and off any serial port not open yet) for its own
+    /// window (a GUI resumeSerial does not end it). The other WireViews keep
+    /// running, publishing and alerting. Refused while the GUI holds the port.
+    /// Returns once the unit's port is closed.</summary>
+    bool IFlashHost.SuspendForFlash(FlashTarget device, int seconds)
     {
         int window = Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
@@ -486,14 +508,20 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
             if (_handoverUntil != null) return false;
             bool rearm = _flashUntil != null;
             _flashUntil = DateTime.UtcNow.AddSeconds(window);
-            _flashSuspended = true;
             if (rearm) return true;
 
+            string? uid = device.UniqueId;
+            _flashUid = uid;
+            _flashSuspended = true;
             _unfreezeBy = null;
-            _publish.FreezeDevices();
-            // Wait for a discovery pass in flight, so no port is opened after this.
-            _local.Stop(TimeSpan.FromSeconds(5));
-            FileLog.Info($"firmware update: device closed and discovery paused for up to {window} s");
+            // Its last readings stay published, marked not connected.
+            if (uid != null) _publish.FreezeDevice(uid);
+            // Waits for a discovery pass in flight, so no port is opened after this.
+            var closed = _local.PauseUnit(md => uid != null
+                ? string.Equals(md.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase)
+                : md.Id == device.Id, TimeSpan.FromSeconds(5));
+            FileLog.Info($"firmware update: {device.Name} closed ({string.Join(", ", closed.Select(c => c.Source))}) " +
+                         $"for up to {window} s; the other WireViews keep running");
         }
         return true;
     }
@@ -580,11 +608,21 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     {
         int capacity = _historyCapacity;
         if (capacity == 0) return;
-        if (PortSuspended || Firmware.Running || SerialTransferBusy) return;
-        if (PreferredLocal()?.Device.UniqueId is { Length: > 0 } selected)
+        if (_handoverActive) return;
+        // A flash pauses the unit it works on; a theme transfer or a log read the selected one.
+        bool flashing = FlashBusy;
+        string? flashUid = flashing ? FlashingUid : null;
+        if (flashing && flashUid == null) return;
+        string? selected = PreferredLocal()?.Device.UniqueId;
+        // While the selected unit is closed for a flash, the pick falls to another one.
+        if (!flashing && selected is { Length: > 0 })
             _historyDevice = selected;
+        bool transfer = SerialTransferBusy;
         foreach (var md in LocalUnits())
         {
+            string uid = md.Device.UniqueId;
+            if (string.Equals(uid, flashUid, StringComparison.OrdinalIgnoreCase)) continue;
+            if (transfer && string.Equals(uid, selected, StringComparison.OrdinalIgnoreCase)) continue;
             if (!md.Device.Connected || md.Latest is not { Connected: true } data) continue;
             HistoryBuffer buffer;
             lock (_histories)
@@ -606,7 +644,10 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         if (_flashUntil == null) return;
         _flashUntil = null;
         _flashSuspended = false;
-        RestartLocalLocked();
+        _flashUid = null;
+        // The frozen readings go once the unit is back, or after the grace.
+        _unfreezeBy = DateTime.UtcNow + UnfreezeGrace;
+        _local.ResumeUnit();
     }
 
     /// <summary>Queues a settings edit (the tray's checkboxes, the control panel).
@@ -888,8 +929,13 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 if (resumed) WaitForLocalDevice(ResumeWait);
                 return DaemonResult.Ok;
             default:
-                // No device commands from the LAN or the app while flashing.
-                return Firmware.Running ? DaemonResult.Busy : null;
+                // No device commands from the LAN or the app to the unit being
+                // flashed, nor ones that name no unit (they could reach it).
+                if (!FlashBusy) return null;
+                string? flashing = FlashingUid;
+                return string.IsNullOrEmpty(cmd.DeviceId) || flashing == null
+                       || string.Equals(cmd.DeviceId, flashing, StringComparison.OrdinalIgnoreCase)
+                    ? DaemonResult.Busy : null;
         }
     }
 
@@ -903,7 +949,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         int window = seconds <= 0 ? DefaultHandoverSeconds : Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
         {
-            if (_flashUntil != null || Firmware.Running || SerialTransferBusy) return false;
+            if (FlashBusy || SerialTransferBusy) return false;
             bool rearm = _handoverUntil != null;
             _handoverUntil = DateTime.UtcNow.AddSeconds(window);
             _handoverActive = true;
