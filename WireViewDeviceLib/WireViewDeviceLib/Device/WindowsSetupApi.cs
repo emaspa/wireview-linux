@@ -253,9 +253,10 @@ namespace WireView2.Device
                     return null;
                 }
 
-                // DevicePath starts immediately after cbSize
-                var pDevicePath = detailDataBuffer + cbSize;
-                var devicePath = Marshal.PtrToStringAuto(pDevicePath);
+                // DevicePath follows the 4-byte cbSize field: cbSize's value (8 on
+                // x64) is the padded struct size, not the field's offset.
+                var pDevicePath = detailDataBuffer + sizeof(uint);
+                var devicePath = Marshal.PtrToStringUni(pDevicePath);
                 return string.IsNullOrWhiteSpace(devicePath) ? null : devicePath;
             }
             finally
@@ -291,7 +292,7 @@ namespace WireView2.Device
             uint MemberIndex,
             ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData);
 
-        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        [DllImport("setupapi.dll", EntryPoint = "SetupDiGetDeviceInterfaceDetailW", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool SetupDiGetDeviceInterfaceDetail(
             nint DeviceInfoSet,
             ref SP_DEVICE_INTERFACE_DATA DeviceInterfaceData,
