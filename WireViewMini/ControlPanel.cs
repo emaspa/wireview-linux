@@ -118,6 +118,7 @@ internal sealed class ControlPanel
                 ("GET", "/api/config") => GetConfig(),
                 ("POST", "/api/config") => PostConfig(req.Body),
                 ("POST", "/api/command") => PostCommand(req.Body),
+                ("POST", "/api/device") => PostDevice(req.Body),
                 ("POST", "/api/settings") => PostSettings(req.Body),
                 ("POST", "/api/open-app") => OpenApp(),
                 ("POST", "/api/test-notification") => TestNotification(),
@@ -140,7 +141,7 @@ internal sealed class ControlPanel
                 ("POST", "/api/profiles") => PostProfile(req.Body),
                 ("GET", "/api/profile") => GetProfile(ParseQuery(req.Query)),
                 ("DELETE", "/api/profile") => DeleteProfile(ParseQuery(req.Query)),
-                (_, "/api/status" or "/api/config" or "/api/command" or "/api/settings" or "/api/open-app" or "/api/test-notification" or "/api/daemon-config"
+                (_, "/api/status" or "/api/config" or "/api/command" or "/api/device" or "/api/settings" or "/api/open-app" or "/api/test-notification" or "/api/daemon-config"
                     or "/api/firmware" or "/api/firmware/flash" or "/api/theme" or "/api/theme/restore-defaults"
                     or "/api/theme/file" or "/api/theme/file/export" or "/api/history" or "/api/history.csv"
                     or "/api/devicelog" or "/api/devicelog/read" or "/api/profiles" or "/api/profile")
@@ -251,7 +252,37 @@ internal sealed class ControlPanel
             // Only while an upload runs: the progress needs no extra requests.
             Theme: _mini.Theme.State is { Running: true } t ? ThemeUploadView(t) : null,
             DeviceLog: _mini.DeviceLog.State is { Running: true } l ? DeviceLogStateView(l) : null,
-            History: q.TryGetValue("history", out var since) ? History(q, since) : null);
+            History: q.TryGetValue("history", out var since) ? History(q, since) : null,
+            Devices: DeviceChoices());
+    }
+
+    /// <summary>The device selector's entries, null with one WireView on this PC.</summary>
+    private List<PanelDeviceChoice>? DeviceChoices()
+    {
+        var units = _mini.LocalUnits();
+        if (units.Count < 2) return null;
+        string? selected = _mini.PreferredLocal()?.Device.UniqueId;
+        return units.Select(u => new PanelDeviceChoice(
+                u.Device.UniqueId,
+                MiniService.LabelFor(u.Device),
+                Stm32PortFinder.UsbSerialFromUid(u.Device.UniqueId),
+                u.Latest is { Connected: true } d ? d.SumPowerW : null,
+                _mini.LocalFaultText(u.Id),
+                string.Equals(u.Device.UniqueId, selected, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    /// <summary>POST /api/device {"uid": "..."}: the device the panel, the tray and
+    /// the device controls use from now on. Refused while a flash, a theme transfer
+    /// or a log read runs on the current one.</summary>
+    private HttpResponseInfo PostDevice(string body)
+    {
+        using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : body);
+        string uid = doc.RootElement.TryGetProperty("uid", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString()! : "";
+        if (_mini.Firmware.Running || _mini.Theme.Busy || _mini.DeviceLog.Busy)
+            return Error(409, "Wait for the firmware update, theme transfer or log read to finish before switching devices.");
+        if (!_mini.SelectDevice(uid)) return Error(404, "No WireView with that id is attached.");
+        return Ok(new PanelMessage(true, "Device selected."), MiniJsonContext.Default.PanelMessage);
     }
 
     private static PanelSettings SettingsView(AppSettings s) => new(
@@ -321,7 +352,7 @@ internal sealed class ControlPanel
     private HttpResponseInfo GetConfig()
     {
         if (DeviceProblem() is { } problem) return problem;
-        var snap = _mini.Publisher.ReadLocalConfig(null);
+        var snap = _mini.ReadSelectedConfig();
         if (snap == null) return Error(503, "could not read the device configuration");
         return ConfigAnswer(snap, extra: null);
     }
@@ -353,7 +384,7 @@ internal sealed class ControlPanel
         if (DeviceProblem() is { } problem) return problem;
         lock (_writeGate)
         {
-            var current = _mini.Publisher.ReadLocalConfig(null);
+            var current = _mini.ReadSelectedConfig();
             if (current == null) return Error(503, "could not read the device configuration to apply the changes to");
             if (current.Version != model.Version)
                 return Error(409, $"the device's config layout is {current.Version}, the edit was made for {model.Version}; reload");
@@ -371,7 +402,7 @@ internal sealed class ControlPanel
             FileLog.Info($"control panel: config applied ({(changed ? "changed" : "no field changed")}, {bytes.Length} bytes)");
 
             Thread.Sleep(150); // let the device take the frames before reading back
-            var after = _mini.Publisher.ReadLocalConfig(null);
+            var after = _mini.ReadSelectedConfig();
             if (after == null) return Error(500, "the config was written but could not be read back");
             return ConfigAnswer(after, new PanelConfigWrite(
                 Changed: changed,

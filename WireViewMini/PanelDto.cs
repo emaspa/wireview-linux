@@ -20,7 +20,13 @@ internal sealed record PanelStatus(
     PanelFlash Firmware,
     PanelThemeUpload? Theme,
     PanelDeviceLogState? DeviceLog,
-    PanelHistory? History);
+    PanelHistory? History,
+    List<PanelDeviceChoice>? Devices);
+
+/// <summary>One of this PC's WireViews in the panel's device selector, listed
+/// only when there are several. <paramref name="Label"/> is the nickname set in
+/// the app or the device name, with the end of the USB serial.</summary>
+internal sealed record PanelDeviceChoice(string Uid, string Label, string? UsbSerial, double? PowerW, string? FaultText, bool Selected);
 
 internal sealed record PanelMiniInfo(
     string Version, long UptimeSeconds, string Os, string Host, string? LogPath, string SettingsPath, bool NoShutdown,

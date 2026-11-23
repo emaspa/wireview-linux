@@ -250,11 +250,16 @@ h3.card-head .card-toggle { text-transform: uppercase; letter-spacing: .6px; col
   <section id="status">
     <h2>Status <span class="sub" id="devSource"></span></h2>
     <div id="noDevice" class="muted hidden">No device connected.</div>
+    <div id="devPick" class="field hidden">
+      <label for="devSel">WireView</label>
+      <select id="devSel" title="Several WireViews are attached to this PC. The page, the tray and the device controls use the one picked here."></select>
+    </div>
     <div id="devBody" class="hidden">
       <dl class="kv">
         <dt>Device</dt><dd id="devName"></dd>
         <dt>Firmware</dt><dd id="devFw"></dd>
         <dt>Unique ID</dt><dd class="mono" id="devId"></dd>
+        <dt>USB serial</dt><dd class="mono" id="devSerial"></dd>
       </dl>
       <div class="big">
         <div class="p"><small>Total power</small><b id="pw">-</b></div>
@@ -876,6 +881,7 @@ const WVPixels = (function () {
       $("devName").textContent = d.name || "-";
       $("devFw").textContent = (d.firmware ? "v" + String(d.firmware).padStart(2, "0") : "-") + (d.buildString ? "  (" + d.buildString + ")" : "");
       $("devId").textContent = d.uniqueId || "-";
+      $("devSerial").textContent = usbSerial(d.uniqueId) || "-";
       const r = d.readings;
       if (r) {
         const volts = r.pinVoltage || [], amps = r.pinCurrent || [];
@@ -939,8 +945,50 @@ const WVPixels = (function () {
     renderThemeStatus(s);
     renderLogStatus(s);
     if (s.history && live) takeHistory(s.history, false);
+    renderDevicePick(s);
     refreshButtons();
   }
+
+  // ---- Several WireViews on this PC ----
+
+  // The USB serial number the firmware derives from the chip UID (as
+  // /dev/serial/by-id and wireviewctl show it): hex8(w0 + w2) + hex4(w1 >> 16).
+  function usbSerial(uid) {
+    if (!uid || !/^[0-9A-Fa-f]{24}$/.test(uid)) return "";
+    const w = i => parseInt(uid.substr(i * 8 + 6, 2) + uid.substr(i * 8 + 4, 2) + uid.substr(i * 8 + 2, 2) + uid.substr(i * 8, 2), 16);
+    const hex = (v, n) => v.toString(16).toUpperCase().padStart(n, "0");
+    return hex((w(0) + w(2)) >>> 0, 8) + hex(w(1) >>> 16, 4);
+  }
+
+  let shownUid = null;       // the device this page was built for
+  function renderDevicePick(s) {
+    const list = s.devices || [];
+    $("devPick").classList.toggle("hidden", list.length < 2);
+    const sel = $("devSel");
+    const opts = list.map(c => el("option", { value: c.uid,
+      text: c.label + (c.powerW != null ? ": " + fmt(c.powerW, 0) + " W" : "") + (c.faultText ? ", fault" : "") }));
+    const key = list.map(c => c.uid + c.label + (c.powerW != null ? fmt(c.powerW, 0) : "") + !!c.faultText + c.selected).join("|");
+    if (sel.dataset.key !== key && document.activeElement !== sel) {
+      sel.dataset.key = key;
+      sel.replaceChildren(...opts);
+      const cur = list.find(c => c.selected);
+      if (cur) sel.value = cur.uid;
+    }
+    // Another device selected (here, in another window or from the tray): the
+    // cards hold the previous device's forms and charts, so start over.
+    const uid = s.device && s.device.uniqueId;
+    if (uid && shownUid && uid !== shownUid && list.length > 1) { location.reload(); return; }
+    if (uid) shownUid = uid;
+  }
+  $("devSel").addEventListener("change", async () => {
+    try {
+      await api("POST", "/api/device", { uid: $("devSel").value });
+      location.reload();
+    } catch (e) {
+      $("devSel").dataset.key = "";
+      say("cfgResult", false, e.message);
+    }
+  });
 
   function uptime(sec) {
     const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60);

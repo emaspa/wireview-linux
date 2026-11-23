@@ -99,7 +99,13 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     private string? _portHolder;           // who serves the wanted port, when known
     private int _lastFallbackPort;
     private int _pollMs = -1;
-    private string? _historyDevice;        // UniqueId of the device the history is of
+    // The chart history of every local device, by UniqueId (guarded by itself);
+    // History is the selected device's.
+    private readonly Dictionary<string, HistoryBuffer> _histories = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HistoryBuffer _noHistory = new();
+    private volatile string? _historyDevice; // UniqueId of the device History is of
+    private volatile int _historyCapacity;
+    private volatile string? _selectedUid; // the device the panel and the tray show
 
     /// <summary>Raised after every tick and on every reading of this PC's
     /// device, on the tick or the device thread. The tray rate-limits.</summary>
@@ -244,7 +250,15 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     /// <summary>The last <see cref="AppSettings.HistoryMinutes"/> of readings of
     /// this PC's device (the panel's Charts section).</summary>
-    public HistoryBuffer History { get; } = new();
+    public HistoryBuffer History
+    {
+        get
+        {
+            string? uid = _historyDevice;
+            lock (_histories)
+                return uid != null && _histories.TryGetValue(uid, out var h) ? h : _noHistory;
+        }
+    }
 
     /// <summary>Something else uses the serial port now (a theme transfer or a
     /// device log read): the device's readings pause meanwhile.</summary>
@@ -313,6 +327,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     {
         if (Firmware.Running) return DaemonResult.Busy;
         if (_handoverActive) return DaemonResult.NotConnected;
+        // No device named: the selected one, not just the first.
+        if (string.IsNullOrEmpty(cmd.DeviceId) && PreferredLocal()?.Device.UniqueId is { Length: > 0 } uid)
+            cmd = cmd with { DeviceId = uid };
         var r = _publish.ExecuteCommand(cmd);
         if (r == DaemonResult.Ok && cmd.Op == "screen"
             && cmd.Cmd is >= (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_MAIN and <= (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_STATUS)
@@ -329,8 +346,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         if (r == DaemonResult.Ok)
         {
             RunLocalCommand(WireViewCommand.Screen("", (int)WireViewPro2Device.SCREEN_CMD.SCREEN_GOTO_SAME));
+            string? cleared = PreferredLocal()?.Id;
             lock (_monitors)
-                foreach (var id in _localFault.Keys.ToList()) _localFault[id] = 0;
+                foreach (var id in _localFault.Keys.Where(k => cleared == null || k == cleared).ToList()) _localFault[id] = 0;
             FileLog.Info("faults cleared on this PC's device");
         }
         return r;
@@ -343,14 +361,24 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         var flash = Firmware.State;
         if (flash.Running) return new MiniStatus(null, null, null, Handover: false, Flash: flash);
         if (_handoverActive) return new MiniStatus(null, null, null, Handover: true);
-        foreach (var d in _local.Devices)
+        // The selected device's power; a fault on any of this PC's devices, named
+        // when there are several.
+        var units = LocalUnits();
+        string? faultText = null;
+        foreach (var u in units)
+        {
+            ushort f;
+            lock (_monitors) _localFault.TryGetValue(u.Id, out f);
+            if (f == 0) continue;
+            faultText = units.Count > 1 ? $"{LabelFor(u.Device)}: {FaultMonitor.FormatFaults(f)}" : FaultMonitor.FormatFaults(f);
+            break;
+        }
+        var shown = PreferredLocal();
+        foreach (var d in shown != null ? new[] { shown }.Concat(_local.Devices) : _local.Devices)
         {
             if (!d.Device.Connected || d.Latest is not { } data) continue;
-            ushort fault;
-            lock (_monitors) _localFault.TryGetValue(d.Id, out fault);
-            return new MiniStatus(d.Device.DeviceName, data.SumPowerW,
-                fault != 0 ? FaultMonitor.FormatFaults(fault) : null, Handover: false,
-                FirmwareUpdate: Firmware.UpdateAvailable());
+            return new MiniStatus(units.Count > 1 ? LabelFor(d.Device) : d.Device.DeviceName, data.SumPowerW,
+                faultText, Handover: false, FirmwareUpdate: Firmware.UpdateAvailable());
         }
         return default;
     }
@@ -359,13 +387,59 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     /// module loaded but wireviewd stopped the manager lists both a read-only
     /// hwmon entry and the serial port, so prefer a device that takes commands,
     /// then a connected one, then one with readings.</summary>
-    internal ManagedDevice? PreferredLocal() =>
-        _local.Devices
-            .Where(d => d.Device is not NetworkDevice)
+    internal ManagedDevice? PreferredLocal()
+    {
+        var local = ThisPcDevices();
+        // With several WireViews, the one picked in the panel (or the app) when it is here.
+        string? uid = _selectedUid;
+        if (uid != null && local.Any(d => string.Equals(d.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase)))
+            local = local.Where(d => string.Equals(d.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase)).ToList();
+        return local
             .OrderByDescending(d => CanWrite(d.Device))
             .ThenByDescending(d => d.Device.Connected)
             .ThenByDescending(d => d.Latest != null)
             .FirstOrDefault();
+    }
+
+    /// <summary>This PC's devices (not the LAN ones), in a stable order.</summary>
+    internal List<ManagedDevice> ThisPcDevices() =>
+        _local.Devices.Where(d => d.Device is not NetworkDevice).OrderBy(d => d.Id, StringComparer.Ordinal).ToList();
+
+    /// <summary>This PC's distinct WireViews (by chip UID), one entry each: the one
+    /// <see cref="PreferredLocal"/> would pick for that UID.</summary>
+    internal List<ManagedDevice> LocalUnits() =>
+        ThisPcDevices()
+            .Where(d => !string.IsNullOrEmpty(d.Device.UniqueId))
+            .GroupBy(d => d.Device.UniqueId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(d => CanWrite(d.Device)).ThenByDescending(d => d.Device.Connected).First())
+            .ToList();
+
+    /// <summary>The chip UID of the device the panel, the tray and the device
+    /// commands use, when several are attached; null for the default pick.</summary>
+    public string? SelectedUid => _selectedUid;
+
+    /// <summary>Selects the device the panel, the tray and the device commands use,
+    /// and remembers it in settings.json (shared with the app). False when no
+    /// device with that UID is attached.</summary>
+    public bool SelectDevice(string uid)
+    {
+        var unit = LocalUnits().FirstOrDefault(d => string.Equals(d.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase));
+        if (unit == null) return false;
+        uid = unit.Device.UniqueId;
+        if (_selectedUid == uid) return true;
+        _selectedUid = uid;
+        FileLog.Info($"device selected: {DeviceLabels.WithShortId(unit.Device.DeviceName, uid)}");
+        RequestSettingsChange("selected device", st => st.SelectedDeviceUid = uid, "panel");
+        RaiseStatusChanged();
+        return true;
+    }
+
+    /// <summary>"name · 4E46", the nickname set in the app when there is one.</summary>
+    internal static string LabelFor(IWireViewDevice dev) =>
+        DeviceLabels.WithShortId(AppSettings.Current.NicknameFor(dev.UniqueId) ?? dev.DeviceName, dev.UniqueId);
+
+    /// <summary>The selected device's config bytes (see <see cref="PreferredLocal"/>).</summary>
+    public ConfigSnapshot? ReadSelectedConfig() => _publish.ReadLocalConfig(PreferredLocal()?.Device.UniqueId);
 
     /// <summary>The device takes commands: serial, or hwmon with wireviewd.</summary>
     internal static bool CanWrite(IWireViewDevice dev) =>
@@ -460,7 +534,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     FlashTarget? IThemeHost.ThemeTarget() => ((IFlashHost)this).FlashTarget();
 
-    ConfigSnapshot? IThemeHost.ReadConfig() => _publish.ReadLocalConfig(null);
+    ConfigSnapshot? IThemeHost.ReadConfig() => ReadSelectedConfig();
 
     DaemonResult IThemeHost.RunCommand(WireViewCommand cmd) => RunLocalCommand(cmd);
 
@@ -504,21 +578,27 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     /// twice. Another device starts a new history.</summary>
     private void RecordHistory()
     {
-        if (History.Capacity == 0) return;
+        int capacity = _historyCapacity;
+        if (capacity == 0) return;
         if (PortSuspended || Firmware.Running || SerialTransferBusy) return;
-        var md = PreferredLocal();
-        if (md == null || !md.Device.Connected || md.Latest is not { Connected: true } data) return;
-        string id = md.Device.UniqueId;
-        if (!string.IsNullOrEmpty(id))
+        if (PreferredLocal()?.Device.UniqueId is { Length: > 0 } selected)
+            _historyDevice = selected;
+        foreach (var md in LocalUnits())
         {
-            if (_historyDevice != null && _historyDevice != id)
+            if (!md.Device.Connected || md.Latest is not { Connected: true } data) continue;
+            HistoryBuffer buffer;
+            lock (_histories)
             {
-                FileLog.Info($"history: another device ({md.Device.DeviceName}), the chart history starts again");
-                History.Clear();
+                if (!_histories.TryGetValue(md.Device.UniqueId, out buffer!))
+                {
+                    _histories[md.Device.UniqueId] = buffer = new HistoryBuffer();
+                    buffer.Resize(capacity);
+                }
             }
-            _historyDevice = id;
+            buffer.Add(data);
         }
-        History.Add(data);
+        // A device gone for good keeps its history until WireView Mini restarts;
+        // a unit that comes back carries on from it.
     }
 
     private void ResumeFlashLocked()
@@ -637,12 +717,17 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         _wantedView = Tuple.Create(s.PublishPort, s.PublishEnabled);
 
         int samples = s.EffectiveHistoryMinutes * 60;
-        if (samples != History.Capacity)
+        // The device picked last (here or in the app) is shown first.
+        if (_selectedUid == null && !string.IsNullOrEmpty(s.SelectedDeviceUid)) _selectedUid = s.SelectedDeviceUid;
+
+        if (samples != _historyCapacity)
         {
-            History.Resize(samples);
+            _historyCapacity = samples;
+            lock (_histories)
+                foreach (var h in _histories.Values) h.Resize(samples);
             FileLog.Info(samples == 0
                 ? "chart history off (HistoryMinutes 0)"
-                : $"chart history: {s.EffectiveHistoryMinutes} min, {samples} samples, {History.ResidentBytes / 1024} KB");
+                : $"chart history: {s.EffectiveHistoryMinutes} min, {samples} samples, {(long)samples * HistoryBuffer.BytesPerSample / 1024} KB per device");
         }
     }
 
@@ -902,7 +987,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         // Same title and text as the GUI; a remote host's alert names the host.
         string body = local ? fault.Text : $"{fault.Text} ({where})";
         FileLog.Warn($"fault on {device?.DeviceName ?? id} at {where}: {fault.Text}");
-        _toast.Show("WireView Fault", body);
+        _toast.Show(local && device != null && LocalUnits().Count > 1 ? "WireView Fault: " + LabelFor(device) : "WireView Fault", body);
 
         // Only this machine's device powers this machine off; a remote host's
         // own WireView Mini or GUI handles that host.
