@@ -72,6 +72,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     private readonly object _gate = new();
     private readonly Dictionary<string, FaultMonitor> _monitors = new();
     private DateTime? _handoverUntil;     // set while the port is lent out
+    private volatile string? _handoverUid; // the lent unit's chip UID; null while every port is lent
     private DateTime? _unfreezeBy;        // after a handover: stop showing the frozen readings by then
     private volatile bool _handoverActive; // _handoverUntil != null, readable without _gate
     private DateTime? _flashUntil;        // set while a firmware flash keeps one unit closed
@@ -275,15 +276,24 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     private bool FlashBusy => _flashSuspended || Firmware.Running;
 
-    /// <summary>The unit a firmware flash keeps closed, when it is the one the
-    /// panel shows (it is selected, or nothing is): its chip UID, else null. The
-    /// panel shows its last readings meanwhile.</summary>
-    internal string? ShownUnitClosedForFlash()
+    /// <summary>Every port is lent to a local client (one that named no unit).</summary>
+    internal bool WholeHandover => _handoverActive && _handoverUid == null;
+
+    /// <summary>The one unit closed for a firmware flash or lent to the app, when
+    /// it is the one the panel and the tray show (it is selected, or nothing is):
+    /// its chip UID, else null. The panel shows its last readings meanwhile.</summary>
+    internal string? ShownClosedUnit()
     {
-        if (!_flashSuspended || _flashUid is not { } uid) return null;
-        string? selected = _selectedUid;
-        return selected == null || string.Equals(selected, uid, StringComparison.OrdinalIgnoreCase) ? uid : null;
+        string? uid = _flashSuspended ? _flashUid : _handoverActive ? _handoverUid : null;
+        return uid != null && Shows(uid) ? uid : null;
     }
+
+    /// <summary>The panel and the tray show this unit: it is selected, or nothing is.</summary>
+    private bool Shows(string uid) =>
+        _selectedUid is not { } selected || string.Equals(selected, uid, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The chip UID of the one unit that is closed (flash or handover), else null.</summary>
+    private string? ClosedUid => FlashBusy ? FlashingUid : _handoverActive ? _handoverUid : null;
 
     /// <summary>Why the publisher is not on the wanted port (the bind error, and
     /// the fallback port while one is used), null while it is.</summary>
@@ -377,7 +387,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     {
         var flash = Firmware.State;
         if (flash.Running) return new MiniStatus(null, null, null, Handover: false, Flash: flash);
-        if (_handoverActive) return new MiniStatus(null, null, null, Handover: true);
+        // Lent to the app: every port, or the shown unit's.
+        if (_handoverActive && (_handoverUid is not { } lent || Shows(lent)))
+            return new MiniStatus(null, null, null, Handover: true);
         // The selected device's power; a fault on any of this PC's devices, named
         // when there are several.
         var units = LocalUnits();
@@ -608,20 +620,21 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     {
         int capacity = _historyCapacity;
         if (capacity == 0) return;
-        if (_handoverActive) return;
-        // A flash pauses the unit it works on; a theme transfer or a log read the selected one.
-        bool flashing = FlashBusy;
-        string? flashUid = flashing ? FlashingUid : null;
-        if (flashing && flashUid == null) return;
+        if (WholeHandover) return;
+        // A flash or a handover pauses the unit it is for; a theme transfer or a
+        // log read the selected one.
+        bool closed = FlashBusy || _handoverActive;
+        string? closedUid = closed ? ClosedUid : null;
+        if (closed && closedUid == null) return;
         string? selected = PreferredLocal()?.Device.UniqueId;
-        // While the selected unit is closed for a flash, the pick falls to another one.
-        if (!flashing && selected is { Length: > 0 })
+        // While the selected unit is closed, the pick falls to another one.
+        if (!closed && selected is { Length: > 0 })
             _historyDevice = selected;
         bool transfer = SerialTransferBusy;
         foreach (var md in LocalUnits())
         {
             string uid = md.Device.UniqueId;
-            if (string.Equals(uid, flashUid, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(uid, closedUid, StringComparison.OrdinalIgnoreCase)) continue;
             if (transfer && string.Equals(uid, selected, StringComparison.OrdinalIgnoreCase)) continue;
             if (!md.Device.Connected || md.Latest is not { Connected: true } data) continue;
             HistoryBuffer buffer;
@@ -905,20 +918,20 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
             case WireViewCommand.SuspendSerialOp:
                 // WireView Mini is flashing the device or moving theme artwork
                 // itself: the app must not open the port in the middle of it.
-                if (!Suspend(cmd.Seconds))
+                if (Suspend(cmd.Seconds, cmd.DeviceId) is { } refused)
                 {
-                    FileLog.Warn(Theme.Busy ? "serial handover refused: a theme transfer is running"
-                        : DeviceLog.Busy ? "serial handover refused: the device log is being read"
-                        : "serial handover refused: a firmware update is running");
+                    FileLog.Warn("serial handover refused: " + refused);
                     return DaemonResult.Busy;
                 }
                 return DaemonResult.Ok;
             case WireViewCommand.ResumeSerialOp:
                 bool resumed = false;
+                string? lentUid = null;
                 lock (_gate)
                 {
                     if (_handoverUntil != null)
                     {
+                        lentUid = _handoverUid;
                         FileLog.Info("serial port handed back by the client");
                         ResumeLocked();
                         resumed = true;
@@ -926,9 +939,13 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 }
                 // Answer once the device is back (briefly), so the client's next
                 // command finds it instead of "no device".
-                if (resumed) WaitForLocalDevice(ResumeWait);
+                if (resumed) WaitForLocalDevice(lentUid, ResumeWait);
                 return DaemonResult.Ok;
             default:
+                // A command that names no unit while one is lent: it could reach
+                // another unit than the one meant (with every port lent there is
+                // no device anyway).
+                if (_handoverActive && string.IsNullOrEmpty(cmd.DeviceId)) return DaemonResult.NotConnected;
                 // No device commands from the LAN or the app to the unit being
                 // flashed, nor ones that name no unit (they could reach it).
                 if (!FlashBusy) return null;
@@ -939,37 +956,66 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         }
     }
 
-    /// <summary>Closes the port (stops the local manager) and keeps the last
-    /// readings published, marked not connected. Re-sending extends the window.
-    /// Returns once the port is closed, so the client can open it right away;
-    /// false (nothing done) while WireView Mini flashes the firmware, moves theme
-    /// artwork or reads the device log over the port.</summary>
-    private bool Suspend(int seconds)
+    /// <summary>Lends a serial port to a local client: the port of the unit with
+    /// chip UID <paramref name="deviceId"/> when it is attached (the app names the
+    /// unit it flashes; the other units keep running), else every port (the local
+    /// manager stops). The last readings of what is closed stay published, marked
+    /// not connected. Re-sending extends the window. Returns once the port is
+    /// closed, so the client can open it right away. Returns why not (nothing
+    /// done) while WireView Mini flashes the firmware, moves theme artwork or reads
+    /// the device log over the port, or while another unit is lent; null when lent.</summary>
+    private string? Suspend(int seconds, string? deviceId)
     {
         int window = seconds <= 0 ? DefaultHandoverSeconds : Math.Clamp(seconds, 1, MaxHandoverSeconds);
         lock (_gate)
         {
-            if (FlashBusy || SerialTransferBusy) return false;
-            bool rearm = _handoverUntil != null;
-            _handoverUntil = DateTime.UtcNow.AddSeconds(window);
-            _handoverActive = true;
-            if (rearm) return true;
+            if (FlashBusy) return "a firmware update is running";
+            if (Theme.Busy) return "a theme transfer is running";
+            if (DeviceLog.Busy) return "the device log is being read";
+            if (_handoverUntil != null)
+            {
+                if (_handoverUid is { } lent && !string.Equals(deviceId, lent, StringComparison.OrdinalIgnoreCase))
+                    return "another WireView's port is lent out";
+                _handoverUntil = DateTime.UtcNow.AddSeconds(window);
+                return null;
+            }
 
+            var unit = string.IsNullOrEmpty(deviceId) ? null
+                : LocalUnits().FirstOrDefault(d => string.Equals(d.Device.UniqueId, deviceId, StringComparison.OrdinalIgnoreCase));
+            string? uid = unit?.Device.UniqueId;
+            _handoverUntil = DateTime.UtcNow.AddSeconds(window);
+            _handoverUid = uid;
+            _handoverActive = true;
             _unfreezeBy = null;
-            _publish.FreezeDevices();
-            // Wait for a discovery pass in flight, so no port is opened after this.
-            _local.Stop(TimeSpan.FromSeconds(5));
-            FileLog.Info($"serial port handed over to a local client for up to {window} s");
+            if (uid != null)
+            {
+                _publish.FreezeDevice(uid, handover: true);
+                // Waits for a discovery pass in flight, so no port is opened after this.
+                var closed = _local.PauseUnit(md => string.Equals(md.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase),
+                    TimeSpan.FromSeconds(5));
+                FileLog.Info($"serial port of {LabelFor(unit!.Device)} ({string.Join(", ", closed.Select(c => c.Source))}) " +
+                             $"handed over to a local client for up to {window} s; the other WireViews keep running");
+            }
+            else
+            {
+                _publish.FreezeDevices();
+                // Wait for a discovery pass in flight, so no port is opened after this.
+                _local.Stop(TimeSpan.FromSeconds(5));
+                FileLog.Info($"serial port handed over to a local client for up to {window} s");
+            }
         }
-        return true;
+        return null;
     }
 
     private static readonly TimeSpan ResumeWait = TimeSpan.FromSeconds(3);
 
-    private void WaitForLocalDevice(TimeSpan timeout)
+    /// <summary>Waits until the unit with chip UID <paramref name="uid"/> (any
+    /// unit when null) is connected again, or the timeout.</summary>
+    private void WaitForLocalDevice(string? uid, TimeSpan timeout)
     {
         var until = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < until && !_local.Devices.Any(d => d.Device.Connected))
+        while (DateTime.UtcNow < until && !_local.Devices.Any(d => d.Device.Connected
+                   && (uid == null || string.Equals(d.Device.UniqueId, uid, StringComparison.OrdinalIgnoreCase))))
             Thread.Sleep(100);
     }
 
@@ -977,7 +1023,16 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     {
         _handoverUntil = null;
         _handoverActive = false;
-        RestartLocalLocked();
+        string? uid = _handoverUid;
+        _handoverUid = null;
+        if (uid == null)
+        {
+            RestartLocalLocked();
+            return;
+        }
+        // The frozen readings go once the unit is back, or after the grace.
+        _unfreezeBy = DateTime.UtcNow + UnfreezeGrace;
+        _local.ResumeUnit();
     }
 
     private void RestartLocalLocked()

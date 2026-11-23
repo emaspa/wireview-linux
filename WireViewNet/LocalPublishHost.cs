@@ -109,7 +109,8 @@ namespace WireView2.Net
 
         // ---- Closed devices (mini) ----
 
-        /// <summary>True between <see cref="FreezeDevices"/> and <see cref="Unfreeze"/>.</summary>
+        /// <summary>True between <see cref="FreezeDevices"/> (or a handover's
+        /// <see cref="FreezeDevice"/>) and <see cref="Unfreeze"/>.</summary>
         public bool SerialSuspended
         {
             get { lock (_gate) return _serialSuspended; }
@@ -132,14 +133,17 @@ namespace WireView2.Net
         }
 
         /// <summary>Like <see cref="FreezeDevices"/>, for one unit (by chip UID) that
-        /// is closed for a firmware flash; the others stay live.</summary>
-        public void FreezeDevice(string uniqueId)
+        /// is closed for a firmware flash or lent to a local client
+        /// (<paramref name="handover"/>, which sets <see cref="SerialSuspended"/>);
+        /// the others stay live.</summary>
+        public void FreezeDevice(string uniqueId, bool handover = false)
         {
             var d = LiveDevices().FirstOrDefault(x => SameId(x.Id, uniqueId));
-            if (d == null) return;
-            d.Connected = false;
+            if (d != null) d.Connected = false;
             lock (_gate)
             {
+                if (handover) _serialSuspended = true;
+                if (d == null) return;
                 _frozen.RemoveAll(x => SameId(x.Id, uniqueId));
                 _frozen.Add(d);
             }

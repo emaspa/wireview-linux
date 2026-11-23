@@ -174,7 +174,7 @@ At startup the app asks WireView Mini's `/sensors` on `127.0.0.1` before it open
 
 ## Serial handover
 
-Firmware flashing, reading the device log and the theme editor need the serial port itself. For those the app asks WireView Mini to let go of the port, does the transfer and hands the port back, like the handover with wireviewd. Meanwhile WireView Mini keeps publishing the last reading, marked not connected. If the app never hands the port back (it crashed), WireView Mini takes it back on its own after at most 10 minutes. The handover is accepted only from this PC.
+Firmware flashing, reading the device log and the theme editor need the serial port itself. For those the app asks WireView Mini to let go of the port, does the transfer and hands the port back, like the handover with wireviewd. WireView Mini lets go of that unit's port only, so with several WireViews the others keep their readings, alerts and LAN publishing; the unit lent out stays published with its last reading, marked not connected. (A client that names no unit, such as an older app, gets every port, and all units show their last reading meanwhile.) If the app never hands the port back (it crashed), WireView Mini takes it back on its own after at most 10 minutes. The handover is accepted only from this PC.
 
 ## LAN publishing and ports
 

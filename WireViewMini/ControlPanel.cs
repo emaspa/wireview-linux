@@ -296,9 +296,10 @@ internal sealed class ControlPanel
 
     private PanelDevice? LocalDevice()
     {
-        // Lent to the app, or the shown unit closed for a firmware flash: the last readings.
-        string? closedUid = _mini.ShownUnitClosedForFlash();
-        if (_mini.HandoverActive || closedUid != null)
+        // Every port lent to the app, or the shown unit lent or closed for a
+        // firmware flash: the last readings.
+        string? closedUid = _mini.ShownClosedUnit();
+        if (_mini.WholeHandover || closedUid != null)
         {
             string? uid = closedUid ?? _mini.SelectedUid;
             var devices = _mini.Publisher.BuildSnapshot().Devices;
