@@ -12,12 +12,12 @@ The app follows the connected device's look ([Noctua Edition](docs/screenshot-ap
 - **Device configuration**: fan, display, fault alarms and thresholds, saved and loaded as named profiles
 - **Data logging**: on-device log readback per power cycle, CSV export
 - **Alerts**: desktop notifications via `notify-send`, and optional software shutdown on fault for eGPUs or setups without the hardware shutdown header
-- **LAN monitoring**: read WireViews on other machines and edit their configuration (HMAC-authenticated). See [LAN monitoring](docs/lan-monitoring.md)
+- **LAN monitoring**: read WireViews on other machines and edit their configuration (HMAC-authenticated). Not in the Flatpak, whose sandbox has no network access. See [LAN monitoring](docs/lan-monitoring.md)
 - **Theme editor**: background images, colors, inversion and a live preview; `.wv2t` files work with the official Windows app. See [usage](docs/usage.md#theme-editor)
 - **Firmware updates**: flash the bundled firmware (v05, build 20260902_0741) over USB DFU with `dfu-util`. See [firmware](docs/firmware.md)
 - **WireView Mini**: alerts, shutdown on fault and the device on the LAN with the app closed. See [WireView Mini](docs/wireview-mini.md)
 - **hwmon integration**: works with the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module and daemon as an alternative to direct serial
-- **Several WireViews**: every unit on the PC in the device picker, nicknames, alerts for all of them, firmware updates to the right one. See [usage](docs/usage.md#several-wireviews-on-one-pc)
+- **Several WireViews**: every unit on the PC in the device picker, each with its own readings, nickname and alerts, an optional tray power icon per unit, and firmware updates to the right one. Over hwmon this needs wireview-hwmon 1.9.0 or later. See [usage](docs/usage.md#several-wireviews-on-one-pc)
 
 **Firmware flashing can leave the device unbootable if it is interrupted. Flash at your own risk and read the [full warning](docs/firmware.md#warning) first.**
 
@@ -54,35 +54,36 @@ Why there are two clients, and which to leave running. Device connected, one rea
 | Ubuntu / Debian (.deb) | `sudo apt install ./wireview-linux_*_amd64.deb` (from [Releases](https://github.com/emaspa/wireview-linux/releases)) |
 | Fedora (COPR) | `sudo dnf copr enable emaspa/wireview-linux`<br>`sudo dnf install wireview-linux` |
 | Flatpak (Bazzite, Silverblue) | `flatpak install ./wireview-linux-*.flatpak` (from [Releases](https://github.com/emaspa/wireview-linux/releases)), then the [host udev rule](docs/install.md#flatpak). The app only, no WireView Mini |
-| Arch / CachyOS / EndeavourOS (AUR) | `yay -S wireview-linux-bin` (or `yay -S wireview-linux` to build from source) |
+| Arch / CachyOS / EndeavourOS (AUR) | `yay -S wireview-linux-bin` (or `yay -S wireview-linux`, a community-maintained source build) |
 | NixOS (flake) | `nix run github:emaspa/wireview-linux`, or the [NixOS module](docs/install.md#nixos-flake). With WireView Mini |
 | Pre-built tarball | Extract the `linux-x64.tar.gz` release, then `./install.sh` and `./WireView2` (`./wireview-mini` for WireView Mini) |
 | Build from source | `git clone https://github.com/emaspa/wireview-linux.git`<br>`cd wireview-linux && ./install.sh` |
 
-The PPA, .deb, COPR/.rpm, AUR and Nix packages install WireView Mini as `wireview-mini` next to the app (`wireview-mini --install` starts it at login) and add a **WireView Mini** entry to the application launcher, which starts it and opens its control panel in the browser, or, when it already runs, opens that one's control panel. The tarball carries it beside `WireView2`, and its `install.sh` adds the same entry, and one for the app, for the current user. The packages install the udev rule, so serial access works out of the box for the user at the local seat. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
+The PPA, .deb, COPR/.rpm, AUR and Nix packages install WireView Mini as `wireview-mini` (`wireview-mini --install` starts it at login) and add a **WireView Mini** launcher entry, which starts it and opens its control panel, or opens the control panel of the one already running. The tarball carries it beside `WireView2`, and its `install.sh` adds launcher entries for both, for the current user. The packages install the udev rule: serial access for the user at the local seat, and a `/dev/wireview-<USB serial>` link for each WireView. The long version (requirements, serial access and groups, the hwmon packages, NixOS, Flatpak, building, troubleshooting) is in [docs/install.md](docs/install.md).
 
 ## Connection modes
 
 | Mode | How it works | Features |
 |------|-------------|----------|
-| **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
+| **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (used when neither of the others is there) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
 | **Through WireView Mini** | App reads and controls the device through [`wireview-mini`](docs/wireview-mini.md) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
 
-The app picks the mode at startup: hwmon when the wireview-hwmon module is loaded, then WireView Mini, then direct serial. Writes through the daemon need the `wireview` group and wireview-hwmon 1.7.0 or later. Details: [docs/usage.md](docs/usage.md#connection-modes).
+The app picks the mode at startup: hwmon when the wireview-hwmon module is loaded, then WireView Mini, then direct serial. Writes through the daemon need the `wireview` group. Use wireview-hwmon 1.9.0 or later: with an older daemon the app sees only the first WireView. Details: [docs/usage.md](docs/usage.md#connection-modes).
 
 ## Quick usage
 
 ```bash
 wireview-linux                    # start the app (./WireView2 from the tarball)
 wireview-linux --page monitoring  # open on overview, monitoring, logging, device or settings
+wireview-linux --device 4E46      # show one WireView: its nickname, UID, or the end of its USB serial
 flatpak run io.github.emaspa.WireViewLinux   # the Flatpak
 
 wireview-mini              # run WireView Mini in the foreground (Ctrl+C to stop)
 wireview-mini --install    # start it at login
 wireview-mini --open       # open its control panel in the browser
 wireview-mini --launch     # the launcher entry: start it, or open the running one's control panel
-wireview-mini --status     # connected device, fault state and version
+wireview-mini --status     # connected devices, fault state and version
 ```
 
 Settings live in `~/.config/PowerMonitor/settings.json` on Linux, shared by the app and WireView Mini, and in `%APPDATA%\PowerMonitor\settings.json` on Windows, where WireView Mini shares the official application's file.
@@ -94,7 +95,7 @@ Settings live in `~/.config/PowerMonitor/settings.json` on Linux, shared by the 
 - [WireView Mini](docs/wireview-mini.md): tray, control panel, serial handover, ports, building, settings
 - [LAN monitoring](docs/lan-monitoring.md): remote hosts, publishing, the network secret
 - [Firmware updates](docs/firmware.md): the warning, checks, `dfu-util`, udev, Windows
-- Design notes: [footprint plan](docs/footprint-plan.md), [upstream 1.0.7 port plan](docs/upstream-1.0.7-port-plan.md), [upstream 1.0.8 port plan](docs/upstream-1.0.8-port-plan.md)
+- Design notes: [footprint plan](docs/footprint-plan.md), [multi-device plan](docs/multi-device-plan.md), [upstream 1.0.7 port plan](docs/upstream-1.0.7-port-plan.md), [upstream 1.0.8 port plan](docs/upstream-1.0.8-port-plan.md)
 
 ## License and credits
 

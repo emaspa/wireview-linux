@@ -6,7 +6,7 @@ Every way to install the WireView Pro II Linux client, and how to get serial acc
 
 - Linux with USB support (tested on Ubuntu 24.04 / 26.04 LTS, Fedora 43-44, and Arch Linux; also packaged for Arch-based distros via the AUR and immutable distros like Bazzite / Silverblue via Flatpak)
 - A Thermal Grizzly WireView Pro II or WireView Pro II Noctua Edition connected via USB (the Noctua Edition is tested on a real unit)
-- For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later; 1.8.1 or later alongside WireView Mini, whose wireviewd takes the LAN port back from it on its own
+- For the hwmon + daemon mode: [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) 1.7.0 or later; 1.8.1 or later alongside WireView Mini, whose wireviewd takes the LAN port back from it on its own; 1.9.0 or later for several WireViews on one PC (an older daemon serves only the first)
 - Optional: `dfu-util` for in-app firmware flashing (the Flatpak bundles it and the Nix package puts it on the PATH; the deb, rpm and AUR `wireview-linux-bin` packages list it as a recommended or optional dependency, and the source-built AUR `wireview-linux` depends on it). See [firmware updates](firmware.md)
 
 ## WireView Mini

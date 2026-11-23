@@ -31,7 +31,7 @@ Nothing starts it on its own: `wireview-mini --install` adds the login entry, an
 wireview-mini              # run in the foreground (Ctrl+C to stop), logs to stderr
 wireview-mini --install    # start it at login
 wireview-mini --uninstall  # stop starting it at login
-wireview-mini --status     # connected device, fault state and version
+wireview-mini --status     # connected devices, fault state and version
 wireview-mini --open       # print the control panel's address and open it in the browser
 wireview-mini --launch     # start it and open the control panel, or open the running one's
 wireview-mini --no-tray    # run without the tray icon

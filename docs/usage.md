@@ -8,7 +8,7 @@ The app supports these ways of communicating with the device:
 
 | Mode | How it works | Features |
 |------|-------------|----------|
-| **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (default) |
+| **Direct serial** | App talks to the device over `/dev/ttyACM*` | Full control (used when neither of the others is there) |
 | **hwmon + daemon** | App reads sensors from `/sys/class/hwmon/`, sends commands via the [wireviewd](https://github.com/emaspa/wireview-hwmon) daemon socket | Full control, plus sensor data available to system monitoring tools |
 | **Through WireView Mini** | App reads and controls the device through [`wireview-mini`](wireview-mini.md) on this PC, over `127.0.0.1` | Full control; alerts and shutdown on fault keep working with the app closed |
 
