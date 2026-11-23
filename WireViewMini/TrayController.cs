@@ -22,6 +22,7 @@ internal sealed class TrayController : IDisposable
     private readonly object _lock = new();
     private ITrayIcon? _tray;
     private TrayState _shown = TrayState.Initial;
+    private IReadOnlyList<MiniUnitStatus> _shownUnits = [];
     private DateTime _lastPush = DateTime.MinValue;
     private bool _forceNext;
 
@@ -37,8 +38,9 @@ internal sealed class TrayController : IDisposable
     public static TrayController? Start(MiniService service, IToastNotifier toast, Action requestStop)
     {
         var controller = new TrayController(service, toast, requestStop);
-        var initial = controller.BuildState();
+        var (initial, units) = controller.BuildState();
         controller._shown = initial;
+        controller._shownUnits = units;
         var tray = TrayIconFactory.Create(initial, controller.OnCommand);
         if (tray == null) return null;
         controller._tray = tray;
@@ -55,16 +57,21 @@ internal sealed class TrayController : IDisposable
             if (!_forceNext && now - _lastPush < MinInterval) return;
             _forceNext = false;
             _lastPush = now;
-            _shown = BuildState();
+            (_shown, _shownUnits) = BuildState();
             _tray.SetState(_shown);
         }
     }
 
-    private TrayState BuildState()
+    private (TrayState State, IReadOnlyList<MiniUnitStatus> Units) BuildState()
     {
         var status = _service.GetStatus();
         var settings = AppSettings.Current;
-        return new TrayState(
+        var units = _service.GetUnits().Take(TrayState.MaxUnitLines).ToList();
+        string unitLines = string.Join('\n', units.Select(u => $"{(!u.Selectable ? "-" : u.Selected ? "1" : "0")}|{u.Line}"));
+        // The header repeats the selected unit's line; while a flash or a handover
+        // runs it says so, above the unit lines.
+        bool headerInUnits = units.Count > 0 && status.Flash == null && !status.Handover;
+        var state = new TrayState(
             Header: TrayState.HeaderFor(status),
             Connected: status.DeviceName != null,
             Fault: status.FaultText != null,
@@ -75,16 +82,29 @@ internal sealed class TrayController : IDisposable
             RemoteLines: TrayState.RemoteLinesFor(_service.GetRemoteHosts()),
             DaemonLine: _service.DaemonMode ? TrayState.DaemonLineFor(_service.Daemon.Observed) : null,
             AppInstalled: GuiLauncher.Locate() != null,
-            FirmwareLine: TrayState.FirmwareLineFor(status));
+            FirmwareLine: TrayState.FirmwareLineFor(status),
+            UnitLines: unitLines,
+            HeaderInUnits: headerInUnits);
+        return (state, units);
     }
 
     /// <summary>A menu click, on the tray's thread.</summary>
     private void OnCommand(TrayCommand command)
     {
         TrayState shown;
-        lock (_lock) shown = _shown;
+        IReadOnlyList<MiniUnitStatus> units;
+        lock (_lock) (shown, units) = (_shown, _shownUnits);
         try
         {
+            if (command is >= TrayCommand.SelectUnit0 and <= TrayCommand.SelectUnit7)
+            {
+                int i = command - TrayCommand.SelectUnit0;
+                if (i < units.Count && units[i].Selectable && !_service.SelectDevice(units[i].Uid))
+                    FileLog.Warn($"tray: {units[i].Line} is no longer attached");
+                lock (_lock) _forceNext = true;
+                Refresh();
+                return;
+            }
             switch (command)
             {
                 case TrayCommand.OpenApp:

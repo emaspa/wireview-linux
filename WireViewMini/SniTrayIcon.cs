@@ -85,7 +85,9 @@ internal sealed class SniTrayIcon : ITrayIcon
                 });
                 return;
             }
-            var changed = newItems.Where((item, i) => item.Line != oldItems[i].Line).Select(i => i.Line).ToList();
+            var changedPairs = newItems.Select((item, i) => (New: item.Line, Old: oldItems[i].Line))
+                .Where(p => p.New != p.Old).ToList();
+            var changed = changedPairs.Select(p => p.New).ToList();
             if (changed.Count == 0) return;
             _revision++;
             EmitSignal(c, MenuPath, MenuInterface, "ItemsPropertiesUpdated", "a(ia{sv})a(ias)", (ref MessageWriter w) =>
@@ -102,10 +104,10 @@ internal sealed class SniTrayIcon : ITrayIcon
                 w.WriteArrayEnd(removed);
             });
             // A checkbox flip or an item enabled or disabled (rare) also resets the
-            // layout, for hosts that only follow LayoutUpdated. The header and remote
-            // host lines, which change every second, go through
+            // layout, for hosts that only follow LayoutUpdated. Label changes (the
+            // header, the unit and remote host lines, every second) go through
             // ItemsPropertiesUpdated only.
-            if (changed.Any(i => i.Kind != TrayItemKind.Header))
+            if (changedPairs.Any(p => p.New.Kind != TrayItemKind.Header && p.New with { Label = "" } != p.Old with { Label = "" }))
             {
                 uint rev = _revision;
                 EmitSignal(c, MenuPath, MenuInterface, "LayoutUpdated", "ui", (ref MessageWriter w) =>
@@ -502,7 +504,7 @@ internal sealed class SniTrayIcon : ITrayIcon
     {
         if (eventId != "clicked") return;
         var item = items.FirstOrDefault(i => i.Id == id);
-        if (item is { Kind: TrayItemKind.Action or TrayItemKind.Check, IsEnabled: true } && Enum.IsDefined((TrayCommand)id))
+        if (item is { Kind: TrayItemKind.Action or TrayItemKind.Check or TrayItemKind.Radio, IsEnabled: true } && Enum.IsDefined((TrayCommand)id))
             Dispatch((TrayCommand)id);
     }
 
@@ -575,9 +577,9 @@ internal sealed class SniTrayIcon : ITrayIcon
         Add("visible", VariantValue.Bool(true));
         if (item.Kind == TrayItemKind.Submenu)
             Add("children-display", VariantValue.String("submenu"));
-        if (item.Kind == TrayItemKind.Check)
+        if (item.Kind is TrayItemKind.Check or TrayItemKind.Radio)
         {
-            Add("toggle-type", VariantValue.String("checkmark"));
+            Add("toggle-type", VariantValue.String(item.Kind == TrayItemKind.Radio ? "radio" : "checkmark"));
             Add("toggle-state", VariantValue.Int32(item.Checked ? 1 : 0));
         }
         return props;

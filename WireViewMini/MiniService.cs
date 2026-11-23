@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using WireView2.Device;
@@ -16,6 +17,11 @@ namespace WireView2.Mini;
 /// <param name="FirmwareUpdate">The bundled firmware is newer than the device's.</param>
 internal readonly record struct MiniStatus(string? DeviceName, double? PowerW, string? FaultText, bool Handover,
     FlashState? Flash = null, bool FirmwareUpdate = false);
+
+/// <summary>One of this PC's WireViews as the tray lists it, when there are
+/// several: its line ("name · 4E46: 16.9 W", its fault, or why it is closed),
+/// whether it is the selected one and whether it can be selected now.</summary>
+internal readonly record struct MiniUnitStatus(string Uid, string Line, bool Selected, bool Selectable);
 
 /// <summary>One remote device (or an unreachable host) as the tray and the
 /// control panel show it.</summary>
@@ -108,6 +114,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
     private volatile string? _historyDevice; // UniqueId of the device History is of
     private volatile int _historyCapacity;
     private volatile string? _selectedUid; // the device the panel and the tray show
+    // Each unit's label and manager id (for a stable order), by chip UID, so a unit
+    // closed for a flash or a handover keeps its tray line (guarded by itself).
+    private readonly Dictionary<string, (string Label, string SortKey)> _unitNames = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised after every tick and on every reading of this PC's
     /// device, on the tick or the device thread. The tray rate-limits.</summary>
@@ -410,6 +419,44 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 faultText, Handover: false, FirmwareUpdate: Firmware.UpdateAvailable());
         }
         return default;
+    }
+
+    /// <summary>This PC's WireViews for the tray, in a stable order: the ones
+    /// attached, plus the one closed for a flash or lent to the app. Empty with
+    /// fewer than two.</summary>
+    public IReadOnlyList<MiniUnitStatus> GetUnits()
+    {
+        var units = LocalUnits();
+        string? closed = ClosedUid;
+        bool flashing = FlashBusy;
+        string? selected = PreferredLocal()?.Device.UniqueId;
+        if (_selectedUid is { } chosen && string.Equals(chosen, closed, StringComparison.OrdinalIgnoreCase))
+            selected = chosen;
+        var rows = new List<(string SortKey, MiniUnitStatus Unit)>();
+        lock (_unitNames)
+        {
+            foreach (var md in units)
+            {
+                string uid = md.Device.UniqueId, label = LabelFor(md.Device);
+                _unitNames[uid] = (label, md.Id);
+                ushort fault;
+                lock (_monitors) _localFault.TryGetValue(md.Id, out fault);
+                string state = !md.Device.Connected || md.Latest is not { Connected: true } data ? "disconnected"
+                    : fault != 0 ? FaultMonitor.FormatFaults(fault)
+                    : string.Create(CultureInfo.InvariantCulture, $"{data.SumPowerW:0.0} W");
+                bool isSelected = string.Equals(uid, selected, StringComparison.OrdinalIgnoreCase);
+                rows.Add((md.Id, new MiniUnitStatus(uid, $"{label}: {state}", isSelected, true)));
+            }
+            if (closed != null && !units.Any(u => string.Equals(u.Device.UniqueId, closed, StringComparison.OrdinalIgnoreCase))
+                && _unitNames.TryGetValue(closed, out var name))
+            {
+                string why = flashing ? "updating the firmware" : "lent to the app";
+                bool isSelected = string.Equals(closed, selected, StringComparison.OrdinalIgnoreCase);
+                rows.Add((name.SortKey, new MiniUnitStatus(closed, $"{name.Label}: {why}", isSelected, false)));
+            }
+        }
+        if (rows.Count < 2) return [];
+        return rows.OrderBy(r => r.SortKey, StringComparer.Ordinal).Select(r => r.Unit).ToList();
     }
 
     /// <summary>The local device the panel shows and drives. With the hwmon

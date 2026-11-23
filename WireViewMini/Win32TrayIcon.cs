@@ -262,6 +262,7 @@ internal sealed class Win32TrayIcon : ITrayIcon
                     AppendMenuW(menu, MF_STRING | grayed, (UIntPtr)item.Id, MenuText(item.Label));
                     break;
                 case TrayItemKind.Check:
+                case TrayItemKind.Radio:
                     AppendMenuW(menu, MF_STRING | grayed | (item.Checked ? MF_CHECKED : 0), (UIntPtr)item.Id, MenuText(item.Label));
                     break;
                 case TrayItemKind.Submenu:

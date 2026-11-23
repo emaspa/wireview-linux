@@ -62,6 +62,7 @@ On Windows WireView Mini has no console window, so starting it at login shows no
 WireView Mini puts the WireView icon in the notification area. Its menu, top to bottom:
 
 - the live state (`WireView Pro II: 123.4 W`, the fault while one is active, *Updating the firmware: 42 %* during a flash, *Serial port lent to the app* during a handover, or *No device*),
+- with several WireViews on this PC, one line per unit in their place (`WireView Pro II · 3245: 4.5 W`, its fault, *disconnected*, or *updating the firmware* / *lent to the app* while it is closed), the selected one marked; clicking a line selects that unit, which the **Screen** and **Clear faults** entries below and the control panel then use (during a flash or a handover the state line stays above them),
 - **Launch WireView Desktop** (starts the app; shown only where the app is installed, so on Linux),
 - **Settings and controls...**, which opens the control panel in the browser,
 - **Screen**, a submenu: Main, Simple, Current, Temperature, Status, then **Pause updates** and **Resume updates** (the device's display),

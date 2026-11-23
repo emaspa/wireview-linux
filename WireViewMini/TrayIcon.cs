@@ -21,9 +21,13 @@ internal enum TrayCommand
     ScreenStatus = 24,
     PauseUpdates = 26,
     ResumeUpdates = 27,
+    // One line per WireView on this PC, when there are several: selects it.
+    SelectUnit0 = 200, SelectUnit1, SelectUnit2, SelectUnit3, SelectUnit4, SelectUnit5, SelectUnit6, SelectUnit7,
 }
 
-internal enum TrayItemKind { Header, Action, Check, Separator, Submenu }
+/// <summary>A <see cref="TrayItemKind.Radio"/> line is a checkmark line drawn as
+/// one choice of several where the host can.</summary>
+internal enum TrayItemKind { Header, Action, Check, Separator, Submenu, Radio }
 
 /// <summary>One menu line. <see cref="Id"/> is stable across updates. A
 /// <see cref="TrayItemKind.Submenu"/> carries its lines in <see cref="Children"/>;
@@ -43,6 +47,10 @@ internal sealed record TrayItem(int Id, TrayItemKind Kind, string Label = "", bo
 /// publishing (Linux), replaces the Publish on the LAN checkbox with a disabled
 /// line. <see cref="FirmwareLine"/>, set when the bundled firmware is newer than
 /// the device's, adds a line under the header that opens the control panel.
+/// <see cref="UnitLines"/>, with several WireViews on this PC, lists each one
+/// ("1|line" for the selected one, "0|line" for another one, "-|line" for one
+/// that cannot be selected now) as a line that selects it; with
+/// <see cref="HeaderInUnits"/> those lines replace the header.
 /// Equal states render identically, so implementations compare with the
 /// last one and send only what changed.</summary>
 internal sealed record TrayState(
@@ -56,12 +64,17 @@ internal sealed record TrayState(
     string RemoteLines = "",
     string? DaemonLine = null,
     bool AppInstalled = true,
-    string? FirmwareLine = null)
+    string? FirmwareLine = null,
+    string UnitLines = "",
+    bool HeaderInUnits = false)
 {
     public const string AppTitle = "WireView Mini";
 
     /// <summary>First id of the remote host lines (one per host or device).</summary>
     public const int RemoteLineIdBase = 100;
+
+    /// <summary>The most unit lines shown (wireviewd drives at most 8 WireViews).</summary>
+    public const int MaxUnitLines = 8;
 
     /// <summary>The "LAN publishing: wireviewd, ..." line in place of the publish checkbox.</summary>
     public const int DaemonLineId = 14;
@@ -82,7 +95,16 @@ internal sealed record TrayState(
     {
         get
         {
-            var items = new List<TrayItem> { new(1, TrayItemKind.Header, Header) };
+            var items = new List<TrayItem>();
+            var units = UnitLines.Length > 0 ? UnitLines.Split('\n').Take(MaxUnitLines).ToArray() : [];
+            if (!HeaderInUnits || units.Length == 0)
+                items.Add(new(1, TrayItemKind.Header, Header));
+            for (int i = 0; i < units.Length; i++)
+            {
+                string flag = units[i][..1], line = units[i][2..];
+                items.Add(new((int)TrayCommand.SelectUnit0 + i, TrayItemKind.Radio, line,
+                    Checked: flag == "1", Enabled: flag != "-"));
+            }
             // Opens the control panel, whose Firmware section does the update.
             if (FirmwareLine != null)
                 items.Add(new((int)TrayCommand.FirmwareUpdate, TrayItemKind.Action, FirmwareLine));
