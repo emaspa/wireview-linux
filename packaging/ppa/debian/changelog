@@ -1,3 +1,29 @@
+wireview-linux (1.5.0.0~resolute1) resolute; urgency=medium
+
+  * Several WireViews on one PC. Each one is its own device in the app and in
+    WireView Mini, with its own readings, history, fault alerts and shutdown
+    on fault; with wireview-hwmon 1.9.0 each one also has its own hwmon
+    device.
+  * The app selects the WireView it showed last again at start (--device picks
+    one for a run), and a nickname per device names it in the picker, the tray
+    and the alerts.
+  * Tray: an option shows one power icon per WireView, each with its own
+    readings menu. WireView Mini's tray menu lists every unit, and a click
+    selects one.
+  * Firmware updates, the serial handover and the bootloader command reach the
+    selected WireView on its own USB port; the others keep running. Windows
+    flashes one WireView among several too, and its native flasher opens the
+    bootloader by its full device path.
+  * WireView Mini: Apply in the theme editor stores the configuration on the
+    device, so a reset no longer brings the old theme back.
+  * The app runs once per user, also when started from a terminal and from the
+    desktop.
+  * The udev rule adds a /dev/wireview-SERIAL link per WireView, SERIAL
+    being its USB serial number.
+  * Recommends wireview-hwmon 1.9.0 or later.
+
+ -- Emanuele Sparvoli <sparvoli@gmail.com>  Mon, 23 Nov 2026 10:19:52 +0000
+
 wireview-linux (1.4.2.0~resolute1) resolute; urgency=medium
 
   * Flatpak: the app starts on a Wayland session. The sandbox got only the

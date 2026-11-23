@@ -10,7 +10,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 
 Name:           wireview-linux
-Version:        1.4.2.0
+Version:        1.5.0.0
 Release:        1%{?dist}
 Summary:        Unofficial Linux GUI for the Thermal Grizzly WireView Pro II
 
@@ -29,8 +29,8 @@ Requires:       fontconfig
 Requires:       freetype
 Requires:       libX11
 # Optional: hwmon kernel module + daemon for system-wide sensor integration.
-# 1.8.1 takes the LAN port back from WireView Mini on its own.
-Recommends:     wireview-hwmon >= 1.8.1
+# 1.9.0 drives several WireViews, each its own hwmon device.
+Recommends:     wireview-hwmon >= 1.9.0
 # Optional: in-app firmware flashing (DFU download to the STM32 bootloader).
 Recommends:     dfu-util
 
@@ -99,6 +99,27 @@ gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 update-desktop-database &>/dev/null || :
 
 %changelog
+* Mon Nov 23 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.5.0.0-1
+- Several WireViews on one PC. Each one is its own device in the app and in
+  WireView Mini, with its own readings, history, fault alerts and shutdown on
+  fault; with wireview-hwmon 1.9.0 each one also has its own hwmon device.
+- The app selects the WireView it showed last again at start (--device picks one
+  for a run), and a nickname per device names it in the picker, the tray and the
+  alerts.
+- Tray: an option shows one power icon per WireView, each with its own readings
+  menu. WireView Mini's tray menu lists every unit, and a click selects one.
+- Firmware updates, the serial handover and the bootloader command reach the
+  selected WireView on its own USB port; the others keep running. Windows
+  flashes one WireView among several too, and its native flasher opens the
+  bootloader by its full device path.
+- WireView Mini: Apply in the theme editor stores the configuration on the
+  device, so a reset no longer brings the old theme back.
+- The app runs once per user, also when started from a terminal and from the
+  desktop.
+- The udev rule adds a /dev/wireview-SERIAL link per WireView, SERIAL
+  being its USB serial number.
+- Recommends wireview-hwmon 1.9.0 or later.
+
 * Thu Nov 12 2026 Emanuele Sparvoli <sparvoli@gmail.com> - 1.4.2.0-1
 - Flatpak: the app starts on a Wayland session. The sandbox got only the
   Wayland socket there, and the app draws through X11 (XWayland), so it stopped
