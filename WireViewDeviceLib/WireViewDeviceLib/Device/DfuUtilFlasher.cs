@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -44,41 +45,74 @@ public static partial class DfuUtilFlasher
         }
     }
 
+    [GeneratedRegex(@"path=""([^""]+)""")]
+    private static partial Regex PathRegex();
+
+    /// <summary>The USB port paths of the bootloaders `dfu-util -l` lists
+    /// (each listed once, though dfu-util prints a line per flash area).</summary>
+    internal static List<string> ParseDfuPaths(string listing)
+    {
+        var paths = new List<string>();
+        foreach (var line in listing.Split('\n'))
+        {
+            if (!line.Contains($"[{DfuVid}:{DfuPid}]", StringComparison.OrdinalIgnoreCase)) continue;
+            var m = PathRegex().Match(line);
+            string path = m.Success ? m.Groups[1].Value : "";
+            if (!paths.Contains(path)) paths.Add(path);
+        }
+        return paths;
+    }
+
+    /// <summary>The USB port paths of the STM32 bootloaders attached now, empty when
+    /// none or when dfu-util cannot list them.</summary>
+    public static async Task<List<string>> ListDfuPathsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var (exitCode, stdout, _) = await RunAsync(DfuUtilPath, "-l",
+                TimeSpan.FromSeconds(5), null, ct).ConfigureAwait(false);
+            return exitCode == 0 ? ParseDfuPaths(stdout) : new List<string>();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
     /// <summary>Polls `dfu-util -l` until the bootloader shows up (device re-enumerates
-    /// a moment after CMD_BOOTLOADER). Returns false on timeout.</summary>
-    public static async Task<bool> WaitForDfuDeviceAsync(TimeSpan timeout, CancellationToken ct)
+    /// a moment after CMD_BOOTLOADER): the one on USB port <paramref name="usbPath"/>
+    /// (e.g. "3-4") when given, which is the port the device was on, else any.
+    /// Returns false on timeout.</summary>
+    public static async Task<bool> WaitForDfuDeviceAsync(TimeSpan timeout, CancellationToken ct, string? usbPath = null)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                var (exitCode, stdout, _) = await RunAsync(DfuUtilPath, "-l",
-                    TimeSpan.FromSeconds(5), null, ct).ConfigureAwait(false);
-                if (exitCode == 0 && stdout.Contains($"[{DfuVid}:{DfuPid}]", StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                // dfu-util hiccup; keep polling until the deadline.
-            }
+            var paths = await ListDfuPathsAsync(ct).ConfigureAwait(false);
+            if (usbPath == null ? paths.Count > 0 : paths.Contains(usbPath))
+                return true;
             await Task.Delay(500, ct).ConfigureAwait(false);
         }
         return false;
     }
 
     /// <summary>Downloads a flat firmware image to internal flash and reboots the
-    /// device (DfuSe ":leave"). Progress is 0..1, parsed from dfu-util output.
-    /// Throws with dfu-util's output on failure.</summary>
+    /// device (DfuSe ":leave"): the bootloader on USB port <paramref name="usbPath"/>
+    /// when given, else the only one attached (refused when there are several, so
+    /// another device's bootloader is never flashed). Progress is 0..1, parsed from
+    /// dfu-util output. Throws with dfu-util's output on failure.</summary>
     public static async Task FlashAsync(string binPath, uint baseAddress,
-        IProgress<double>? progress, CancellationToken ct)
+        IProgress<double>? progress, CancellationToken ct, string? usbPath = null)
     {
-        string args = $"-d {DfuVid}:{DfuPid} -a 0 -s 0x{baseAddress:X8}:leave -D \"{binPath}\"";
+        if (usbPath == null && (await ListDfuPathsAsync(ct).ConfigureAwait(false)).Count > 1)
+            throw new InvalidOperationException(
+                "More than one device is in firmware update mode. Unplug all but the one to update and try again.");
+        string target = usbPath == null ? "" : $" -p {usbPath}";
+        string args = $"-d {DfuVid}:{DfuPid}{target} -a 0 -s 0x{baseAddress:X8}:leave -D \"{binPath}\"";
         var (exitCode, stdout, stderr) = await RunAsync(DfuUtilPath, args,
             TimeSpan.FromMinutes(5), progress, ct).ConfigureAwait(false);
 

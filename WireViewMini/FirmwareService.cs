@@ -16,10 +16,26 @@ internal enum FlashRoute
 }
 
 /// <summary>This PC's device as the firmware gates see it, taken at one moment.</summary>
+/// <param name="Port">Its serial port, <paramref name="UsbPath"/> its USB port path
+/// (e.g. "3-4") and <paramref name="UsbSerial"/> its USB serial number, null where
+/// unknown; <paramref name="Attached"/> the number of WireViews on this PC.</param>
 internal sealed record FlashTarget(
     string Id, string Name, byte VendorId, byte ProductId, string FirmwareVersion, string BuildString,
-    bool Connected, FlashRoute Route)
+    bool Connected, FlashRoute Route, string? Port = null, string? UsbPath = null, string? UsbSerial = null,
+    int Attached = 1)
 {
+    /// <summary>The name, with its USB serial and port when several WireViews are
+    /// attached, so a confirmation names the unit.</summary>
+    public string TargetName => Attached > 1 && UsbPath != null
+        ? $"{Name} (serial {UsbSerial}, USB port {UsbPath})"
+        : Name;
+
+    /// <summary>Why this device cannot be flashed while others are attached, or null.</summary>
+    public string? AmbiguityProblem => Attached <= 1 ? null
+        : OperatingSystem.IsWindows() ? "Several WireViews are attached. Unplug the others to update this one."
+        : UsbPath == null ? "Several WireViews are attached and the USB port of this one could not be found. Unplug the others and try again."
+        : null;
+
     /// <summary>The device's firmware version number, null while unknown.</summary>
     public int? Version =>
         int.TryParse(FirmwareVersion, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : null;
@@ -51,10 +67,10 @@ internal interface IFlashHost
     /// for at most <paramref name="seconds"/>. False while the GUI holds the port.</summary>
     bool SuspendForFlash(int seconds);
 
-    /// <summary>Serial route, after <see cref="SuspendForFlash"/>: opens the
-    /// port directly and sends the bootloader command. Null on success, else the
-    /// status line.</summary>
-    string? EnterBootloaderDirect();
+    /// <summary>Serial route, after <see cref="SuspendForFlash"/>: opens
+    /// <paramref name="port"/> directly and sends the bootloader command. Null on
+    /// success, else the status line.</summary>
+    string? EnterBootloaderDirect(string? port);
 
     /// <summary>Ends <see cref="SuspendForFlash"/>: device discovery resumes.</summary>
     void ResumeAfterFlash();
@@ -298,7 +314,7 @@ internal sealed class FirmwareService
 
     /// <summary>The app's final confirmation dialog text.</summary>
     private static string ConfirmText(FirmwareImageInfo image, FlashTarget device) =>
-        $"Flash firmware {ImageLabel(image)} to {device.Name}?\n\n" +
+        $"Flash firmware {ImageLabel(image)} to {device.TargetName}?\n\n" +
         $"The device runs {device.Label}.\n\n" +
         "The device restarts into its bootloader and is flashed over USB. " +
         "Do not unplug it until the update finishes.\n\n" +
@@ -328,6 +344,7 @@ internal sealed class FirmwareService
         if (device == null || !device.Connected) return "Not connected.";
         if (device.Route == FlashRoute.ReadOnly)
             return "The device is reached through hwmon without wireviewd, which is read only. Start wireviewd and try again.";
+        if (device.AmbiguityProblem is { } ambiguous) return ambiguous;
         if (image == null) return imageError;
         if (verdict == FlashVerdict.ProductMismatch)
             return $"The firmware image is for product {WireViewEditions.FormatHardwareRevision(image.VendorId, image.ProductId)}, " +
@@ -474,7 +491,7 @@ internal sealed class FirmwareService
                 }
                 suspended = true;
                 FileLog.Info("firmware update: serial port closed, sending the bootloader command over a direct connection");
-                if (_host.EnterBootloaderDirect() is { } bootError) { Fail(generation, bootError); return; }
+                if (_host.EnterBootloaderDirect(device.Port) is { } bootError) { Fail(generation, bootError); return; }
             }
 
             var progress = new DirectProgress(p => SetProgress(generation, p));
@@ -498,7 +515,7 @@ internal sealed class FirmwareService
                 await File.WriteAllBytesAsync(binPath, image).ConfigureAwait(false);
                 Set(generation, FlashPhase.WaitingForDfu, 0, "Waiting for the DFU bootloader...");
                 FileLog.Info($"firmware update: waiting up to {DfuWait.TotalSeconds:0} s for the DFU device {DfuUtilFlasher.DfuVid}:{DfuUtilFlasher.DfuPid}");
-                if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(DfuWait, CancellationToken.None).ConfigureAwait(false))
+                if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(DfuWait, CancellationToken.None, device.UsbPath).ConfigureAwait(false))
                 {
                     Fail(generation,
                         "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
@@ -507,7 +524,7 @@ internal sealed class FirmwareService
                 }
                 Set(generation, FlashPhase.Flashing, 0, $"Flashing {imageLabel}...");
                 FileLog.Info($"firmware update: flashing {image.Length} bytes at 0x{baseAddress:X8} with dfu-util");
-                await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None).ConfigureAwait(false);
+                await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None, device.UsbPath).ConfigureAwait(false);
             }
 
             flashed = true;

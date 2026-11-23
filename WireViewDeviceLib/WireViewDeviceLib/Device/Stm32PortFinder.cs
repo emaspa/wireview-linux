@@ -2,6 +2,12 @@ using System.Runtime.InteropServices;
 
 namespace WireView2.Device
 {
+    /// <summary>A WireView serial port. <paramref name="UsbSerial"/> is the USB
+    /// serial number (derived from the chip UID, see
+    /// <see cref="Stm32PortFinder.UsbSerialFromUid"/>) and <paramref name="UsbPath"/>
+    /// the USB port path (e.g. "3-4"); both null where unknown.</summary>
+    public sealed record WireViewPort(string Port, string? UsbSerial, string? UsbPath);
+
     public static class Stm32PortFinder
     {
         public static List<string> FindMatchingComPorts()
@@ -89,9 +95,55 @@ namespace WireView2.Device
             return false;
         }
 
-        private static List<string> FindMatchingComPortsLinux()
+        private static List<string> FindMatchingComPortsLinux() =>
+            FindMatchingPortsLinux().Select(p => p.Port).ToList();
+
+        /// <summary>The WireView serial ports with their USB identity: the device's
+        /// USB serial number and its USB port path (the sysfs name of the USB
+        /// device, e.g. "3-4", which dfu-util takes as <c>-p</c>). On Windows only
+        /// the port is known.</summary>
+        public static List<WireViewPort> FindMatchingPorts()
         {
-            var ports = new List<string>();
+            if (OperatingSystem.IsLinux())
+                return FindMatchingPortsLinux();
+            return FindMatchingComPorts().Select(p => new WireViewPort(p, null, null)).ToList();
+        }
+
+        /// <summary>The USB serial number the firmware reports for the device with
+        /// chip UID <paramref name="uid"/> (24 hex digits, as
+        /// <see cref="IWireViewDevice.UniqueId"/>): the STM32 USB library derives it
+        /// from the UID as hex8(w0 + w2) + hex4(w1 >> 16), w0..w2 the UID's
+        /// little-endian words. Null when <paramref name="uid"/> is not a UID.</summary>
+        public static string? UsbSerialFromUid(string? uid)
+        {
+            if (uid == null || uid.Length != 24) return null;
+            byte[] b;
+            try { b = Convert.FromHexString(uid); }
+            catch (FormatException) { return null; }
+            uint w0 = BitConverter.ToUInt32(b, 0), w1 = BitConverter.ToUInt32(b, 4), w2 = BitConverter.ToUInt32(b, 8);
+            return unchecked(w0 + w2).ToString("X8") + (w1 >> 16).ToString("X4");
+        }
+
+        /// <summary>The port of the device with chip UID <paramref name="uid"/>,
+        /// matched by its USB serial number without opening any port. When no port
+        /// matches (no UID, USB serials not known as on Windows, or a firmware that
+        /// reports another serial), the only WireView port when there is exactly one;
+        /// null when it cannot be told which port it is.</summary>
+        public static string? FindPortForUid(string? uid) => FindPortInfoForUid(uid)?.Port;
+
+        /// <summary>As <see cref="FindPortForUid"/>, with the port's USB identity.</summary>
+        public static WireViewPort? FindPortInfoForUid(string? uid)
+        {
+            var ports = FindMatchingPorts();
+            string? serial = UsbSerialFromUid(uid);
+            if (serial != null && ports.FirstOrDefault(p => string.Equals(p.UsbSerial, serial, StringComparison.OrdinalIgnoreCase)) is { } match)
+                return match;
+            return ports.Count == 1 ? ports[0] : null;
+        }
+
+        private static List<WireViewPort> FindMatchingPortsLinux()
+        {
+            var ports = new List<WireViewPort>();
 
             const string sysClassTty = "/sys/class/tty";
             if (!Directory.Exists(sysClassTty))
@@ -124,7 +176,10 @@ namespace WireView2.Device
                                 product.Equals("5740", StringComparison.OrdinalIgnoreCase))
                             {
                                 var ttyName = Path.GetFileName(ttyDir);
-                                ports.Add($"/dev/{ttyName}");
+                                var serialFile = Path.Combine(searchDir, "serial");
+                                string? serial = File.Exists(serialFile) ? File.ReadAllText(serialFile).Trim() : null;
+                                ports.Add(new WireViewPort($"/dev/{ttyName}",
+                                    string.IsNullOrEmpty(serial) ? null : serial, Path.GetFileName(searchDir)));
                             }
 
                             break;
@@ -139,8 +194,12 @@ namespace WireView2.Device
                 }
             }
 
+            ports.Sort((a, b) => TtyNumber(a.Port).CompareTo(TtyNumber(b.Port)));
             return ports;
         }
+
+        private static int TtyNumber(string port) =>
+            int.TryParse(port.AsSpan(port.LastIndexOf("ACM", StringComparison.Ordinal) + 3), out int n) ? n : int.MaxValue;
 
         private static string? TryExtractComPortFromFriendlyName(string friendlyName)
         {

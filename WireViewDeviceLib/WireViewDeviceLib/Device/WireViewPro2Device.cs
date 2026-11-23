@@ -16,6 +16,9 @@ namespace WireView2.Device
         private const string WelcomePrefix = "Thermal Grizzly WireView";
         private const int MaxWelcomeLength = 64;
         private readonly string _portName;
+
+        /// <summary>The serial port this device is opened on.</summary>
+        public string PortName => _portName;
         private readonly int _baud;
         private SerialPort? _port;
         private CancellationTokenSource? _cts;

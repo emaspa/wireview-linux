@@ -379,6 +379,11 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         var md = PreferredLocal();
         if (md == null) return null;
         var dev = md.Device;
+        var ports = Stm32PortFinder.FindMatchingPorts();
+        var usb = Stm32PortFinder.FindPortInfoForUid(dev.UniqueId);
+        // A serial device knows its own port even when its USB serial is not matched.
+        string? port = dev is WireViewPro2Device pro2 ? pro2.PortName : usb?.Port;
+        if (port != null && usb?.Port != port) usb = ports.FirstOrDefault(p => p.Port == port);
         return new FlashTarget(md.Id, dev.DeviceName, dev.VendorId, dev.ProductId,
             dev.FirmwareVersion ?? "", dev.BuildString ?? "", dev.Connected,
             dev switch
@@ -386,7 +391,8 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
                 WireViewPro2Device => FlashRoute.Serial,
                 HwmonDevice { DaemonAvailable: true } => FlashRoute.Daemon,
                 _ => FlashRoute.ReadOnly,
-            });
+            },
+            port, usb?.UsbPath, usb?.UsbSerial, Math.Max(ports.Count, 1));
     }
 
     DaemonResult IFlashHost.EnterBootloaderThroughDaemon()
@@ -418,10 +424,9 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         return true;
     }
 
-    string? IFlashHost.EnterBootloaderDirect()
+    string? IFlashHost.EnterBootloaderDirect(string? port)
     {
         // The app's EnterBootloaderViaMini, with WireView Mini's port already closed.
-        string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
         if (port == null)
             return "No WireView serial port found.";
         var direct = new WireViewPro2Device(port);

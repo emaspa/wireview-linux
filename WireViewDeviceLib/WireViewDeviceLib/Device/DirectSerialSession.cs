@@ -46,9 +46,13 @@ namespace WireView2.Device
         {
             return RunWithHandoverAsync(daemonDevice, async token =>
             {
-                string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
+                // The port of the device the owner lent, not just any WireView's.
+                string? uid = (daemonDevice as IWireViewDevice)?.UniqueId;
+                string? port = Stm32PortFinder.FindPortForUid(uid);
                 if (port == null)
-                    throw new InvalidOperationException("No WireView serial port found.");
+                    throw new InvalidOperationException(Stm32PortFinder.FindMatchingPorts().Count > 1
+                        ? "Several WireViews are attached and the serial port of this one could not be found."
+                        : "No WireView serial port found.");
 
                 var device = new WireViewPro2Device(port);
                 // Stops an operation that does not observe the token at its next

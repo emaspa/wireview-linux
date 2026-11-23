@@ -633,8 +633,27 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             }
         }
 
+        // The USB port of this device, so the bootloader command and the flash reach
+        // it and not another WireView on this PC.
+        int attached = Stm32PortFinder.FindMatchingPorts().Count;
+        var target = Stm32PortFinder.FindPortInfoForUid(device.UniqueId);
+        if (attached > 1 && (target == null || (!OperatingSystem.IsWindows() && target.UsbPath == null)))
+        {
+            FirmwareUpdateStatus = "Several WireViews are attached and the USB port of this one could not be found. " +
+                                   "Unplug the others and try again. Nothing was flashed.";
+            return;
+        }
+        if (attached > 1 && OperatingSystem.IsWindows())
+        {
+            FirmwareUpdateStatus = "Several WireViews are attached. Unplug the others to update this one. Nothing was flashed.";
+            return;
+        }
+        string targetLabel = attached > 1 && target != null
+            ? $"{DeviceName} (serial {target.UsbSerial}, USB port {target.UsbPath})"
+            : DeviceName;
+
         var confirm = await MessageBox.Show(null,
-            $"Flash firmware {imageLabel} to {DeviceName}?\n\n" +
+            $"Flash firmware {imageLabel} to {targetLabel}?\n\n" +
             $"The device runs {deviceLabel}.\n\n" +
             "The device restarts into its bootloader and is flashed over USB. " +
             "Do not unplug it until the update finishes.\n\n" +
@@ -689,7 +708,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 case NetworkDevice { IsLocalMini: true } mini:
                     // WireView Mini owns the port: have it close the port, then send the
                     // bootloader command over a direct connection of our own.
-                    string? bootError = await Task.Run(() => EnterBootloaderViaMini(mini));
+                    string? bootError = await Task.Run(() => EnterBootloaderViaMini(mini, target?.Port));
                     miniHandover = mini;
                     if (bootError != null)
                     {
@@ -718,7 +737,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
             else
             {
                 await File.WriteAllBytesAsync(binPath, image);
-                if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None))
+                if (!await DfuUtilFlasher.WaitForDfuDeviceAsync(TimeSpan.FromSeconds(20), CancellationToken.None, target?.UsbPath))
                 {
                     FirmwareUpdateStatus =
                         "The DFU bootloader did not appear. Check that the udev rule for 0483:df11 is " +
@@ -726,7 +745,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                     return;
                 }
                 FirmwareUpdateStatus = $"Flashing {imageLabel}…";
-                await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None);
+                await DfuUtilFlasher.FlashAsync(binPath, baseAddress, progress, CancellationToken.None, target?.UsbPath);
             }
 
             FirmwareUpdateProgress = 1.0;
@@ -758,7 +777,7 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     /// <summary>Asks wireview-mini to close its serial port and restarts the
     /// device into its DFU bootloader over a direct connection. Returns null on
     /// success, else the status line. Blocking: run it off the UI thread.</summary>
-    private static string? EnterBootloaderViaMini(NetworkDevice mini)
+    private static string? EnterBootloaderViaMini(NetworkDevice mini, string? port)
     {
         var suspend = mini.RequestSuspendSerial(MiniFlashHandoverSeconds);
         if (suspend == DaemonResult.Busy)
@@ -766,7 +785,6 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         if (suspend != DaemonResult.Ok)
             return $"WireView Mini did not hand over the serial port ({suspend.DescribeNeutral()}).";
 
-        string? port = Stm32PortFinder.FindMatchingComPorts().FirstOrDefault();
         if (port == null)
             return "No WireView serial port found.";
         var direct = new WireViewPro2Device(port);
