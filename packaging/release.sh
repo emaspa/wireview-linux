@@ -36,6 +36,10 @@
 # A rebuild gives new checksums (the app's build stamp differs), so publish
 # the files of one run and commit that run's pins.
 #
+# Env: UBUNTU_MIRROR=<url> points apt in the Ubuntu containers at that
+#      archive (e.g. http://it.archive.ubuntu.com/ubuntu) when the default one
+#      is slow.
+#
 # Requires: git, dotnet (8.0+ SDK), docker (or sudo docker), rpmbuild,
 #           flatpak-builder with org.freedesktop.Sdk//26.08, ostree, python3.
 #
@@ -268,17 +272,30 @@ out="$(desktop-file-validate "$entry" 2>&1)" || { echo "$out"; echo "!! $entry i
 grep -E '^(Exec|Icon)=' "$entry"
 EOF
 chmod +x "$STAGE/check-desktop.sh"
+# Ubuntu containers: apt uses $UBUNTU_MIRROR when it is set.
+cat > "$STAGE/apt-mirror.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -n "${UBUNTU_MIRROR:-}" ]] || exit 0
+for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+    if [[ -f "$f" ]]; then
+        sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_MIRROR%/}/#g" "$f"
+    fi
+done
+EOF
+chmod +x "$STAGE/apt-mirror.sh"
 run_check() { # image, script; /out is dist/, /check-mini.sh and /check-desktop.sh the checks
     local image="$1" script="$2"
     step "6. $image: $3"
     "${DOCKER[@]}" run "${SANDBOX[@]}" -v "$OUT:/out:ro" -v "$STAGE/check-mini.sh:/check-mini.sh:ro" \
         -v "$STAGE/check-desktop.sh:/check-desktop.sh:ro" \
+        -v "$STAGE/apt-mirror.sh:/apt-mirror.sh:ro" -e UBUNTU_MIRROR="${UBUNTU_MIRROR:-}" \
         -v "$STAGE/aur:/aur:ro" -v "$STAGE/aur-out:/aurout" "$image" bash -c "$script" 2>&1 | tee "$STAGE/check-${image//[:\/]/-}-$4.log"
     grep -q -- '--- OK' "$STAGE/check-${image//[:\/]/-}-$4.log" || fail "$image: $3 failed"
 }
 APP_IN_PKG=/usr/bin/wireview-linux
 
-run_check ubuntu:24.04 "set -e; export DEBIAN_FRONTEND=noninteractive; apt-get update -qq;
+run_check ubuntu:24.04 "set -e; export DEBIAN_FRONTEND=noninteractive; /apt-mirror.sh; apt-get update -qq;
     apt-get install -y -qq /out/$DEB xvfb xauth libfontconfig1 > /tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
     dpkg -s wireview-linux | grep -E '^(Version|Recommends):'; ls -l /usr/bin/wireview-linux /usr/bin/wireview-mini
     /check-desktop.sh

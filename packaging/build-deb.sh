@@ -28,6 +28,8 @@
 # Env:      DEB_BUILDER=docker|host   where dpkg-buildpackage runs (default docker)
 #           DEB_IMAGE=ubuntu:24.04    container image for DEB_BUILDER=docker
 #           MINI_DIR=<dir>            reuse a packaging/build-mini.sh output
+#           UBUNTU_MIRROR=<url>       Ubuntu archive for the container's apt, e.g.
+#                                     http://it.archive.ubuntu.com/ubuntu
 #
 set -euo pipefail
 
@@ -98,6 +100,13 @@ docker)
 #!/usr/bin/env bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+if [[ -n "${UBUNTU_MIRROR:-}" ]]; then
+    for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
+        if [[ -f "$f" ]]; then
+            sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${UBUNTU_MIRROR%/}/#g" "$f"
+        fi
+    done
+fi
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends debhelper >/dev/null
 cd "/work/$SRC_NAME"
@@ -110,7 +119,7 @@ EOF
     docker info >/dev/null 2>&1 || DOCKER=(sudo docker)
     echo ">> dpkg-buildpackage in $DEB_IMAGE"
     "${DOCKER[@]}" run --rm -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-        -e SRC_NAME="$(basename "$SRC")" \
+        -e SRC_NAME="$(basename "$SRC")" -e UBUNTU_MIRROR="${UBUNTU_MIRROR:-}" \
         -v "$WORK:/work" "$DEB_IMAGE" bash /work/build.sh
     ;;
 host)
