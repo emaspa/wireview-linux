@@ -10,15 +10,14 @@ namespace WireView2.Device
 
     public static class Stm32PortFinder
     {
-        public static List<string> FindMatchingComPorts()
+        public static List<string> FindMatchingComPorts() =>
+            FindMatchingPorts().Select(p => p.Port).ToList();
+
+        private static List<WireViewPort> FindMatchingPortsWindows()
         {
-            if (OperatingSystem.IsLinux())
-                return FindMatchingComPortsLinux();
-
+            var ports = new List<WireViewPort>();
             if (!OperatingSystem.IsWindows())
-                return new List<string>();
-
-            var ports = new List<string>();
+                return ports;
 
             nint devInfo = WindowsSetupApi.SetupDiGetClassDevsAllClassesPresent();
             if (WindowsSetupApi.IsInvalidHandle(devInfo))
@@ -53,10 +52,20 @@ namespace WireView2.Device
                     }
 
                     var comPort = TryExtractComPortFromFriendlyName(friendlyName);
-                    if (!string.IsNullOrWhiteSpace(comPort))
+                    if (string.IsNullOrWhiteSpace(comPort))
                     {
-                        ports.Add(comPort);
+                        continue;
                     }
+
+                    // The USB serial number is the last part of the USB device's
+                    // instance id; the location path names its physical USB port.
+                    string? usbSerial = null, usbPath = null;
+                    if (WindowsSetupApi.UsbDeviceOf(devInfoData.DevInst) is { } usb)
+                    {
+                        usbSerial = WindowsSetupApi.UsbSerialFromInstanceId(usb.InstanceId);
+                        usbPath = WindowsSetupApi.TryGetLocationPath(usb.DevInst);
+                    }
+                    ports.Add(new WireViewPort(comPort, usbSerial, usbPath));
                 }
             }
             finally
@@ -95,18 +104,32 @@ namespace WireView2.Device
             return false;
         }
 
-        private static List<string> FindMatchingComPortsLinux() =>
-            FindMatchingPortsLinux().Select(p => p.Port).ToList();
-
         /// <summary>The WireView serial ports with their USB identity: the device's
-        /// USB serial number and its USB port path (the sysfs name of the USB
-        /// device, e.g. "3-4", which dfu-util takes as <c>-p</c>). On Windows only
-        /// the port is known.</summary>
+        /// USB serial number and its USB port path: on Linux the sysfs name of the
+        /// USB device (e.g. "3-4", which dfu-util takes as <c>-p</c>), on Windows
+        /// its location path (e.g. "PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(4)", which
+        /// the native DFU flasher matches). Empty elsewhere.</summary>
         public static List<WireViewPort> FindMatchingPorts()
         {
             if (OperatingSystem.IsLinux())
                 return FindMatchingPortsLinux();
-            return FindMatchingComPorts().Select(p => new WireViewPort(p, null, null)).ToList();
+            if (OperatingSystem.IsWindows())
+                return FindMatchingPortsWindows();
+            return new List<WireViewPort>();
+        }
+
+        /// <summary>A USB port path as people read it: unchanged on Linux ("3-4");
+        /// a Windows location path shortened to its hub port chain after the root
+        /// hub ("PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(4)#USB(2)" is "4-2").</summary>
+        public static string? DescribeUsbPath(string? usbPath)
+        {
+            if (usbPath == null) return null;
+            int root = usbPath.IndexOf("USBROOT(", StringComparison.OrdinalIgnoreCase);
+            if (root < 0) return usbPath;
+            var hops = usbPath[root..].Split('#').Skip(1)
+                .Select(h => h.StartsWith("USB(", StringComparison.OrdinalIgnoreCase) && h.EndsWith(')') ? h[4..^1] : h)
+                .ToList();
+            return hops.Count > 0 ? string.Join('-', hops) : usbPath;
         }
 
         /// <summary>The USB serial number the firmware reports for the device with

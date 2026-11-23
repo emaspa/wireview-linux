@@ -28,14 +28,12 @@ internal sealed record FlashTarget(
     /// <summary>The name, with its USB serial and port when several WireViews are
     /// attached, so a confirmation names the unit.</summary>
     public string TargetName => Attached > 1 && UsbPath != null
-        ? $"{Name} (serial {UsbSerial}, USB port {UsbPath})"
+        ? $"{Name} (serial {UsbSerial}, USB port {Stm32PortFinder.DescribeUsbPath(UsbPath)})"
         : Name;
 
     /// <summary>Why this device cannot be flashed while others are attached, or null.</summary>
-    public string? AmbiguityProblem => Attached <= 1 ? null
-        : OperatingSystem.IsWindows() ? "Several WireViews are attached. Unplug the others to update this one."
-        : UsbPath == null ? "Several WireViews are attached and the USB port of this one could not be found. Unplug the others and try again."
-        : null;
+    public string? AmbiguityProblem => Attached <= 1 || UsbPath != null ? null
+        : "Several WireViews are attached and the USB port of this one could not be found. Unplug the others and try again.";
 
     /// <summary>The device's firmware version number, null while unknown.</summary>
     public int? Version =>
@@ -519,7 +517,9 @@ internal sealed class FirmwareService
                 Set(generation, FlashPhase.Flashing, 0, $"Flashing {imageLabel}...");
                 FileLog.Info($"firmware update: flashing {image.Length} bytes over WinUSB");
                 using var imageStream = new MemoryStream(image);
-                await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None).ConfigureAwait(false);
+                // With several WireViews, only the bootloader on this one's USB port.
+                await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None,
+                    device.Attached > 1 ? device.UsbPath : null).ConfigureAwait(false);
             }
             else
             {

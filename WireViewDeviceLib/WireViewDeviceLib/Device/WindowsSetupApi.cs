@@ -12,6 +12,10 @@ namespace WireView2.Device
         public const uint SPDRP_FRIENDLYNAME = 0x0000000C;
         public const uint SPDRP_DEVICEDESC = 0x00000000;
 
+        // CM_DRP_* = SPDRP_* + 1.
+        private const uint CM_DRP_LOCATION_PATHS = 0x00000024;
+        private const uint CR_SUCCESS = 0x00000000;
+
         private static readonly nint InvalidHandleValue = new(-1);
 
         public static nint SetupDiGetClassDevsAllClassesPresent()
@@ -196,9 +200,58 @@ namespace WireView2.Device
             }
         }
 
-        private static string? TryGetDeviceInstanceId(uint devInst)
+        /// <summary>The USB device behind a device node: the node itself, or its
+        /// parent for an interface of a composite device (an instance id with
+        /// "&amp;MI_"). Returns its instance id and node.</summary>
+        public static (string InstanceId, uint DevInst)? UsbDeviceOf(uint devInst)
         {
-            const uint CR_SUCCESS = 0x00000000;
+            string? id = TryGetDeviceInstanceId(devInst);
+            if (id == null) return null;
+            if (id.Contains("&MI_", StringComparison.OrdinalIgnoreCase))
+            {
+                if (CM_Get_Parent(out uint parent, devInst, 0) != CR_SUCCESS) return null;
+                devInst = parent;
+                id = TryGetDeviceInstanceId(devInst);
+                if (id == null) return null;
+            }
+            return (id, devInst);
+        }
+
+        /// <summary>The USB serial number in a USB device's instance id
+        /// (USB\VID_0483&amp;PID_5740\206B31765445), or null when Windows made the
+        /// last part up because the device reports none (it holds an "&amp;").</summary>
+        public static string? UsbSerialFromInstanceId(string instanceId)
+        {
+            int slash = instanceId.LastIndexOf('\\');
+            if (slash < 0 || slash == instanceId.Length - 1) return null;
+            string last = instanceId[(slash + 1)..];
+            return last.Contains('&') ? null : last;
+        }
+
+        /// <summary>The device's first location path, e.g.
+        /// "PCIROOT(0)#PCI(1400)#USBROOT(0)#USB(4)": the physical USB port, the
+        /// same for the WireView and for its DFU bootloader. Null when unknown.</summary>
+        public static string? TryGetLocationPath(uint devInst)
+        {
+            uint length = 0;
+            _ = CM_Get_DevNode_Registry_PropertyW(devInst, CM_DRP_LOCATION_PATHS, out _, null, ref length, 0);
+            if (length == 0) return null;
+            var buffer = new byte[length];
+            if (CM_Get_DevNode_Registry_PropertyW(devInst, CM_DRP_LOCATION_PATHS, out _, buffer, ref length, 0) != CR_SUCCESS)
+                return null;
+            return DecodeMultiSzUtf16(buffer).FirstOrDefault();
+        }
+
+        /// <summary>The location path of the USB device with this instance id
+        /// (or of the composite device an interface id belongs to).</summary>
+        public static string? LocationPathOfInstance(string instanceId)
+        {
+            if (CM_Locate_DevNodeW(out uint devInst, instanceId, 0) != CR_SUCCESS) return null;
+            return UsbDeviceOf(devInst) is { } usb ? TryGetLocationPath(usb.DevInst) : null;
+        }
+
+        internal static string? TryGetDeviceInstanceId(uint devInst)
+        {
 
             var buffer = new char[512];
             var cr = CM_Get_Device_ID(devInst, buffer, (uint)buffer.Length, 0);
@@ -334,5 +387,15 @@ namespace WireView2.Device
 
         [DllImport("cfgmgr32.dll")]
         private static extern uint CM_Get_Device_ID_Size(out uint pulLen, uint dnDevInst, uint ulFlags);
+
+        [DllImport("cfgmgr32.dll")]
+        private static extern uint CM_Get_Parent(out uint pdnDevInst, uint dnDevInst, uint ulFlags);
+
+        [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Locate_DevNodeW(out uint pdnDevInst, string pDeviceID, uint ulFlags);
+
+        [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint CM_Get_DevNode_Registry_PropertyW(uint dnDevInst, uint ulProperty,
+            out uint pulRegDataType, byte[]? buffer, ref uint pulLength, uint ulFlags);
     }
 }

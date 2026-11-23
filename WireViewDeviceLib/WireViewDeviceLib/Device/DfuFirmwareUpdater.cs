@@ -23,8 +23,12 @@ namespace WireView2.Device
         public const int DfuVid = 0x0483;  // 1155
         public const int DfuPid = 0xDF11;  // 57105
 
+        /// <param name="usbPath">The location path of the WireView's USB port
+        /// (<see cref="Stm32PortFinder.FindMatchingPorts"/>): only the bootloader on
+        /// that port is flashed, so another WireView or STM32 bootloader on this PC
+        /// is left alone. Null takes the first one found.</param>
         public static async Task UpdateAsync(Stream firmwareImage, IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, string? usbPath = null)
         {
             // The Guillemot "guistdfudev" driver hijacks the DFU interface; remove
             // it so the WinUSB interface enumerates (same as the official client).
@@ -35,11 +39,23 @@ namespace WireView2.Device
                 throw new InvalidOperationException(
                     "The DFU device could not be reached in WinUSB mode. Please check the connection or existing drivers.");
 
+            string? devicePath = null;
+            if (usbPath != null)
+            {
+                // The bootloader re-enumerates on the WireView's own USB port.
+                var until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+                while ((devicePath = WinUsbDevice.FindDevicePath(DfuVid, DfuPid, usbPath)) == null && DateTime.UtcNow < until)
+                    await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+                if (devicePath == null)
+                    throw new InvalidOperationException(
+                        $"The DFU bootloader did not appear on this WireView's USB port ({Stm32PortFinder.DescribeUsbPath(usbPath)}). Nothing was flashed.");
+            }
+
             using var ms = new MemoryStream();
             await firmwareImage.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
             byte[] payload = ms.ToArray();
 
-            using var dfu = DfuDevice.Open(DfuVid, DfuPid);
+            using var dfu = devicePath != null ? DfuDevice.OpenPath(devicePath) : DfuDevice.Open(DfuVid, DfuPid);
             var descriptor = dfu.GetFunctionalDescriptor() ?? new DfuFunctionalDescriptor { wTransferSize = 1024 };
             int transferSize = Math.Max(64, Math.Min(4096, (int)descriptor.wTransferSize));
 
@@ -215,6 +231,9 @@ namespace WireView2.Device
             public static DfuDevice Open(ushort vid, ushort pid) =>
                 new(WinUsbDevice.OpenByVidPid(vid, pid));
 
+            public static DfuDevice OpenPath(string devicePath) =>
+                new(WinUsbDevice.OpenPath(devicePath));
+
             private DfuDevice(WinUsbDevice usb)
             {
                 _usb = usb;
@@ -368,10 +387,12 @@ namespace WireView2.Device
             private SafeFileHandle _deviceHandle = null!;
             private nint _winUsbHandle = IntPtr.Zero;
 
-            public static WinUsbDevice OpenByVidPid(ushort vid, ushort pid)
+            public static WinUsbDevice OpenByVidPid(ushort vid, ushort pid) =>
+                OpenPath(FindDevicePath(vid, pid)
+                    ?? throw new FileNotFoundException("DFU WinUSB interface not found."));
+
+            public static WinUsbDevice OpenPath(string path)
             {
-                string path = FindDevicePath(vid, pid)
-                    ?? throw new FileNotFoundException("DFU WinUSB interface not found.");
                 var handle = CreateFile(path, 0xC0000000u /* GENERIC_READ|WRITE */, 3u /* share rw */,
                     IntPtr.Zero, 3u /* OPEN_EXISTING */, 0x80u /* FILE_ATTRIBUTE_NORMAL */, IntPtr.Zero);
                 if (handle.IsInvalid)
@@ -428,15 +449,29 @@ namespace WireView2.Device
                 _deviceHandle?.Dispose();
             }
 
-            private static string? FindDevicePath(ushort vid, ushort pid)
+            /// <summary>The WinUSB interface path of the first device with this VID and
+            /// PID, or of the one on USB location path <paramref name="usbPath"/>.</summary>
+            internal static string? FindDevicePath(ushort vid, ushort pid, string? usbPath = null)
             {
                 string needle = $"vid_{vid:X4}&pid_{pid:X4}";
                 foreach (string path in WindowsSetupApi.EnumerateDeviceInterfacePaths(GUID_DEVINTERFACE_WINUSB))
                 {
-                    if (path.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (path.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    if (usbPath == null || string.Equals(LocationPathOfInterface(path), usbPath, StringComparison.OrdinalIgnoreCase))
                         return path;
                 }
                 return null;
+            }
+
+            /// <summary>The USB location path of the device an interface path belongs
+            /// to: \\?\usb#vid_0483&amp;pid_df11#SERIAL#{guid} is the device USB\VID_0483&amp;PID_DF11\SERIAL.</summary>
+            private static string? LocationPathOfInterface(string interfacePath)
+            {
+                string p = interfacePath.StartsWith(@"\\?\", StringComparison.Ordinal) ? interfacePath[4..] : interfacePath;
+                var parts = p.Split('#');
+                if (parts.Length < 3) return null;
+                return WindowsSetupApi.LocationPathOfInstance($"{parts[0]}\\{parts[1]}\\{parts[2]}".ToUpperInvariant());
             }
 
             [DllImport("winusb.dll", SetLastError = true)]

@@ -681,19 +681,14 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
         // it and not another WireView on this PC.
         int attached = Stm32PortFinder.FindMatchingPorts().Count;
         var target = Stm32PortFinder.FindPortInfoForUid(device.UniqueId);
-        if (attached > 1 && (target == null || (!OperatingSystem.IsWindows() && target.UsbPath == null)))
+        if (attached > 1 && target?.UsbPath == null)
         {
             FirmwareUpdateStatus = "Several WireViews are attached and the USB port of this one could not be found. " +
                                    "Unplug the others and try again. Nothing was flashed.";
             return;
         }
-        if (attached > 1 && OperatingSystem.IsWindows())
-        {
-            FirmwareUpdateStatus = "Several WireViews are attached. Unplug the others to update this one. Nothing was flashed.";
-            return;
-        }
         string targetLabel = attached > 1 && target != null
-            ? $"{DeviceName} (serial {target.UsbSerial}, USB port {target.UsbPath})"
+            ? $"{DeviceName} (serial {target.UsbSerial}, USB port {Stm32PortFinder.DescribeUsbPath(target.UsbPath)})"
             : DeviceName;
 
         var confirm = await MessageBox.Show(null,
@@ -776,7 +771,9 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
                 }
                 FirmwareUpdateStatus = $"Flashing {imageLabel}…";
                 using var imageStream = new MemoryStream(image);
-                await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None);
+                // With several WireViews, only the bootloader on this one's USB port.
+                await DfuFirmwareUpdater.UpdateAsync(imageStream, progress, CancellationToken.None,
+                    attached > 1 ? target?.UsbPath : null);
             }
             else
             {
