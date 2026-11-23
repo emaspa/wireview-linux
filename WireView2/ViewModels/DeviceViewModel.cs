@@ -157,7 +157,51 @@ public sealed partial class DeviceViewModel : ViewModelBase, IDisposable
     public string UniqueId
     {
         get => _uniqueId;
-        private set => Set(ref _uniqueId, value);
+        private set
+        {
+            if (!Set(ref _uniqueId, value)) return;
+            UsbSerial = Stm32PortFinder.UsbSerialFromUid(value) ?? "";
+            _nickname = AppSettings.Current.NicknameFor(value) ?? "";
+            OnPropertyChanged(nameof(Nickname));
+            OnPropertyChanged(nameof(CanEditNickname));
+        }
+    }
+
+    private string _usbSerial = string.Empty;
+    private string _nickname = string.Empty;
+
+    /// <summary>The USB serial number (from the chip UID), the id /dev/serial/by-id,
+    /// wireviewctl and WireView Mini show.</summary>
+    public string UsbSerial
+    {
+        get => _usbSerial;
+        private set => Set(ref _usbSerial, value);
+    }
+
+    /// <summary>This PC's name for the device, shown in the device picker and the
+    /// tray. Saved per device in settings.json.</summary>
+    public string Nickname
+    {
+        get => _nickname;
+        set => Set(ref _nickname, value);
+    }
+
+    public bool CanEditNickname => Stm32PortFinder.UsbSerialFromUid(_uniqueId) != null;
+
+    [RelayCommand]
+    private void SaveNickname()
+    {
+        if (!CanEditNickname) return;
+        AppSettings.Current.SetNickname(_uniqueId, Nickname);
+        try
+        {
+            AppSettings.SaveCurrent();
+            ConfigStatus = string.IsNullOrWhiteSpace(Nickname) ? "Nickname cleared." : "Nickname saved.";
+        }
+        catch (Exception ex)
+        {
+            ConfigStatus = "Could not save the nickname: " + ex.Message;
+        }
     }
 
     public bool IsConnected

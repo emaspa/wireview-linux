@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
@@ -20,6 +22,9 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     private ushort _lastFaultLog;
     // Debounce, edge detection and toast cooldown (shared with wireview-mini).
     private readonly FaultMonitor _faultMonitor = new();
+    // The other WireViews on this PC (not the selected one), by DeviceManager id.
+    private readonly Dictionary<string, FaultMonitor> _otherMonitors = new();
+    private readonly DeviceManager? _manager;
 
     // --------------- Connection state ---------------
 
@@ -123,6 +128,11 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
 
         _connector.ConnectionChanged += OnConnectionChanged;
         _connector.DataUpdated += OnDataUpdated;
+        if (connector == null)
+        {
+            _manager = DeviceManager.Shared;
+            _manager.DataUpdated += OnAnyDeviceData;
+        }
         _connector.Start();
         SetConnected(_connector.Device?.Connected ?? false);
         ApplyEditionFromCurrentDevice();
@@ -226,11 +236,49 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
             // Format from the data directly: the FaultText property is set
             // via a UI-thread post and may not be updated yet on this thread.
             if (!miniRunning)
-                _toast.Show("WireView Fault", fault.Text);
+                _toast.Show(FaultTitle(_connector.Device), fault.Text);
 
             if (AppSettings.Current.SoftwareShutdownOnFault && !(miniRunning && localDevice))
                 SystemPower.Shutdown();
         }
+    }
+
+    /// <summary>A reading of any device: the WireViews on this PC that are not
+    /// selected get the same fault alert and shutdown as the selected one (which
+    /// <see cref="OnDataUpdated"/> handles), so a second unit is not left unwatched.
+    /// Devices on other hosts keep alerting only while selected, as before.</summary>
+    private void OnAnyDeviceData(object? sender, (string Id, DeviceData Data) e)
+    {
+        var manager = _manager!;
+        if (e.Id == manager.SelectedId) return;
+        var md = manager.Devices.FirstOrDefault(d => d.Id == e.Id);
+        if (md == null || md.IsRemote) return;
+        FaultMonitor monitor;
+        lock (_otherMonitors)
+        {
+            foreach (var gone in _otherMonitors.Keys.Where(id => manager.Devices.All(d => d.Id != id)).ToList())
+                _otherMonitors.Remove(gone);
+            if (!_otherMonitors.TryGetValue(e.Id, out monitor!))
+                _otherMonitors[e.Id] = monitor = new FaultMonitor();
+        }
+        var fault = monitor.Observe(e.Data);
+        if (!fault.Raised) return;
+
+        // WireView Mini alerts and shuts down for every device on this PC itself.
+        bool miniRunning = WireViewDiscoveryService.Shared.MiniPresent || MiniInstance.IsRunning();
+        if (miniRunning) return;
+        _toast.Show(FaultTitle(md.Device), fault.Text);
+        if (AppSettings.Current.SoftwareShutdownOnFault)
+            SystemPower.Shutdown();
+    }
+
+    /// <summary>"WireView Fault", naming the device when there are several on this PC.</summary>
+    private string FaultTitle(IWireViewDevice? device)
+    {
+        if (device == null || _manager == null || _manager.Devices.Count(d => !d.IsRemote) < 2)
+            return "WireView Fault";
+        string name = AppSettings.Current.NicknameFor(device.UniqueId) ?? device.DeviceName;
+        return "WireView Fault: " + DeviceLabels.WithShortId(name, device.UniqueId);
     }
 
     // --------------- Helpers ---------------
@@ -318,5 +366,6 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     {
         _connector.ConnectionChanged -= OnConnectionChanged;
         _connector.DataUpdated -= OnDataUpdated;
+        if (_manager != null) _manager.DataUpdated -= OnAnyDeviceData;
     }
 }

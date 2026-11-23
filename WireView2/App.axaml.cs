@@ -30,6 +30,11 @@ public class App : Application
     private NativeMenuItem? _showUnitMenuItem;
     private NativeMenu? _trayMenu;
     private NativeMenuItem? _statusMenuItem;
+    // One row per WireView on this PC when there are several; clicking selects it.
+    private NativeMenuItem? _trayShowItem;
+    private readonly List<(string Id, NativeMenuItem Item)> _deviceMenuItems = new();
+    private NativeMenuItemSeparator? _deviceMenuSeparator;
+    private string _deviceMenuKey = "";
     private NativeMenuItemSeparator? _statusSeparator;
     private Bitmap? _baseTrayBitmap;
     private readonly object _mainWindowGate = new object();
@@ -68,6 +73,11 @@ public class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             _startPage = StartPageFromArgs(desktop.Args);
             AppSettings.Reload();
+            // The device picked last comes back first; --device overrides it for this run.
+            DeviceManager.Shared.PreferredUid = AppSettings.Current.SelectedDeviceUid;
+            _startDevice = OptionFromArgs(desktop.Args, "--device");
+            if (_startDevice != null)
+                DeviceManager.Shared.DevicesChanged += OnStartDeviceCandidates;
             WireView2.Net.FileLog.Init(
                 System.IO.Path.Combine(
                     System.IO.Path.GetDirectoryName(AppSettings.GetSettingsPath())!, "logs"),
@@ -160,6 +170,7 @@ public class App : Application
 
         var showItem = new NativeMenuItem("Show");
         showItem.Click += (_, _) => ShowMainWindow(desktop);
+        _trayShowItem = showItem;
         _autoStartMenuItem = new NativeMenuItem("Auto-start")
         {
             ToggleType = MenuItemToggleType.CheckBox,
@@ -265,9 +276,66 @@ public class App : Application
         // Begin polling immediately so the tray reflects live state even while the
         // main window has never been opened (Start is idempotent).
         connector.Start();
+        DeviceManager.Shared.DevicesChanged += OnTrayDevicesChanged;
+        DeviceManager.Shared.SelectedChanged += OnTrayDevicesChanged;
+        AppSettings.Saved += OnTrayDevicesChanged;   // a nickname changed
         UpdateTrayVisuals();
         UpdateStatusHeader();
         UpdateValuesMenu();
+        UpdateDeviceMenu();
+    }
+
+    private void OnTrayDevicesChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(UpdateDeviceMenu, DispatcherPriority.Background);
+
+    /// <summary>The tray menu's device rows: with two or more WireViews on this PC,
+    /// one row each ("name · 4E46: 312 W"), the selected one checked; clicking a
+    /// row shows that device. The rows are rebuilt only when the devices, the
+    /// selection or a nickname change, and otherwise only their text is updated
+    /// when it changed, for the same flicker reason as the status header.</summary>
+    private void UpdateDeviceMenu()
+    {
+        if (_trayMenu == null || _trayShowItem == null) return;
+        var mgr = DeviceManager.Shared;
+        var local = mgr.Devices.Where(d => !d.IsRemote).OrderBy(d => d.Id, StringComparer.Ordinal).ToList();
+        if (local.Count < 2) local.Clear();
+        string selected = mgr.SelectedId ?? "";
+        string key = selected + "|" + string.Join(",", local.Select(d => d.Id + "=" + RowLabel(d)));
+        if (key != _deviceMenuKey)
+        {
+            _deviceMenuKey = key;
+            foreach (var (_, item) in _deviceMenuItems) _trayMenu.Items.Remove(item);
+            _deviceMenuItems.Clear();
+            if (_deviceMenuSeparator != null) _trayMenu.Items.Remove(_deviceMenuSeparator);
+            _deviceMenuSeparator = null;
+            if (local.Count > 0)
+            {
+                int at = _trayMenu.Items.IndexOf(_trayShowItem) + 1;
+                _deviceMenuSeparator = new NativeMenuItemSeparator();
+                _trayMenu.Items.Insert(at++, _deviceMenuSeparator);
+                foreach (var md in local)
+                {
+                    string id = md.Id;
+                    var item = new NativeMenuItem(RowText(md))
+                    {
+                        ToggleType = MenuItemToggleType.Radio,
+                        IsChecked = id == selected,
+                    };
+                    item.Click += (_, _) => mgr.SelectedId = id;
+                    _trayMenu.Items.Insert(at++, item);
+                    _deviceMenuItems.Add((id, item));
+                }
+            }
+            return;
+        }
+        foreach (var (id, item) in _deviceMenuItems)
+            if (local.FirstOrDefault(d => d.Id == id) is { } md)
+                SetHeaderIfChanged(item, RowText(md));
+
+        static string RowLabel(ManagedDevice md) =>
+            DeviceLabels.WithShortId(AppSettings.Current.NicknameFor(md.Device.UniqueId) ?? md.Device.DeviceName, md.Device.UniqueId);
+        static string RowText(ManagedDevice md) =>
+            md.Latest is { Connected: true } d ? $"{RowLabel(md)}: {(int)Math.Round(d.SumPowerW)} W" : RowLabel(md);
     }
 
     private void OnTrayConnectionChanged(object? sender, bool connected)
@@ -313,6 +381,7 @@ public class App : Application
             {
                 UpdateStatusHeader();
                 UpdateValuesMenu();
+                UpdateDeviceMenu();
             }, DispatcherPriority.Background);
         }
 
@@ -587,15 +656,47 @@ public class App : Application
     /// settings). Handy for launchers and for measuring a page; consumed once.</summary>
     private string? _startPage;
 
-    private static string? StartPageFromArgs(string[]? args)
+    private static string? StartPageFromArgs(string[]? args) => OptionFromArgs(args, "--page");
+
+    private static string? OptionFromArgs(string[]? args, string name)
     {
         if (args == null) return null;
         for (int i = 0; i < args.Length; i++)
         {
-            if (args[i] == "--page" && i + 1 < args.Length) return args[i + 1];
-            if (args[i].StartsWith("--page=", StringComparison.Ordinal)) return args[i]["--page=".Length..];
+            if (args[i] == name && i + 1 < args.Length) return args[i + 1];
+            if (args[i].StartsWith(name + "=", StringComparison.Ordinal)) return args[i][(name.Length + 1)..];
         }
         return null;
+    }
+
+    /// <summary>The device to show first, from "--device X" on the command line:
+    /// a nickname, a chip UID, or a USB serial number or its end (as the picker and
+    /// wireviewctl show it). Selected once it shows up, for this run only.</summary>
+    private string? _startDevice;
+
+    private void SelectStartDevice()
+    {
+        if (_startDevice == null) return;
+        var match = DeviceManager.Shared.Devices
+            .Where(d => !d.IsRemote)
+            .FirstOrDefault(d => DeviceMatches(d.Device.UniqueId, _startDevice));
+        if (match == null) return;
+        _startDevice = null;
+        DeviceManager.Shared.DevicesChanged -= OnStartDeviceCandidates;
+        DeviceManager.Shared.PreferredUid = match.Device.UniqueId;
+        DeviceManager.Shared.SelectedId = match.Id;
+    }
+
+    private void OnStartDeviceCandidates(object? sender, EventArgs e) => SelectStartDevice();
+
+    internal static bool DeviceMatches(string uid, string query)
+    {
+        query = query.Trim();
+        if (query.Length == 0 || string.IsNullOrEmpty(uid)) return false;
+        if (string.Equals(AppSettings.Current.NicknameFor(uid), query, StringComparison.OrdinalIgnoreCase)) return true;
+        if (string.Equals(uid, query, StringComparison.OrdinalIgnoreCase)) return true;
+        string? serial = Stm32PortFinder.UsbSerialFromUid(uid);
+        return serial != null && query.Length >= 4 && serial.EndsWith(query, StringComparison.OrdinalIgnoreCase);
     }
 
     private void ShowMainWindow(IClassicDesktopStyleApplicationLifetime desktop, bool startMinimized = false)

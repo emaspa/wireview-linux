@@ -9,12 +9,16 @@ namespace WireView2.Device
     /// <summary>A connected local WireView plus its most recent reading.</summary>
     public sealed class ManagedDevice
     {
-        public ManagedDevice(IWireViewDevice device, string source, string id)
+        public ManagedDevice(IWireViewDevice device, string source, string id, bool isRemote = false)
         {
             Device = device;
             Source = source;
             Id = id;
+            IsRemote = isRemote;
         }
+
+        /// <summary>Found by a registered probe (another host over the LAN), not on this PC.</summary>
+        public bool IsRemote { get; }
 
         public IWireViewDevice Device { get; }
         /// <summary>Where it came from, e.g. "hwmon" or "serial:/dev/ttyACM0". Used to avoid re-opening the same source.</summary>
@@ -49,6 +53,7 @@ namespace WireView2.Device
         private Task? _worker;
         private int _pollMs = 1000;
         private string? _selectedId;
+        private string? _preferredUid;
 
         // Each probe yields candidate (unconnected) devices to attempt, skipping
         // sources already held. The default probes real hwmon + serial; the app
@@ -190,6 +195,44 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>The chip UID of the device to select when it shows up (the app's
+        /// remembered choice), so the selection does not go to whichever device
+        /// connected first. A local connection to it is preferred over a LAN one.</summary>
+        public string? PreferredUid
+        {
+            get { lock (_gate) { return _preferredUid; } }
+            set
+            {
+                bool changed;
+                lock (_gate)
+                {
+                    _preferredUid = string.IsNullOrEmpty(value) ? null : value;
+                    string? before = _selectedId;
+                    _selectedId = PickPreferred(_selectedId);
+                    changed = before != _selectedId;
+                }
+                if (changed) SelectedChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        /// <summary>The selection with <see cref="PreferredUid"/> applied (called
+        /// under <see cref="_gate"/>): the preferred device's best entry when it is
+        /// here and the current selection is another device or its LAN copy.</summary>
+        private string? PickPreferred(string? current)
+        {
+            if (_preferredUid == null) return current ?? _byId.Keys.FirstOrDefault();
+            var best = _byId.Values
+                .Where(md => string.Equals(md.Device.UniqueId, _preferredUid, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(md => md.IsRemote ? 1 : 0)
+                .FirstOrDefault();
+            if (best == null) return current ?? _byId.Keys.FirstOrDefault();
+            if (current != null && _byId.TryGetValue(current, out var cur)
+                && string.Equals(cur.Device.UniqueId, _preferredUid, StringComparison.OrdinalIgnoreCase)
+                && (!cur.IsRemote || best.IsRemote))
+                return current;
+            return best.Id;
+        }
+
         public ManagedDevice? Selected
         {
             get
@@ -266,12 +309,14 @@ namespace WireView2.Device
                 probes = _probes.ToList();
             }
 
-            foreach (var probe in probes)
-            foreach (var (device, source) in probe(held))
+            for (int i = 0; i < probes.Count; i++)
+            foreach (var (device, source) in probes[i](held))
             {
                 if (HoldsSource(source)) { Dispose(device); continue; }
                 ApplyPoll(device);
-                TryAdd(device, source);
+                // The first probe is this PC's (hwmon, WireView Mini, serial); the
+                // registered ones reach other hosts.
+                TryAdd(device, source, isRemote: i > 0);
             }
         }
 
@@ -286,7 +331,7 @@ namespace WireView2.Device
             else if (device is HwmonDevice h) h.PollIntervalMs = _pollMs;
         }
 
-        private void TryAdd(IWireViewDevice device, string source)
+        private void TryAdd(IWireViewDevice device, string source, bool isRemote)
         {
             bool added = false;
             try
@@ -313,7 +358,7 @@ namespace WireView2.Device
                         return;
                     }
 
-                    var md = new ManagedDevice(device, source, id);
+                    var md = new ManagedDevice(device, source, id, isRemote);
                     _byId[id] = md;
                     _openSources.Add(source);
 
@@ -322,7 +367,7 @@ namespace WireView2.Device
                     device.DataUpdated += h;
                     device.ConnectionChanged += OnDeviceConnectionChanged;
 
-                    _selectedId ??= id;
+                    _selectedId = PickPreferred(_selectedId);
                     added = true;
                 }
             }
@@ -368,7 +413,7 @@ namespace WireView2.Device
         {
             _byId.Remove(md.Id);
             _openSources.Remove(md.Source);
-            if (_selectedId == md.Id) _selectedId = _byId.Keys.FirstOrDefault();
+            if (_selectedId == md.Id) _selectedId = PickPreferred(null);
 
             var dev = md.Device;
             try

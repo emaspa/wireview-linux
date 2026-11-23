@@ -16,7 +16,7 @@
             <Border Background="{DynamicResource OverlayPanelBrush}" CornerRadius="8" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Device Information" FontWeight="SemiBold" FontSize="16"/>
-                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
+                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Device:"/>
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DeviceName}"/>
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Firmware:"/>
@@ -34,8 +34,18 @@
                         </StackPanel>
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Unique ID:"/>
                         <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding UniqueId}"/>
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Status:"/>
-                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding ConfigStatus}" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="USB serial:"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding UsbSerial}"/>
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Nickname:" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <TextBox Text="{Binding Nickname}" Width="220" MaxLength="40"
+                                     PlaceholderText="Name for this device on this PC"
+                                     IsEnabled="{Binding CanEditNickname}"/>
+                            <Button Content="Save" Command="{Binding SaveNicknameCommand}"
+                                    IsEnabled="{Binding CanEditNickname}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Status:"/>
+                        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ConfigStatus}" TextWrapping="Wrap"/>
                     </Grid>
                 </StackPanel>
             </Border>

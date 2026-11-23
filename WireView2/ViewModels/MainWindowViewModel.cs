@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using WireView2.Device;
 using WireView2.Net;
+using WireView2.Services;
 
 namespace WireView2.ViewModels;
 
@@ -40,7 +41,10 @@ public partial class MainWindowViewModel : ViewModelBase
         set
         {
             if (Set(ref _selectedDevice, value) && !_syncingSelection && value != null)
+            {
                 DeviceManager.Shared.SelectedId = value.Id;
+                RememberSelection(value.Id);
+            }
         }
     }
 
@@ -57,6 +61,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         DeviceManager.Shared.DevicesChanged += OnDevicesChanged;
         DeviceManager.Shared.SelectedChanged += OnDevicesChanged;
+        AppSettings.Saved += OnDevicesChanged;   // a nickname changed
         DeviceManager.Shared.Start();
         ReconcileDevices();
     }
@@ -97,16 +102,30 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Picker label: "&lt;name&gt; -&lt;transport&gt; · &lt;id&gt;", transport being serial / hwmon / mini / lan@host.</summary>
+    /// <summary>Remembers the device the user picked, by chip UID, so the next
+    /// start shows it again even when another WireView connects first.</summary>
+    private static void RememberSelection(string id)
+    {
+        string? uid = DeviceManager.Shared.Devices.FirstOrDefault(d => d.Id == id)?.Device.UniqueId;
+        if (string.IsNullOrEmpty(uid)) return;
+        DeviceManager.Shared.PreferredUid = uid;
+        if (AppSettings.Current.SelectedDeviceUid == uid) return;
+        AppSettings.Current.SelectedDeviceUid = uid;
+        try { AppSettings.SaveCurrent(); } catch { /* not fatal: only the remembered choice is lost */ }
+    }
+
+    /// <summary>Picker label: "&lt;name&gt; -&lt;transport&gt; · &lt;id&gt;", transport being
+    /// serial / hwmon / mini / lan@host, the name the device's nickname when one is
+    /// set, the id the end of its USB serial number.</summary>
     private static string DisplayFor(ManagedDevice md)
     {
-        string name = md.Device.DeviceName;
+        string uid = md.Device.UniqueId;
+        string name = AppSettings.Current.NicknameFor(uid) ?? md.Device.DeviceName;
         int paren = name.IndexOf(" (", StringComparison.Ordinal); // strip the device's own "(hwmon)" suffix
         if (paren > 0) name = name[..paren];
         if (string.IsNullOrWhiteSpace(name)) name = "WireView";
 
-        string uid = md.Device.UniqueId;
-        string shortId = uid.Length >= 6 ? uid[^6..] : uid;
+        string shortId = DeviceLabels.ShortId(uid);
 
         if (md.Device is NetworkDevice { IsLocalMini: true })
             return $"{name} - mini · {shortId}";

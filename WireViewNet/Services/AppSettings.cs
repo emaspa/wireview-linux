@@ -157,6 +157,43 @@ public class AppSettings
     public int EffectiveHistoryMinutes => Math.Clamp(HistoryMinutes ?? DefaultHistoryMinutes, 0, MaxHistoryMinutes);
 
 
+    /// <summary>The chip UID of the device the app shows, the one picked last;
+    /// null (left out of the file) shows the first one found.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedDeviceUid { get; set; }
+
+    /// <summary>Per-device settings by chip UID, for PCs with several WireViews.
+    /// Null (left out of the file) when none is set.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, DeviceSettings>? Devices { get; set; }
+
+    /// <summary>The nickname set for the device with chip UID <paramref name="uid"/>, or null.</summary>
+    public string? NicknameFor(string? uid) =>
+        uid != null && Devices != null && Devices.TryGetValue(uid, out var d) && !string.IsNullOrWhiteSpace(d.Nickname)
+            ? d.Nickname.Trim()
+            : null;
+
+    /// <summary>Sets (or with an empty <paramref name="nickname"/> clears) the
+    /// device's nickname. Does not save.</summary>
+    public void SetNickname(string uid, string? nickname)
+    {
+        nickname = string.IsNullOrWhiteSpace(nickname) ? null : nickname.Trim();
+        Devices ??= new Dictionary<string, DeviceSettings>(StringComparer.OrdinalIgnoreCase);
+        if (!Devices.TryGetValue(uid, out var d)) Devices[uid] = d = new DeviceSettings();
+        d.Nickname = nickname;
+        if (d.IsEmpty) Devices.Remove(uid);
+        if (Devices.Count == 0) Devices = null;
+    }
+
+    public sealed class DeviceSettings
+    {
+        /// <summary>The name the app and WireView Mini show for the device.</summary>
+        public string? Nickname { get; set; }
+
+        [JsonIgnore]
+        public bool IsEmpty => string.IsNullOrWhiteSpace(Nickname);
+    }
+
     public MonitoringAxisSettings MonitoringYV { get; set; } = new MonitoringAxisSettings();
     public MonitoringAxisSettings MonitoringYA { get; set; } = new MonitoringAxisSettings();
     public MonitoringAxisSettings MonitoringYW { get; set; } = new MonitoringAxisSettings();
