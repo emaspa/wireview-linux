@@ -17,6 +17,7 @@ The app follows the connected device's look ([Noctua Edition](docs/screenshot-ap
 - **Firmware updates**: flash the bundled firmware (v05, build 20260902_0741) over USB DFU with `dfu-util`. See [firmware](docs/firmware.md)
 - **WireView Mini**: alerts, shutdown on fault and the device on the LAN with the app closed. See [WireView Mini](docs/wireview-mini.md)
 - **hwmon integration**: works with the [wireview-hwmon](https://github.com/emaspa/wireview-hwmon) kernel module and daemon as an alternative to direct serial
+- **Several WireViews**: every unit on the PC in the device picker, nicknames, alerts for all of them, firmware updates to the right one. See [usage](docs/usage.md#several-wireviews-on-one-pc)
 
 **Firmware flashing can leave the device unbootable if it is interrupted. Flash at your own risk and read the [full warning](docs/firmware.md#warning) first.**
 

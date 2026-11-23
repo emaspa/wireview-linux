@@ -20,6 +20,16 @@ If the kernel module is not loaded, the app looks for the [WireView Mini](wirevi
 
 The app can also read and control devices on other machines: see [LAN monitoring](lan-monitoring.md).
 
+## Several WireViews on one PC
+
+Every WireView attached to the PC is listed in the device picker at the top of the window, named by its nickname or its model and the last four characters of its USB serial number, the number `/dev/serial/by-id`, `wireviewctl devices` and WireView Mini show. The pages show the device picked there. The app remembers the pick and selects that device again at the next start, even when another one connects first; `wireview-linux --device <name>` picks one for a single run, by nickname, chip UID or USB serial number (its last four characters are enough).
+
+The **Device** page shows the USB serial number and sets a **Nickname** for the device, kept in `settings.json` on this PC and shown in the picker, the tray menu, fault notifications and WireView Mini.
+
+With two or more WireViews, the tray menu lists each one with its power, and clicking one shows it. A fault on any of them raises the notification and, when enabled, the shutdown on fault, not only on the one shown.
+
+Over hwmon this needs wireview-hwmon 1.9.0 or later, which serves every WireView and gives each its own hwmon instance; an older wireviewd drives only the first device it finds. Over direct serial the app opens every WireView on its own. A firmware update, a device log read and the theme editor always reach the device shown, on its own USB port. The udev rule names each serial port `/dev/wireview-<serial>` as well.
+
 ## Pages
 
 The app has five pages accessible from the left sidebar:

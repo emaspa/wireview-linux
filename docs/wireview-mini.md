@@ -90,7 +90,9 @@ Settings changed on the page are saved to `settings.json` and applied at once, t
 
 ### Status
 
-Device, firmware, source (`hwmon` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power as a table with the temperatures under it, the app's per-wire bar chart beside them (voltage, current and power toggles; 12 V, 10 A and 120 W full scale, growing when a reading is more than 5 percent over; gridlines at every quarter of full scale labelled for each series shown; value labels on the bars with one series on), the fan duty, and the fault state with a **Clear faults** button.
+With several WireViews on this PC, a **WireView** selector at the top lists each one with its power and fault state; the page, the tray's power and every device control (screen, configuration, theme, device log, firmware) use the one picked there, and WireView Mini remembers it. Each device keeps its own chart history. A fault on any of them raises the alert and the shutdown on fault, and the tray names the device.
+
+Device, firmware, USB serial number, source (`hwmon:hwmon5` or `serial:/dev/ttyACM0`, `COM3`), total power, current and voltage, each pin's voltage, current and power as a table with the temperatures under it, the app's per-wire bar chart beside them (voltage, current and power toggles; 12 V, 10 A and 120 W full scale, growing when a reading is more than 5 percent over; gridlines at every quarter of full scale labelled for each series shown; value labels on the bars with one series on), the fan duty, and the fault state with a **Clear faults** button.
 
 ### Remote hosts
 

@@ -27,6 +27,8 @@ The app and WireView Mini run the same checks:
 
 Flash the bundled firmware from the **Device** page. Requires the `dfu-util` package on Linux.
 
+With several WireViews attached, the flash goes to the device shown, and the confirmation names it with its USB serial number and USB port. The bootloader is flashed on that USB port only (`dfu-util -p`), so the other units keep running. If the app cannot tell which USB port the device is on, it refuses and asks to unplug the others. On Windows, unplug the other WireViews before a flash.
+
 ## In WireView Mini
 
 The panel's **Firmware** card shows the device's and the bundled firmware (version and build), what a flash would do, and **Update firmware**. **Update firmware** shows the same warning as the app first; **Flash now** restarts the device into its bootloader and flashes it, with a progress bar, and the device reconnects on its own.
