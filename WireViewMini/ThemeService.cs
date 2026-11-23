@@ -383,8 +383,8 @@ internal sealed class ThemeService
 
         string? redrawError = await RedrawAsync(generation).ConfigureAwait(false);
         Done(generation, redrawError == null
-            ? "Theme applied. Background uploaded."
-            : "Theme applied and background uploaded; screen refresh failed (" + redrawError + "). Switch screens once to see it.");
+            ? message + " Background uploaded."
+            : message + " Background uploaded; screen refresh failed (" + redrawError + "). Switch screens once to see it.");
     }
 
     private async Task RestoreAsync(int generation, WireViewPro2Device.THEME_BACKGROUND background, byte[] bg,
@@ -458,7 +458,9 @@ internal sealed class ThemeService
             byte[] bytes;
             try { bytes = wanted.EncodeOnto(snap.Version, snap.Data, current); }
             catch (DeviceConfigException ex) { return (400, ex.Message); }
-            if (bytes.AsSpan().SequenceEqual(snap.Data)) return (200, "Theme applied (nothing changed).");
+            // Still stored: the device may run a theme an older WireView Mini wrote
+            // to its RAM only, which a reset would throw away.
+            if (bytes.AsSpan().SequenceEqual(snap.Data)) return Store(snap.DeviceId, "Theme applied (nothing changed)");
 
             var r = _host.RunCommand(WireViewCommand.WriteConfig(snap.DeviceId, snap.Version, bytes));
             if (r == DaemonResult.Denied)
@@ -474,12 +476,30 @@ internal sealed class ThemeService
 
             Thread.Sleep(150); // let the device take the frames before reading back
             var after = _host.ReadConfig();
-            if (after == null) return (200, "Theme applied (it could not be read back).");
-            return after.Data.AsSpan().SequenceEqual(bytes)
-                ? (200, "Theme applied.")
-                : (200, "Theme applied, but the device reads back a different configuration.");
+            if (after == null) return Store(snap.DeviceId, "Theme applied (it could not be read back)");
+            if (!after.Data.AsSpan().SequenceEqual(bytes))
+                return (200, "Theme applied, but the device reads back a different configuration. It was not stored to device memory.");
+            return Store(snap.DeviceId, "Theme applied");
         }
         return last;
+    }
+
+    /// <summary>Stores the device's running config to its memory (NVM store), so the
+    /// theme survives a reset or power cycle: a config write alone only changes the
+    /// running config. <paramref name="applied"/> is the apply's result line.</summary>
+    private (int Status, string Message) Store(string deviceId, string applied)
+    {
+        var r = _host.RunCommand(WireViewCommand.Nvm(deviceId, (int)WireViewPro2Device.NVM_CMD.NVM_CMD_STORE));
+        if (r == DaemonResult.Ok)
+        {
+            FileLog.Info("theme: config stored to device memory");
+            return (200, applied + " and stored to device memory.");
+        }
+        FileLog.Warn($"theme: storing the config to device memory failed: {r.Describe()}");
+        // The theme is on the screen, so this stays a success, with the warning.
+        return r == DaemonResult.Denied
+            ? (200, applied + ", but wireviewd refused to store it to device memory, so a reset will undo it. Add your user to the 'wireview' group and log in again.")
+            : (200, applied + ", but storing it to device memory failed (" + r.Describe() + "), so a reset will undo it.");
     }
 
     // ---- State ----
