@@ -333,7 +333,7 @@ public class App : Application
                 SetHeaderIfChanged(item, RowText(md));
 
         static string RowLabel(ManagedDevice md) =>
-            DeviceLabels.WithShortId(AppSettings.Current.NicknameFor(md.Device.UniqueId) ?? md.Device.DeviceName, md.Device.UniqueId);
+            DeviceLabels.Label(md.Device, AppSettings.Current.NicknameFor(md.Device.UniqueId));
         static string RowText(ManagedDevice md) =>
             md.Latest is { Connected: true } d ? $"{RowLabel(md)}: {(int)Math.Round(d.SumPowerW)} W" : RowLabel(md);
     }

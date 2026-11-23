@@ -17,8 +17,11 @@
 
 ACTION=="remove", GOTO="wireview_end"
 
-# Normal operation (STM32 CDC/ACM virtual serial port)
+# Normal operation (STM32 CDC/ACM virtual serial port). /dev/wireview-<serial>
+# names each unit by its USB serial number; /dev/wireview-pro2 is kept for
+# scripts written for one device and points at whichever unit came last.
 SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", MODE="0660", TAG+="uaccess", RUN{builtin}+="uaccess", SYMLINK+="wireview-pro2"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", ATTRS{serial}=="?*", SYMLINK+="wireview-$attr{serial}"
 
 # Keep ModemManager away: it probes every new CDC-ACM port with AT and QCDM
 # commands for about half a minute, holding the port and sending the device

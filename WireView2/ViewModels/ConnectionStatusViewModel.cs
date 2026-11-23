@@ -277,8 +277,7 @@ public sealed partial class ConnectionStatusViewModel : ViewModelBase, IDisposab
     {
         if (device == null || _manager == null || _manager.Devices.Count(d => !d.IsRemote) < 2)
             return "WireView Fault";
-        string name = AppSettings.Current.NicknameFor(device.UniqueId) ?? device.DeviceName;
-        return "WireView Fault: " + DeviceLabels.WithShortId(name, device.UniqueId);
+        return "WireView Fault: " + DeviceLabels.Label(device, AppSettings.Current.NicknameFor(device.UniqueId));
     }
 
     // --------------- Helpers ---------------

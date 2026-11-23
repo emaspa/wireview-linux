@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,7 +22,7 @@ namespace WireView2.Device
         public bool IsRemote { get; }
 
         public IWireViewDevice Device { get; }
-        /// <summary>Where it came from, e.g. "hwmon" or "serial:/dev/ttyACM0". Used to avoid re-opening the same source.</summary>
+        /// <summary>Where it came from, e.g. "hwmon:hwmon5" or "serial:/dev/ttyACM0". Used to avoid re-opening the same source.</summary>
         public string Source { get; }
         /// <summary>Collection key: the stable chip UID, or the source if the UID is unavailable.</summary>
         public string Id { get; }
@@ -109,9 +110,14 @@ namespace WireView2.Device
         {
             if (OperatingSystem.IsLinux())
             {
-                string? hwmonPath = HwmonDevice.FindHwmonPath();
-                if (hwmonPath != null && !held.Contains("hwmon"))
-                    yield return (new HwmonDevice(hwmonPath), "hwmon");
+                // One hwmon instance per WireView with wireviewd 1.9.0 and newer, keyed
+                // by its directory, which stays while the instance exists.
+                foreach (string hwmonPath in HwmonDevice.FindHwmonPaths())
+                {
+                    string source = "hwmon:" + Path.GetFileName(hwmonPath);
+                    if (!held.Contains(source))
+                        yield return (new HwmonDevice(hwmonPath), source);
+                }
 
                 // wireviewd owns the serial port while it is attached to the device;
                 // there is no cross-process port coordination, so a concurrent

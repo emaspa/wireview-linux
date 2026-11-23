@@ -13,6 +13,21 @@ namespace WireView2.Device
             return id.Length > 4 ? id[^4..] : id;
         }
 
+        /// <summary>"nickname · 4E46", or the device's model name (without its
+        /// "(hwmon)" style transport suffix) when it has no nickname.</summary>
+        public static string Label(IWireViewDevice device, string? nickname)
+        {
+            string name = nickname ?? BaseName(device.DeviceName);
+            return WithShortId(string.IsNullOrWhiteSpace(name) ? "WireView" : name, device.UniqueId);
+        }
+
+        /// <summary>The device name without its own " (hwmon + daemon)" suffix.</summary>
+        public static string BaseName(string deviceName)
+        {
+            int paren = deviceName.IndexOf(" (", StringComparison.Ordinal);
+            return paren > 0 ? deviceName[..paren] : deviceName;
+        }
+
         /// <summary>"name · 4E46": the name with the short id, or the name alone
         /// when the UID is unknown.</summary>
         public static string WithShortId(string name, string? uid)

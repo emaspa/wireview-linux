@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Sockets;
@@ -24,6 +26,9 @@ namespace WireView2.Device
         private const byte WCMD_ENTER_BOOTLOADER = 0x08;
         private const byte WCMD_SUSPEND_SERIAL   = 0x09;
         private const byte WCMD_RESUME_SERIAL    = 0x0A;
+        // wireviewd 1.9.0 and newer: the commands of a connection address the
+        // device chosen with SELECT_DEVICE (payload: the 12 UID bytes).
+        private const byte WCMD_SELECT_DEVICE    = 0x0D;
 
         // Socket protocol response status (must match wireviewd)
         private const byte RESP_OK            = 0;
@@ -78,6 +83,25 @@ namespace WireView2.Device
             _hwmonPath = hwmonPath;
         }
 
+        /// <summary>The hwmon directory this device reads, e.g. /sys/class/hwmon/hwmon5.</summary>
+        public string HwmonPath => _hwmonPath;
+
+        /// <summary>The chip UID wireviewd 1.9.0 and newer publish in the instance's
+        /// <c>uid</c> attribute (24 hex digits), null with an older daemon or module,
+        /// or while no device is bound to the instance.</summary>
+        public static string? ReadBoundUid(string hwmonPath)
+        {
+            try
+            {
+                string text = File.ReadAllText(Path.Combine(hwmonPath, "uid")).Trim();
+                return text.Length == 24 ? text.ToUpperInvariant() : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public void Connect()
         {
             if (Connected) return;
@@ -85,7 +109,7 @@ namespace WireView2.Device
             string namePath = Path.Combine(_hwmonPath, "name");
             if (!File.Exists(namePath)) return;
             string name = File.ReadAllText(namePath).Trim();
-            if (!name.Equals("wireview", StringComparison.OrdinalIgnoreCase)) return;
+            if (!IsWireViewName(name)) return;
 
             string testPath = Path.Combine(_hwmonPath, "in0_input");
             if (!File.Exists(testPath)) return;
@@ -176,6 +200,11 @@ namespace WireView2.Device
             }
         }
 
+        /// <summary>A connection to wireviewd addressing this instance's device: with
+        /// several WireViews, wireviewd 1.9.0 and newer bind each to its own hwmon
+        /// instance and name its UID there, and the connection selects that device.
+        /// Without the attribute (one device, or an older daemon) the connection
+        /// addresses the daemon's primary device, as before.</summary>
         private Socket OpenDaemonSocket()
         {
             var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
@@ -184,6 +213,12 @@ namespace WireView2.Device
                 socket.ReceiveTimeout = 3000;
                 socket.SendTimeout = 3000;
                 socket.Connect(new UnixDomainSocketEndPoint(_socketPath));
+                if (ReadBoundUid(_hwmonPath) is { } uid)
+                {
+                    var (status, _) = ExchangeDaemonRequest(socket, WCMD_SELECT_DEVICE, Convert.FromHexString(uid));
+                    if (status != RESP_OK)
+                        throw new IOException($"wireviewd does not serve the device {uid} (status {status}).");
+                }
                 return socket;
             }
             catch
@@ -758,10 +793,23 @@ namespace WireView2.Device
 
         // ---- Static discovery ----
 
-        public static string? FindHwmonPath()
+        public static string? FindHwmonPath() => FindHwmonPaths().FirstOrDefault();
+
+        /// <summary>A WireView hwmon instance's name: "wireview" for the first (and
+        /// only, before wireviewd 1.9.0) device, "wireview1", "wireview2"... for the
+        /// others, so tools that take the first "wireview" keep seeing the first.</summary>
+        public static bool IsWireViewName(string name) =>
+            name.StartsWith("wireview", StringComparison.OrdinalIgnoreCase)
+            && name.AsSpan("wireview".Length).IndexOfAnyExceptInRange('0', '9') < 0;
+
+        /// <summary>Every WireView hwmon instance (see <see cref="IsWireViewName"/>):
+        /// one per WireView with wireviewd 1.9.0 and newer, else the single one.
+        /// Sorted by hwmon number.</summary>
+        public static List<string> FindHwmonPaths()
         {
             const string hwmonBase = "/sys/class/hwmon";
-            if (!Directory.Exists(hwmonBase)) return null;
+            var paths = new List<string>();
+            if (!Directory.Exists(hwmonBase)) return paths;
 
             foreach (var dir in Directory.GetDirectories(hwmonBase))
             {
@@ -771,13 +819,17 @@ namespace WireView2.Device
                 try
                 {
                     string name = File.ReadAllText(namePath).Trim();
-                    if (name.Equals("wireview", StringComparison.OrdinalIgnoreCase))
-                        return dir;
+                    if (IsWireViewName(name))
+                        paths.Add(dir);
                 }
                 catch { }
             }
-            return null;
+            paths.Sort((a, b) => HwmonNumber(a).CompareTo(HwmonNumber(b)));
+            return paths;
         }
+
+        private static int HwmonNumber(string dir) =>
+            int.TryParse(Path.GetFileName(dir).AsSpan("hwmon".Length), out int n) ? n : int.MaxValue;
 
         public void Dispose() => Disconnect();
     }

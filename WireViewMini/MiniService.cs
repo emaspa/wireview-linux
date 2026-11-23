@@ -428,7 +428,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
         uid = unit.Device.UniqueId;
         if (_selectedUid == uid) return true;
         _selectedUid = uid;
-        FileLog.Info($"device selected: {DeviceLabels.WithShortId(unit.Device.DeviceName, uid)}");
+        FileLog.Info($"device selected: {LabelFor(unit.Device)}");
         RequestSettingsChange("selected device", st => st.SelectedDeviceUid = uid, "panel");
         RaiseStatusChanged();
         return true;
@@ -436,7 +436,7 @@ internal sealed class MiniService : IDisposable, IFlashHost, IThemeHost, IDevice
 
     /// <summary>"name · 4E46", the nickname set in the app when there is one.</summary>
     internal static string LabelFor(IWireViewDevice dev) =>
-        DeviceLabels.WithShortId(AppSettings.Current.NicknameFor(dev.UniqueId) ?? dev.DeviceName, dev.UniqueId);
+        DeviceLabels.Label(dev, AppSettings.Current.NicknameFor(dev.UniqueId));
 
     /// <summary>The selected device's config bytes (see <see cref="PreferredLocal"/>).</summary>
     public ConfigSnapshot? ReadSelectedConfig() => _publish.ReadLocalConfig(PreferredLocal()?.Device.UniqueId);
