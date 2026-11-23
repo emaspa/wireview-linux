@@ -26,6 +26,7 @@ public class SettingsViewModel : ViewModelBase
     private bool _softwareShutdownOnFault;
     private bool _showTrayPower;
     private bool _showTrayPowerUnit;
+    private bool _showTrayPowerAllDevices;
 
     // ======================== Properties ========================
 
@@ -189,6 +190,19 @@ public class SettingsViewModel : ViewModelBase
             if (Set(ref _showTrayPowerUnit, value))
             {
                 AppSettings.Current.ShowTrayPowerUnit = value;
+                AppSettings.SaveCurrent();
+            }
+        }
+    }
+
+    public bool ShowTrayPowerAllDevices
+    {
+        get => _showTrayPowerAllDevices;
+        set
+        {
+            if (Set(ref _showTrayPowerAllDevices, value))
+            {
+                AppSettings.Current.ShowTrayPowerAllDevices = value;
                 AppSettings.SaveCurrent();
             }
         }
@@ -363,6 +377,7 @@ public class SettingsViewModel : ViewModelBase
         _softwareShutdownOnFault = AppSettings.Current.SoftwareShutdownOnFault;
         _showTrayPower = AppSettings.Current.ShowTrayPower;
         _showTrayPowerUnit = AppSettings.Current.ShowTrayPowerUnit;
+        _showTrayPowerAllDevices = AppSettings.Current.ShowTrayPowerAllDevices;
         AppSettings.Saved += OnSettingsSaved;
     }
 
@@ -418,6 +433,9 @@ public class SettingsViewModel : ViewModelBase
 
         if (Set(ref _showTrayPowerUnit, AppSettings.Current.ShowTrayPowerUnit, nameof(ShowTrayPowerUnit)))
             OnPropertyChanged(nameof(ShowTrayPowerUnit));
+
+        if (Set(ref _showTrayPowerAllDevices, AppSettings.Current.ShowTrayPowerAllDevices, nameof(ShowTrayPowerAllDevices)))
+            OnPropertyChanged(nameof(ShowTrayPowerAllDevices));
 
         OnPropertyChanged(nameof(RemoteHostsText));
     }

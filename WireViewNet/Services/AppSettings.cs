@@ -137,6 +137,9 @@ public class AppSettings
     public bool ShowTrayPower { get; set; } = true;
     // Whether the tray power icon includes the unit word under the number.
     public bool ShowTrayPowerUnit { get; set; } = true;
+    // With two or more WireViews on this PC, one power icon per device instead
+    // of the single one for the selected device.
+    public bool ShowTrayPowerAllDevices { get; set; }
 
     public int MonitoringXWindowSeconds { get; set; } = 30;
 

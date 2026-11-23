@@ -26,7 +26,7 @@ Every WireView attached to the PC is listed in the device picker at the top of t
 
 The **Device** page shows the USB serial number and sets a **Nickname** for the device, kept in `settings.json` on this PC and shown in the picker, the tray menu, fault notifications and WireView Mini.
 
-With two or more WireViews, the tray menu lists each one with its power, and clicking one shows it. A fault on any of them raises the notification and, when enabled, the shutdown on fault, not only on the one shown.
+With two or more WireViews, the tray menu lists each one with its power, and clicking one shows it. **Power icon for each device** (tray menu, or Settings under Tray icon) replaces the power tray icon with one per WireView, each with its own readings on right-click; clicking one shows that device. A fault on any of them raises the notification and, when enabled, the shutdown on fault, not only on the one shown.
 
 Over hwmon this needs wireview-hwmon 1.9.0 or later, which serves every WireView and gives each its own hwmon instance; an older wireviewd drives only the first device it finds. Over direct serial the app opens every WireView on its own. A firmware update, a device log read and the theme editor always reach the device shown, on its own USB port. The udev rule names each serial port `/dev/wireview-<serial>` as well.
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -28,6 +29,7 @@ public class App : Application
     private NativeMenuItem? _autoStartMenuItem;
     private NativeMenuItem? _showPowerMenuItem;
     private NativeMenuItem? _showUnitMenuItem;
+    private NativeMenuItem? _showAllPowerMenuItem;
     private NativeMenu? _trayMenu;
     private NativeMenuItem? _statusMenuItem;
     // One row per WireView on this PC when there are several; clicking selects it.
@@ -45,19 +47,27 @@ public class App : Application
     private bool _trayConnected;
     private DeviceData? _lastData;
 
-    // Right-click "values" dropdown on the power icon (live hwmon readings)
-    private NativeMenu? _valuesMenu;
-    private NativeMenuItem? _vTotalPower;
-    private NativeMenuItem? _vTotalCurrent;
-    private NativeMenuItem? _vAvgVoltage;
-    private NativeMenuItem? _vCableRating;
-    private NativeMenuItem[]? _vPins;
-    private NativeMenuItem? _vTempIn;
-    private NativeMenuItem? _vTempOut;
-    private NativeMenuItem? _vTempExt1;
-    private NativeMenuItem? _vTempExt2;
-    // Absent temperature sensors get no row in the values dropdown.
-    private readonly TemperatureSensorPresence _trayTempPresence = new();
+    // Right-click "values" dropdown on the power icon (the selected device's readings)
+    private TrayValuesMenu? _selectedValues;
+
+    // "Power icon for each device": one power icon per WireView on this PC, keyed
+    // by device id, used instead of the single icon while there are two or more.
+    private readonly Dictionary<string, DevicePowerIcon> _devicePowerIcons = new();
+
+    private sealed class DevicePowerIcon
+    {
+        public DevicePowerIcon(TrayIcon icon, TrayValuesMenu values)
+        {
+            Icon = icon;
+            Values = values;
+        }
+        public TrayIcon Icon { get; }
+        public TrayValuesMenu Values { get; }
+        public DeviceData? Last { get; set; }
+        public string Label { get; set; } = "";
+        // What the icon was last drawn with, to redraw only on a change.
+        public string Drawn { get; set; } = "";
+    }
 
     public static event EventHandler<bool>? MainWindowVisibilityChanged;
 
@@ -136,6 +146,8 @@ public class App : Application
                 _showPowerMenuItem.IsChecked = AppSettings.Current.ShowTrayPower;
             if (_showUnitMenuItem != null)
                 _showUnitMenuItem.IsChecked = AppSettings.Current.ShowTrayPowerUnit;
+            if (_showAllPowerMenuItem != null)
+                _showAllPowerMenuItem.IsChecked = AppSettings.Current.ShowTrayPowerAllDevices;
             UpdateTrayVisuals();
         });
     }
@@ -218,12 +230,27 @@ public class App : Application
             _showUnitMenuItem.IsChecked = newState;
             UpdateTrayVisuals();
         };
+        _showAllPowerMenuItem = new NativeMenuItem("Power icon for each device")
+        {
+            ToggleType = MenuItemToggleType.CheckBox,
+            IsChecked = AppSettings.Current.ShowTrayPowerAllDevices,
+            IsEnabled = AppSettings.Current.ShowTrayPower
+        };
+        _showAllPowerMenuItem.Click += (_, _) =>
+        {
+            bool newState = !AppSettings.Current.ShowTrayPowerAllDevices;
+            AppSettings.Current.ShowTrayPowerAllDevices = newState;
+            AppSettings.SaveCurrent();
+            _showAllPowerMenuItem.IsChecked = newState;
+            UpdateTrayVisuals();
+        };
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => desktop.Shutdown();
         menu.Items.Add(showItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(_showPowerMenuItem);
         menu.Items.Add(_showUnitMenuItem);
+        menu.Items.Add(_showAllPowerMenuItem);
         menu.Items.Add(_autoStartMenuItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
@@ -231,41 +258,9 @@ public class App : Application
         _bearTrayIcon.Clicked += (_, _) => ShowMainWindow(desktop);
 
         // Right-click dropdown on the power icon listing every live hwmon value.
-        NativeMenuItem ValueRow() => new NativeMenuItem { IsEnabled = false };
-        _valuesMenu = new NativeMenu();
-        _vTotalPower = ValueRow();
-        _vTotalCurrent = ValueRow();
-        _vAvgVoltage = ValueRow();
-        _valuesMenu.Items.Add(_vTotalPower);
-        _valuesMenu.Items.Add(_vTotalCurrent);
-        _valuesMenu.Items.Add(_vAvgVoltage);
-        _valuesMenu.Items.Add(new NativeMenuItemSeparator());
-        _vPins = new NativeMenuItem[6];
-        for (int i = 0; i < 6; i++)
-        {
-            _vPins[i] = ValueRow();
-            _valuesMenu.Items.Add(_vPins[i]);
-        }
-        _valuesMenu.Items.Add(new NativeMenuItemSeparator());
-        _vTempIn = ValueRow();
-        _vTempOut = ValueRow();
-        _vTempExt1 = ValueRow();
-        _vTempExt2 = ValueRow();
-        _valuesMenu.Items.Add(_vTempIn);
-        _valuesMenu.Items.Add(_vTempOut);
-        _valuesMenu.Items.Add(_vTempExt1);
-        _valuesMenu.Items.Add(_vTempExt2);
-        _valuesMenu.Items.Add(new NativeMenuItemSeparator());
-        _vCableRating = ValueRow();
-        _valuesMenu.Items.Add(_vCableRating);
-        _valuesMenu.Items.Add(new NativeMenuItemSeparator());
-        var valuesShow = new NativeMenuItem("Show window");
-        valuesShow.Click += (_, _) => ShowMainWindow(desktop);
-        _valuesMenu.Items.Add(valuesShow);
-        // Populate the values only just before the menu is shown. Refreshing the
-        // items on every poll instead makes an open menu flicker, so we don't.
-        _valuesMenu.NeedsUpdate += (_, _) => UpdateValuesMenu();
-        _valuesMenu.Opening += (_, _) => UpdateValuesMenu();
+        // Populated only just before the menu is shown: refreshing the items on
+        // every poll instead makes an open menu flicker.
+        _selectedValues = new TrayValuesMenu(() => ShowMainWindow(desktop), UpdateValuesMenu);
 
         // Drive the tray icon/tooltip from live device data, independent of
         // whether the main window has been created yet.
@@ -278,6 +273,7 @@ public class App : Application
         connector.Start();
         DeviceManager.Shared.DevicesChanged += OnTrayDevicesChanged;
         DeviceManager.Shared.SelectedChanged += OnTrayDevicesChanged;
+        DeviceManager.Shared.DataUpdated += OnAnyTrayData;
         AppSettings.Saved += OnTrayDevicesChanged;   // a nickname changed
         UpdateTrayVisuals();
         UpdateStatusHeader();
@@ -286,7 +282,96 @@ public class App : Application
     }
 
     private void OnTrayDevicesChanged(object? sender, EventArgs e) =>
-        Dispatcher.UIThread.Post(UpdateDeviceMenu, DispatcherPriority.Background);
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateDeviceMenu();
+            // Two devices or more switch "Power icon for each device" on, fewer off.
+            if (AppSettings.Current.ShowTrayPower && AppSettings.Current.ShowTrayPowerAllDevices)
+                UpdateTrayVisuals();
+        }, DispatcherPriority.Background);
+
+    /// <summary>The WireViews on this PC, in a stable order (the tray menu rows and
+    /// the per-device power icons).</summary>
+    private static List<ManagedDevice> LocalTrayDevices() =>
+        DeviceManager.Shared.Devices.Where(d => !d.IsRemote).OrderBy(d => d.Id, StringComparer.Ordinal).ToList();
+
+    private static string TrayLabel(ManagedDevice md) =>
+        DeviceLabels.Label(md.Device, AppSettings.Current.NicknameFor(md.Device.UniqueId));
+
+    /// <summary>Every device's readings, for its own power icon when there is one.</summary>
+    private void OnAnyTrayData(object? sender, (string Id, DeviceData Data) e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_devicePowerIcons.TryGetValue(e.Id, out var entry)) return;
+            entry.Last = e.Data;
+            entry.Values.TempPresence.Update(e.Data);
+            DrawDeviceIcon(entry);
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>Creates, keeps or removes the per-device power icons: one per
+    /// WireView on this PC while <paramref name="on"/>, none otherwise.</summary>
+    private void SyncDevicePowerIcons(bool on)
+    {
+        var local = on ? LocalTrayDevices() : new List<ManagedDevice>();
+        foreach (var id in _devicePowerIcons.Keys.Where(id => local.All(d => d.Id != id)).ToList())
+        {
+            _devicePowerIcons[id].Icon.Dispose();
+            _devicePowerIcons.Remove(id);
+        }
+        foreach (var md in local)
+        {
+            if (!_devicePowerIcons.TryGetValue(md.Id, out var entry))
+            {
+                string id = md.Id;
+                var values = new TrayValuesMenu(() => ShowTrayDevice(id), () => UpdateDeviceValuesMenu(id), withTitle: true);
+                // A fresh icon each time, never hidden and re-shown (see UpdateTrayVisuals).
+                var icon = new TrayIcon { ToolTipText = "WireView Pro II", IsVisible = true, Menu = values.Menu };
+                icon.Clicked += (_, _) => ShowTrayDevice(id);
+                entry = new DevicePowerIcon(icon, values);
+                _devicePowerIcons[id] = entry;
+            }
+            entry.Last = md.Latest ?? entry.Last;
+            entry.Label = TrayLabel(md);
+            entry.Values.SetTitle(entry.Label);
+            DrawDeviceIcon(entry);
+        }
+    }
+
+    private void DrawDeviceIcon(DevicePowerIcon entry)
+    {
+        bool connected = entry.Last is { Connected: true };
+        int watts = connected ? (int)Math.Round(entry.Last!.SumPowerW) : 0;
+        string drawn = $"{connected}|{watts}|{AppSettings.Current.ShowTrayPowerUnit}";
+        if (drawn != entry.Drawn)
+        {
+            entry.Drawn = drawn;
+            try
+            {
+                entry.Icon.Icon = connected ? RenderWattsIcon(watts) : RenderDisconnectedIcon();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Tray power icon render failed: {ex.Message}");
+            }
+        }
+        string tip = connected ? $"{entry.Label}: {watts} W" : $"{entry.Label}: disconnected";
+        if (entry.Icon.ToolTipText != tip) entry.Icon.ToolTipText = tip;
+    }
+
+    private void UpdateDeviceValuesMenu(string id)
+    {
+        if (_devicePowerIcons.TryGetValue(id, out var entry))
+            entry.Values.Update(entry.Last, entry.Last is { Connected: true });
+    }
+
+    /// <summary>A per-device power icon was clicked: show that device.</summary>
+    private void ShowTrayDevice(string id)
+    {
+        DeviceManager.Shared.SelectedId = id;
+        if (_desktop != null) ShowMainWindow(_desktop);
+    }
 
     /// <summary>The tray menu's device rows: with two or more WireViews on this PC,
     /// one row each ("name · 4E46: 312 W"), the selected one checked; clicking a
@@ -297,7 +382,7 @@ public class App : Application
     {
         if (_trayMenu == null || _trayShowItem == null) return;
         var mgr = DeviceManager.Shared;
-        var local = mgr.Devices.Where(d => !d.IsRemote).OrderBy(d => d.Id, StringComparer.Ordinal).ToList();
+        var local = LocalTrayDevices();
         if (local.Count < 2) local.Clear();
         string selected = mgr.SelectedId ?? "";
         string key = selected + "|" + string.Join(",", local.Select(d => d.Id + "=" + RowLabel(d)));
@@ -332,15 +417,14 @@ public class App : Application
             if (local.FirstOrDefault(d => d.Id == id) is { } md)
                 SetHeaderIfChanged(item, RowText(md));
 
-        static string RowLabel(ManagedDevice md) =>
-            DeviceLabels.Label(md.Device, AppSettings.Current.NicknameFor(md.Device.UniqueId));
+        static string RowLabel(ManagedDevice md) => TrayLabel(md);
         static string RowText(ManagedDevice md) =>
             md.Latest is { Connected: true } d ? $"{RowLabel(md)}: {(int)Math.Round(d.SumPowerW)} W" : RowLabel(md);
     }
 
     private void OnTrayConnectionChanged(object? sender, bool connected)
     {
-        _trayTempPresence.Reset();
+        _selectedValues?.TempPresence.Reset();
         if (_trayConnected == connected) return;
         _trayConnected = connected;
         if (!connected) _lastData = null;
@@ -364,7 +448,7 @@ public class App : Application
     private void OnTrayDataUpdated(object? sender, DeviceData data)
     {
         _lastData = data;
-        _trayTempPresence.Update(data);
+        _selectedValues?.TempPresence.Update(data);
         int watts = (int)Math.Round(data.SumPowerW);
         bool connected = data.Connected;
 
@@ -397,32 +481,28 @@ public class App : Application
 
     /// <summary>Sets a menu item's text only when it changed: every write makes the
     /// DBus menu exporter re-publish the layout, which flashes an open menu.</summary>
-    private static void SetHeaderIfChanged(NativeMenuItem item, string text)
-    {
-        if (!string.Equals(item.Header as string, text, StringComparison.Ordinal))
-            item.Header = text;
-    }
-
-    /// <summary>Same change-only rule as <see cref="SetHeaderIfChanged"/>.</summary>
-    private static void SetVisibleIfChanged(NativeMenuItem item, bool visible)
-    {
-        if (item.IsVisible != visible)
-            item.IsVisible = visible;
-    }
+    private static void SetHeaderIfChanged(NativeMenuItem item, string text) =>
+        TrayValuesMenu.SetHeaderIfChanged(item, text);
 
     private void UpdateTrayVisuals()
     {
         bool showPower = AppSettings.Current.ShowTrayPower;
         string statusText = _trayConnected ? $"{_trayWatts} W" : "Disconnected";
+        // One power icon per device instead of the single one, with two or more.
+        bool perDevice = showPower && AppSettings.Current.ShowTrayPowerAllDevices
+            && LocalTrayDevices().Count >= 2;
 
-        // The unit toggle only applies while the power icon is shown.
+        // The unit and per-device toggles only apply while the power icon is shown.
         if (_showUnitMenuItem != null)
             _showUnitMenuItem.IsEnabled = showPower;
+        if (_showAllPowerMenuItem != null)
+            _showAllPowerMenuItem.IsEnabled = showPower;
+        SyncDevicePowerIcons(perDevice);
 
         // Icon 2: create/dispose rather than toggling IsVisible. Avalonia's
         // FreeDesktop StatusNotifierItem backend throws when an icon is hidden and
         // later re-shown with a new bitmap, so we make a fresh icon each time.
-        if (showPower)
+        if (showPower && !perDevice)
         {
             if (_powerTrayIcon == null)
                 CreatePowerTrayIcon();
@@ -477,63 +557,18 @@ public class App : Application
 
         var icon = new TrayIcon { ToolTipText = "WireView Pro II", IsVisible = true };
         icon.Clicked += (_, _) => ShowMainWindow(desktop);
-        icon.Menu = _valuesMenu;
+        icon.Menu = _selectedValues?.Menu;
         _powerTrayIcon = icon;
     }
 
-    // Refresh the right-click "values" dropdown with the latest hwmon readings.
+    // Refresh the right-click "values" dropdowns with the latest hwmon readings:
+    // the single power icon's, and each per-device icon's.
     private void UpdateValuesMenu()
     {
-        if (_vTotalPower == null || _vTotalCurrent == null || _vAvgVoltage == null
-            || _vPins == null || _vTempIn == null || _vTempOut == null
-            || _vTempExt1 == null || _vTempExt2 == null || _vCableRating == null)
-            return;
-
-        var d = _lastData;
-        if (!_trayConnected || d == null)
-        {
-            SetHeaderIfChanged(_vTotalPower, "Disconnected");
-            SetHeaderIfChanged(_vTotalCurrent, "Total current: N/A");
-            SetHeaderIfChanged(_vAvgVoltage, "Average voltage: N/A");
-            for (int i = 0; i < _vPins.Length; i++)
-                SetHeaderIfChanged(_vPins[i], $"Pin {i + 1}: N/A");
-            SetHeaderIfChanged(_vTempIn, "Temp onboard in: N/A");
-            SetHeaderIfChanged(_vTempOut, "Temp onboard out: N/A");
-            SetHeaderIfChanged(_vTempExt1, "Temp external 1: N/A");
-            SetHeaderIfChanged(_vTempExt2, "Temp external 2: N/A");
-            SetHeaderIfChanged(_vCableRating, "Cable rating: N/A");
-            SetVisibleIfChanged(_vTempIn, true);
-            SetVisibleIfChanged(_vTempOut, true);
-            SetVisibleIfChanged(_vTempExt1, true);
-            SetVisibleIfChanged(_vTempExt2, true);
-            return;
-        }
-
-        var ci = CultureInfo.InvariantCulture;
-        SetHeaderIfChanged(_vTotalPower, $"Total power: {d.SumPowerW.ToString("0.0", ci)} W");
-        SetHeaderIfChanged(_vTotalCurrent, $"Total current: {d.SumCurrentA.ToString("0.00", ci)} A");
-        SetHeaderIfChanged(_vAvgVoltage, $"Average voltage: {d.PinVoltage.Average().ToString("0.00", ci)} V");
-        for (int i = 0; i < _vPins.Length; i++)
-        {
-            double v = d.PinVoltage[i], a = d.PinCurrent[i];
-            SetHeaderIfChanged(_vPins[i],
-                $"Pin {i + 1}: {v.ToString("0.00", ci)} V  {a.ToString("0.00", ci)} A  {(v * a).ToString("0.0", ci)} W");
-        }
-        SetHeaderIfChanged(_vTempIn, $"Temp onboard in: {FormatTemp(d.OnboardTempInC)}");
-        SetHeaderIfChanged(_vTempOut, $"Temp onboard out: {FormatTemp(d.OnboardTempOutC)}");
-        SetHeaderIfChanged(_vTempExt1, $"Temp external 1: {FormatTemp(d.ExternalTemp1C)}");
-        SetHeaderIfChanged(_vTempExt2, $"Temp external 2: {FormatTemp(d.ExternalTemp2C)}");
-        SetVisibleIfChanged(_vTempIn, _trayTempPresence.IsPresent(0));
-        SetVisibleIfChanged(_vTempOut, _trayTempPresence.IsPresent(1));
-        SetVisibleIfChanged(_vTempExt1, _trayTempPresence.IsPresent(2));
-        SetVisibleIfChanged(_vTempExt2, _trayTempPresence.IsPresent(3));
-        SetHeaderIfChanged(_vCableRating, d.PsuCapabilityW > 0
-            ? $"Cable rating: {d.PsuCapabilityW} W"
-            : "Cable rating: N/A");
+        _selectedValues?.Update(_lastData, _trayConnected);
+        foreach (var id in _devicePowerIcons.Keys)
+            UpdateDeviceValuesMenu(id);
     }
-
-    private static string FormatTemp(double t) =>
-        t > -100.0 && t < 200.0 ? $"{t.ToString("0.#", CultureInfo.InvariantCulture)} °C" : "N/A";
 
     // Monochrome wattage on a square icon: the number large on top with the unit
     // word ("watt") smaller below, so the digits stay big for 2- and 3-digit
