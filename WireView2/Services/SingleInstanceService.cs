@@ -8,27 +8,17 @@ namespace WireView2.Services;
 
 public static class SingleInstanceService
 {
-    private const string MutexName = "WireView2_SingleInstance";
-    private static Mutex? _mutex;
-    private static readonly string _lockFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "PowerMonitor", ".wireview2.lock");
+    // A file lock on Linux (wireview2.lock next to settings.json), a named mutex
+    // on Windows; see InstanceLock for why not a mutex everywhere.
+    private static readonly InstanceLock Lock = new("wireview2.lock", "WireView2_SingleInstance");
+    private static IDisposable? _held;
 
+    /// <summary>Takes the lock and keeps it for the life of the process; false when
+    /// another copy of the app already holds it.</summary>
     public static bool IsFirstInstance()
     {
-        // Try a named Mutex first (works on both platforms for basic exclusion)
-        bool createdNew;
-        _mutex = new Mutex(true, MutexName, out createdNew);
-
-        if (createdNew)
-        {
-            return true;
-        }
-
-        // Another instance exists
-        _mutex.Dispose();
-        _mutex = null;
-        return false;
+        _held = Lock.TryAcquire();
+        return _held != null;
     }
 
     public static EventWaitHandle CreateOrOpenActivationEvent()
